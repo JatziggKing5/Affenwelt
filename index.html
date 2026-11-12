@@ -2039,6 +2039,26 @@
         punkte = Infinity; punkteZeigen();
         return '💰 UNENDLICH GELD! Kauf dir alles, was du willst!';
       },
+      '9989': () => {
+        if (aktuellesFahrzeug) return '✈️ Steig erst aus, dann kommt das Flugzeug!';
+        // Das Flugzeug gibt es nur einmal: ist es schon da, holen wir es her
+        let flug = fahrzeuge.find(f => f.typ === 'flugzeug');
+        const neu = !flug;
+        flug ??= neuesFahrzeug('flugzeug', affe.position.x, affe.position.z, blickRichtung);
+        // Einen freien Platz vor, neben oder hinter dem Affen suchen
+        for (const [vorne, seitlich] of [[7, 0], [7, 5], [7, -5], [-7, 0], [0, 7], [0, -7], [12, 0]]) {
+          const s = Math.sin(blickRichtung), c = Math.cos(blickRichtung);
+          const x = affe.position.x + s * vorne + c * seitlich, z = affe.position.z + c * vorne - s * seitlich;
+          flug.hoeheJetzt = 0; flug.boden = 0; flug.hoehe = 1.4;
+          if (fahrzeugStoesst(flug, x, z, blickRichtung)) continue;
+          flug.x = x; flug.z = z; flug.richtung = blickRichtung; flug.tempo = 0;
+          flug.karosserie.rotation.set(0, 0, 0);
+          fahrzeugZeigen(flug);
+          return '✈️ Dein Flugzeug steht bereit! E = einsteigen, W = Gas, Leertaste = steigen';
+        }
+        if (neu) { szene.remove(flug.gruppe); fahrzeuge.splice(fahrzeuge.indexOf(flug), 1); }
+        return '✈️ Hier ist kein Platz. Geh auf eine freie Wiese!';
+      },
     };
     const fb = document.getElementById('fernbedienung'), fbAnzeige = fb.querySelector('.anzeige'), fbText = fb.querySelector('.text'), fbLed = fb.querySelector('.led');
     let fbCode = '';
@@ -2300,6 +2320,7 @@
       motorrad:{ name: 'Motorrad',    emoji: '🏍️', maxTempo: 24, beschl: 15, lenk: 2.6, breite: 0.8, laenge: 2.1, hoehe: 1.1, sitz: [0, 1.15, -0.25], hupe: 880 },
       rakete:  { name: 'Raketenwagen', emoji: '🚀', maxTempo: 58, beschl: 32, lenk: 2.2, breite: 2.0, laenge: 4.4, hoehe: 1.0, sitz: [0, 0.8, -0.45], hupe: 520 },
       kart:    { name: 'Go-Kart',     emoji: '🏁', maxTempo: 19, beschl: 18, lenk: 3.0, breite: 1.3, laenge: 2.0, hoehe: 0.6, sitz: [0, 0.65, -0.25], hupe: 1100 },
+      flugzeug:{ name: 'Flugzeug',    emoji: '✈️', maxTempo: 32, beschl: 10, lenk: 1.3, breite: 2.6, laenge: 3.6, hoehe: 1.4, sitz: [0, 0.95, -0.2], hupe: 330 },
     };
 
     function bauen(typ, karosserie) {
@@ -2373,6 +2394,23 @@
         lenkrad.position.set(0, 0.62, 0.35); lenkrad.rotation.x = -0.6;
         karosserie.add(lenkrad);
         kiste(karosserie, 1.4, 0.1, 0.12, lack, 0, 0.25, 1.0);        // Stoßstange vorne
+      } else if (typ === 'flugzeug') {                // kleines weiß-rotes Flugzeug mit Propeller
+        const weiss = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+        const rot = new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.4 });
+        const rumpf = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.3, 3.0, 14), weiss);
+        rumpf.rotation.x = Math.PI / 2; rumpf.position.set(0, 0.75, 0); rumpf.castShadow = true;
+        karosserie.add(rumpf);
+        const nase = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.45, 0.4, 14), rot);
+        nase.rotation.x = Math.PI / 2; nase.position.set(0, 0.75, 1.7); karosserie.add(nase);
+        kiste(karosserie, 0.7, 0.35, 0.8, glas, 0, 1.1, 0.2);          // Cockpit-Glas
+        kiste(karosserie, 5.0, 0.07, 0.9, rot, 0, 0.85, 0.3);          // Tragflächen
+        kiste(karosserie, 1.7, 0.06, 0.5, rot, 0, 0.8, -1.4);          // Höhenruder hinten
+        kiste(karosserie, 0.07, 0.7, 0.6, rot, 0, 1.15, -1.4);         // Seitenruder
+        const propeller = new THREE.Group();
+        propeller.name = 'Propeller'; propeller.position.set(0, 0.75, 1.95);
+        kiste(propeller, 1.7, 0.12, 0.04, dunkel, 0, 0, 0);
+        kiste(propeller, 0.12, 1.7, 0.04, dunkel, 0, 0, 0);
+        karosserie.add(propeller);
       }
     }
 
@@ -2391,6 +2429,7 @@
       if (typ === 'motorrad') { rad(f, 0.36, 0.16, 0, 0.36, 0.8, true); rad(f, 0.36, 0.2, 0, 0.36, -0.8, false); }
       if (typ === 'rakete')   { for (const s of [-1, 1]) { rad(f, 0.36, 0.34, s * 1.0, 0.36, 1.4, true); rad(f, 0.42, 0.42, s * 1.0, 0.42, -1.4, false); } lichter(f, 0.7, 0.5, 2.21, -2.21); }
       if (typ === 'kart')     { for (const s of [-1, 1]) { rad(f, 0.22, 0.22, s * 0.65, 0.22, 0.7, true); rad(f, 0.25, 0.28, s * 0.65, 0.25, -0.7, false); } }
+      if (typ === 'flugzeug') { rad(f, 0.2, 0.1, 0, 0.2, 0.9, true); for (const s of [-1, 1]) rad(f, 0.2, 0.1, s * 0.6, 0.2, -0.1, false); }
       // Gibt es das Fahrzeug in Blender? Dann dieses Modell nehmen (Räder heißen dort z. B. "Cabrio_Rad_vorne_1")
       const m = modell(f.name);
       const neueKarosserie = m && finde(m, `${f.name}_Karosserie`);
@@ -2412,7 +2451,7 @@
       return f;
     }
     function fahrzeugZeigen(f) {
-      f.gruppe.position.set(f.x, 0, f.z);
+      f.gruppe.position.set(f.x, f.hoeheJetzt || 0, f.z); // Flugzeuge können in der Luft sein
       f.gruppe.rotation.y = f.richtung;
     }
 
@@ -2448,14 +2487,17 @@
     let letzterTreffer = null; // was zuletzt angefahren wurde
     function fahrzeugStoesst(f, x, z, richtung) {
       const halb = f.breite / 2;
+      const boden = f.boden || 0;         // Flugzeug in der Luft: darunter ist alles frei
+      const hoch = boden > 2;
       letzterTreffer = 'block';
       for (const [px, pz] of fahrzeugPunkte(f, x, z, richtung)) {
         const imBunker = Math.abs(px - GEHEIM.x) < GEHEIM.b / 2 && Math.abs(pz - GEHEIM.z) < GEHEIM.t / 2;
         if (!imBunker && (px < WIESE.x1 + halb || px > WIESE.x2 - halb || pz < WIESE.z1 + halb || pz > WIESE.z2 - halb)) return true;
         for (const o of bloecke) {
-          if (o.art === 'lava' || o.unten > f.hoehe || o.oben < 0.1) continue;
+          if (o.art === 'lava' || o.unten > f.hoehe || o.oben < Math.max(0.1, boden)) continue;
           if (Math.abs(px - o.x) < o.b / 2 + halb && Math.abs(pz - o.z) < o.t / 2 + halb) return true;
         }
+        if (hoch) continue;
         for (const g of fahrzeuge) if (g !== f && punktInFahrzeug(g, px, pz, halb)) { letzterTreffer = 'fahrzeug'; return true; }
         for (const a of verkehr) if (punktInFahrzeug(a, px, pz, halb)) { letzterTreffer = 'verkehr'; return true; } // Autos im Verkehr
         if (polizei.aktiv && punktInFahrzeug(polizei, px, pz, halb)) { letzterTreffer = 'polizei'; return true; }
@@ -2617,6 +2659,7 @@
 
     function aussteigen() {
       const f = aktuellesFahrzeug;
+      if (f.typ === 'flugzeug') { f.hoeheJetzt = 0; f.boden = 0; f.hoehe = 1.4; f.karosserie.rotation.set(0, 0, 0); fahrzeugZeigen(f); affe.rotation.z = 0; } // sicher landen
       const s = Math.sin(f.richtung), c = Math.cos(f.richtung);
       // Plätze rund ums Fahrzeug ausprobieren: links, rechts, hinten, vorne – sonst aufs Dach
       const versuche = [
@@ -2636,8 +2679,66 @@
       f.tempo = 0;
     }
 
+    // Ein Bild lang fliegen: W Gas, A/D lenken, Leertaste steigen (erst ab ca. 40 km/h), Shift sinken
+    const ABHEBE_TEMPO = 11;
+    function fliegen(f, dt) {
+      const gas = stick.aktiv ? stick.y : (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0);
+      const lenkRichtung = stick.aktiv ? -stick.x : (tasten.KeyA ? 1 : 0) - (tasten.KeyD ? 1 : 0);
+      f.hoeheJetzt ??= 0;
+      const inLuft = f.hoeheJetzt > 0.05;
+
+      if (gas > 0.2) f.tempo += f.beschl * dt;
+      else if (gas < -0.2) f.tempo -= (f.tempo > 0 ? 12 : f.beschl * 0.6) * dt;
+      else f.tempo -= Math.sign(f.tempo) * Math.min(Math.abs(f.tempo), (inLuft ? 1.5 : 5) * dt);
+      f.tempo = THREE.MathUtils.clamp(f.tempo, -f.maxTempo * 0.2, f.maxTempo);
+
+      // Steigen / sinken: zu langsam heißt abstürzen (sinken)
+      let steigen = 0;
+      if (tasten.Space && f.tempo > ABHEBE_TEMPO) steigen = 7;
+      else if (tasten.ShiftLeft || tasten.ShiftRight) steigen = -8;
+      else if (inLuft && f.tempo < ABHEBE_TEMPO) steigen = -6;
+      const neueHoehe = THREE.MathUtils.clamp(f.hoeheJetzt + steigen * dt, 0, 80);
+
+      f.lenkung += (lenkRichtung - f.lenkung) * Math.min(1, 8 * dt);
+      const neueRichtung = f.richtung + f.lenkung * f.lenk * dt * THREE.MathUtils.clamp(f.tempo / 5, -1, 1);
+      const nx = f.x + Math.sin(neueRichtung) * f.tempo * dt;
+      const nz = f.z + Math.cos(neueRichtung) * f.tempo * dt;
+      f.boden = neueHoehe; f.hoehe = neueHoehe + 1.4;
+      if (fahrzeugStoesst(f, nx, nz, neueRichtung)) {
+        if (Math.abs(f.tempo) > 6) zeigeMeldung('💥 Bumm!', 0.8);
+        if (Math.abs(f.tempo) > 4 && (letzterTreffer === 'verkehr' || letzterTreffer === 'fahrzeug')) straftat('Unfall gebaut!');
+        if (letzterTreffer === 'polizei') straftat('Polizeiauto gerammt!');
+        f.tempo *= neueHoehe > 1 ? 0.5 : -0.3;
+        if (steigen > 0) f.hoeheJetzt = neueHoehe; // nach oben kommt man immer weg
+      } else {
+        f.x = nx; f.z = nz; f.richtung = neueRichtung; f.hoeheJetzt = neueHoehe;
+      }
+      f.boden = f.hoeheJetzt; f.hoehe = f.hoeheJetzt + 1.4;
+      fahrzeugZeigen(f);
+
+      // Räder rollen am Boden, Propeller dreht immer, Flugzeug neigt sich in Kurven und beim Steigen
+      for (const r of f.raeder) {
+        r.drehHalter.rotation.x += (f.tempo * dt) / r.r;
+        if (r.vorne) r.lenkHalter.rotation.y = f.lenkung * 0.45;
+      }
+      f.karosserie.traverse(o => { if (o.name === 'Propeller') o.rotation.z += (25 + Math.abs(f.tempo) * 2) * dt; });
+      const inLuftJetzt = f.hoeheJetzt > 0.05;
+      const bank = inLuftJetzt ? -f.lenkung * THREE.MathUtils.clamp(f.tempo / f.maxTempo, 0, 1) * 0.6 : 0;
+      const nick = inLuftJetzt || steigen > 0 ? -steigen * 0.04 : 0;
+      f.karosserie.rotation.z += (bank - f.karosserie.rotation.z) * Math.min(1, 6 * dt);
+      f.karosserie.rotation.x += (nick - f.karosserie.rotation.x) * Math.min(1, 5 * dt);
+
+      const [sx, sy, sz] = f.sitz;
+      const s = Math.sin(f.richtung), c = Math.cos(f.richtung);
+      affe.position.set(f.x + s * sz + c * sx, sy + f.hoeheJetzt, f.z + c * sz - s * sx);
+      affe.rotation.y = f.richtung;
+      affe.rotation.z = f.karosserie.rotation.z;
+      blickRichtung = f.richtung;
+    }
+
     // Ein Bild lang fahren
     function fahren(f, dt) {
+      if (f.typ === 'flugzeug') return fliegen(f, dt);
       const gas = stick.aktiv ? stick.y : (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0);                 // Handy: Stick hoch = Gas
       const lenkRichtung = stick.aktiv ? -stick.x : (tasten.KeyA ? 1 : 0) - (tasten.KeyD ? 1 : 0); // A = links, D = rechts
 
@@ -2866,7 +2967,7 @@
     // Ein Bild lang den ganzen Verkehr bewegen
     function verkehrBewegen(dt) {
       // Alles, wovor Autos bremsen: andere Autos, die Fahrzeuge aus der Garage und der Affe
-      const spielerHindernisse = fahrzeuge.map(f => ({ x: f.x, z: f.z, laenge: f.laenge, breite: f.breite, istSpieler: true,
+      const spielerHindernisse = fahrzeuge.filter(f => !(f.hoeheJetzt > 2)).map(f => ({ x: f.x, z: f.z, laenge: f.laenge, breite: f.breite, istSpieler: true,
         grund: f === aktuellesFahrzeug ? 'Verkehr blockiert!' : 'Falsch geparkt!' }));
       if (!aktuellesFahrzeug) spielerHindernisse.push({ x: affe.position.x, z: affe.position.z, laenge: 1, breite: 1, istSpieler: true, grund: 'Verkehr blockiert!' });
       for (const g of fussgaenger) if (g.zustand !== 'einkaufen') spielerHindernisse.push({ x: g.x, z: g.z, laenge: 0.8, breite: 0.8, immer: true });
@@ -5278,7 +5379,7 @@
         eGedrueckt = false;
         if (mitfahrt) mitfahrtEnde();                                   // beim Freund aussteigen
         else if (!aktuellesFahrzeug && (auftragAktion(p) || hausAktion(p) || graben(p) || tresorKnacken(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
-        else if (aktuellesFahrzeug) aussteigen();
+        else if (aktuellesFahrzeug) { if ((aktuellesFahrzeug.hoeheJetzt || 0) > 0.3) zeigeMeldung('✈️ Erst landen, dann aussteigen!', 1.5); else aussteigen(); }
         else if (!imGefaengnis) { const mf = mitfahrKandidat(p); if (mf) mitfahrtStarten(mf); else { const f = naechstesFahrzeug(p); if (f) einsteigen(f); else npcAnsprechen(p); } }
       }
 
@@ -5287,7 +5388,7 @@
       if (aktuellesFahrzeug) {
         // ===== FAHREN =====
         const f = aktuellesFahrzeug;
-        if (sprungGedrueckt) { hupen(f.hupe); sprungGedrueckt = false; } // Leertaste = hupen
+        if (sprungGedrueckt) { if (f.typ !== 'flugzeug') hupen(f.hupe); sprungGedrueckt = false; } // Leertaste = hupen (Flugzeug: steigen)
         if (f.vorherX === undefined) { f.vorherX = f.x; f.vorherZ = f.z; }
         fahren(f, dt);
         motorGeraeusch(f);
@@ -5322,7 +5423,7 @@
         kopf.rotation.z = Math.sin(spielZeit * 3) * 0.05;
         figur.position.y = 0; figur.rotation.x = 0;
         const kmh = Math.round(Math.abs(f.tempo) * 3.6);
-        fahrInfo.innerHTML = rennHinweis(f) || `<b>${f.emoji} ${f.name} · ${kmh} km/h</b>` +
+        fahrInfo.innerHTML = f.typ === 'flugzeug' ? `<b>${f.emoji} ${f.name} · ${kmh} km/h · ${Math.round(f.hoeheJetzt || 0)} m hoch</b><small>W Gas · A/D lenken · Leertaste steigen (ab ${Math.round(ABHEBE_TEMPO * 3.6)} km/h) · Shift sinken · E aussteigen (nur am Boden)</small>` : rennHinweis(f) || `<b>${f.emoji} ${f.name} · ${kmh} km/h</b>` +
           (IST_HANDY ? '<small>Stick: Gas, Bremse und lenken · 📯 hupen · ✋ aussteigen</small>' : `<small>W Gas · S Bremse/Rückwärts · A/D lenken · Leertaste hupen · E aussteigen</small>`);
         fahrInfo.classList.add('offen');
       } else {
