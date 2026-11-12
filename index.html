@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mein erstes Spiel</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #87ceeb; font-family: sans-serif; }
+    #hilfe {
+      position: fixed; top: 12px; left: 12px; padding: 8px 12px;
+      background: rgba(0,0,0,0.5); color: #fff; border-radius: 8px; font-size: 14px;
+    }
+  </style>
+  <!-- Import-Map: sagt dem Browser, wo er Three.js herunterladen soll -->
+  <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.webgpu.js",
+        "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.webgpu.js"
+    } }
+  </script>
+</head>
+<body>
+  <div id="hilfe">Pfeiltasten: bewegen · Leertaste: springen</div>
+
+  <script type="module">
+    import * as THREE from 'three/webgpu';
+
+    // --- Szene, Kamera und Renderer: die "Bühne", das "Auge" und der "Maler" ---
+    const szene = new THREE.Scene();
+    szene.background = new THREE.Color(0x87ceeb); // hellblauer Himmel
+
+    const kamera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 200);
+
+    // WebGPU-Renderer: malt mit der modernen Grafik-Schnittstelle WebGPU
+    const renderer = new THREE.WebGPURenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+    await renderer.init(); // WebGPU starten (dauert einen Moment)
+
+    // Anzeigen, ob wirklich WebGPU läuft
+    const hilfe = document.getElementById('hilfe');
+    hilfe.textContent += renderer.backend.isWebGPUBackend
+      ? ' · WebGPU ✓'
+      : ' · Achtung: kein WebGPU, nur WebGL';
+
+    // --- Licht: eine weiche Grundhelligkeit plus eine "Sonne", die Schatten wirft ---
+    szene.add(new THREE.HemisphereLight(0xffffff, 0x446644, 1.0));
+    const sonne = new THREE.DirectionalLight(0xffffff, 2);
+    sonne.position.set(10, 20, 10);
+    sonne.castShadow = true;
+    sonne.shadow.camera.left = -30; sonne.shadow.camera.right = 30;
+    sonne.shadow.camera.top = 30;   sonne.shadow.camera.bottom = -30;
+    szene.add(sonne);
+
+    // --- Grüner Boden: eine große flache Fläche ---
+    const BODEN_GROESSE = 50;
+    const boden = new THREE.Mesh(
+      new THREE.PlaneGeometry(BODEN_GROESSE, BODEN_GROESSE),
+      new THREE.MeshStandardMaterial({ color: 0x4caf50 })
+    );
+    boden.rotation.x = -Math.PI / 2; // flach hinlegen
+    boden.receiveShadow = true;
+    szene.add(boden);
+
+    // --- Der Würfel: unsere Spielfigur ---
+    const wuerfel = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial({ color: 0xff5722 })
+    );
+    wuerfel.position.y = 0.5; // halbe Höhe, damit er AUF dem Boden steht
+    wuerfel.castShadow = true;
+    szene.add(wuerfel);
+
+    // --- Tasten merken: welche Taste ist gerade gedrückt? ---
+    const tasten = {};
+    addEventListener('keydown', (e) => {
+      tasten[e.code] = true;
+      if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault(); // Seite nicht scrollen
+    });
+    addEventListener('keyup', (e) => { tasten[e.code] = false; });
+
+    // --- Spielwerte ---
+    const TEMPO = 6;          // wie schnell der Würfel läuft
+    const SPRUNGKRAFT = 7;    // wie stark er springt
+    const SCHWERKRAFT = 20;   // wie stark er nach unten fällt
+    let fallTempo = 0;        // aktuelle Geschwindigkeit nach oben/unten
+    const RAND = BODEN_GROESSE / 2 - 0.5;
+
+    // --- Spiel-Schleife: läuft ca. 60 Mal pro Sekunde ---
+    const uhr = new THREE.Clock();
+    function spielSchleife() {
+      const dt = Math.min(uhr.getDelta(), 0.05); // Zeit seit dem letzten Bild
+
+      // Bewegen mit den Pfeiltasten
+      if (tasten.ArrowLeft)  wuerfel.position.x -= TEMPO * dt;
+      if (tasten.ArrowRight) wuerfel.position.x += TEMPO * dt;
+      if (tasten.ArrowUp)    wuerfel.position.z -= TEMPO * dt;
+      if (tasten.ArrowDown)  wuerfel.position.z += TEMPO * dt;
+
+      // Nicht vom Boden herunterlaufen
+      wuerfel.position.x = THREE.MathUtils.clamp(wuerfel.position.x, -RAND, RAND);
+      wuerfel.position.z = THREE.MathUtils.clamp(wuerfel.position.z, -RAND, RAND);
+
+      // Springen: nur wenn der Würfel auf dem Boden steht
+      const amBoden = wuerfel.position.y <= 0.5;
+      if (tasten.Space && amBoden) fallTempo = SPRUNGKRAFT;
+
+      // Schwerkraft zieht ihn wieder herunter
+      fallTempo -= SCHWERKRAFT * dt;
+      wuerfel.position.y += fallTempo * dt;
+      if (wuerfel.position.y < 0.5) { wuerfel.position.y = 0.5; fallTempo = 0; }
+
+      // Kamera folgt dem Würfel von schräg hinten
+      kamera.position.set(wuerfel.position.x, wuerfel.position.y + 5, wuerfel.position.z + 9);
+      kamera.lookAt(wuerfel.position);
+
+      renderer.render(szene, kamera);
+    }
+    renderer.setAnimationLoop(spielSchleife); // ruft spielSchleife bei jedem Bild auf
+
+    // Wenn das Fenster größer/kleiner wird, Bild anpassen
+    addEventListener('resize', () => {
+      kamera.aspect = innerWidth / innerHeight;
+      kamera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>
