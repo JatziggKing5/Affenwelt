@@ -84,6 +84,36 @@
     #mehrspieler .mpSpieler { padding: 8px; background: rgba(255,255,255,0.18); color: #fff; font-size: 15px; }
     body.handy #mehrspielerKnopf { right: 136px; }
     body.handy #mpLeiste { right: 136px; top: 60px; }
+    /* --- Chat --- */
+    #chatKnopf {
+      position: fixed; top: 12px; right: 262px; width: 44px; height: 44px; border-radius: 12px; z-index: 6;
+      border: 2px solid rgba(255,255,255,0.6); background: rgba(0,0,0,0.55); font-size: 22px; cursor: pointer;
+    }
+    #chatVerlauf {
+      position: fixed; left: 12px; bottom: 12px; width: min(340px, 45vw); z-index: 5; pointer-events: none;
+      display: flex; flex-direction: column; gap: 4px; font-size: 14px;
+    }
+    #chatVerlauf .zeile {
+      background: rgba(0,0,0,0.55); color: #fff; padding: 4px 8px; border-radius: 8px; word-wrap: break-word;
+      transition: opacity 1s; align-self: flex-start; max-width: 100%;
+    }
+    #chatVerlauf .zeile.alt { opacity: 0; }
+    #chatVerlauf.offen .zeile.alt { opacity: 0.85; }
+    #chatVerlauf .zeile b { color: #ffd600; }
+    #chatVerlauf .zeile.ich b { color: #80d8ff; }
+    #chatEingabe {
+      position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%); z-index: 23; display: none;
+      width: min(420px, calc(100vw - 24px)); gap: 6px;
+    }
+    #chatEingabe.offen { display: flex; }
+    #chatEingabe input {
+      flex: 1; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 3px solid #ffd600;
+      background: rgba(0,0,0,0.8); color: #fff; outline: none;
+    }
+    #chatEingabe button { font-size: 20px; border: none; border-radius: 10px; background: #ffd600; padding: 0 14px; cursor: pointer; }
+    body.handy #chatKnopf { right: 188px; }
+    body.handy #chatVerlauf { bottom: auto; top: 130px; width: 42vw; font-size: 12px; }
+    body.handy #chatEingabe { bottom: auto; top: 70px; }
     #karteZu {
       position: fixed; top: 14px; right: 14px; z-index: 21; width: 48px; height: 48px; border-radius: 50%;
       border: 3px solid #fff; background: rgba(0,0,0,0.7); color: #fff; font-size: 24px; display: none; cursor: pointer;
@@ -256,6 +286,9 @@
   <button id="mehrspielerKnopf" title="Mehrspieler (P)">👥</button>
   <div id="mpLeiste"></div>
   <div id="mehrspieler"></div>
+  <button id="chatKnopf" title="Chat (T oder Enter)" hidden>💬</button>
+  <div id="chatVerlauf" hidden></div>
+  <form id="chatEingabe" autocomplete="off"><input id="chatText" maxlength="80" placeholder="Nachricht schreiben … (Enter = senden)"><button>➤</button></form>
   <button id="karteZu" title="Karte schließen">✕</button>
   <div id="stick"><div id="stickKnopf"></div></div>
   <div id="handyknoepfe">
@@ -271,7 +304,7 @@
     <div id="farben"></div>
     <p class="klein">Zum Verlassen einfach rauslaufen.</p>
   </div>
-  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1–5: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · Shift: rennen · Jetpack: Leertaste halten · M: Karte (Klick = Wegpunkt) · P: 👥 Mehrspieler · 🚔 Nicht über Rot fahren!</div>
+  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1–5: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · Shift: rennen · Jetpack: Leertaste halten · M: Karte (Klick = Wegpunkt) · P: 👥 Mehrspieler · T: Chat · 🚔 Nicht über Rot fahren!</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -4027,6 +4060,7 @@
       }
       if (n.t === 'banane' && typeof n.d?.x === 'number') fremdeBananeFliegt(n.d);
       if (n.t === 'weg') mitspielerEntfernen(n.i);
+      if (n.t === 'chat' && typeof n.d?.m === 'string') chatEmpfangen(n.i, n.d.m);
       if (n.t === 'knall' && typeof n.d?.x === 'number') {   // ein Mitspieler hat mit der Bazooka geschossen
         knallZeigen(n.d.x, n.d.y, n.d.z); hupen(60);
         const p = affe.position;
@@ -4080,6 +4114,8 @@
     const mpVerbunden = () => mp.raum ? mp.raum.verbindungen.filter(c => c.connected).length : 0;
     function mpLeisteZeigen() {
       mpLeiste.classList.toggle('offen', !!mp.raum);
+      chatKnopf.hidden = chatVerlauf.hidden = !mp.raum;   // Chat gibt es nur im Mehrspieler-Raum
+      if (!mp.raum) chatSchliessen();
       if (mp.raum) mpLeiste.textContent = `👥 AFFE-${mp.code} · ${mp.andere.size + 1} Spieler`;
     }
 
@@ -4143,6 +4179,90 @@
       mpLeisteZeigen();
       if (mpPanel.classList.contains('offen')) mpPanelZeigen();
     }
+
+    // --- Chat: mit den Mitspielern schreiben ---
+    const chatKnopf = document.getElementById('chatKnopf');
+    const chatVerlauf = document.getElementById('chatVerlauf');
+    const chatEingabe = document.getElementById('chatEingabe');
+    const chatText = document.getElementById('chatText');
+    let chatOffen = false, chatGesendetUm = -9;
+    function chatOeffnen() {
+      if (!mp.raum || chatOffen) return;
+      chatOffen = true;
+      for (const t in tasten) tasten[t] = false;       // der Affe soll nicht weiterlaufen, während man tippt
+      chatEingabe.classList.add('offen'); chatVerlauf.classList.add('offen');
+      chatText.value = ''; chatText.focus();
+    }
+    function chatSchliessen() {
+      if (!chatOffen) return;
+      chatOffen = false;
+      chatEingabe.classList.remove('offen'); chatVerlauf.classList.remove('offen');
+      chatText.blur();
+    }
+    function chatZeile(name, text, ich) {
+      const zeile = document.createElement('div');
+      zeile.className = 'zeile' + (ich ? ' ich' : '');
+      const b = document.createElement('b'); b.textContent = name + ': ';   // textContent: niemand kann HTML einschmuggeln
+      zeile.append(b, document.createTextNode(text));
+      chatVerlauf.append(zeile);
+      while (chatVerlauf.children.length > 8) chatVerlauf.firstChild.remove(); // nur die letzten 8 zeigen
+      setTimeout(() => zeile.classList.add('alt'), 12000);                    // nach 12 s ausblenden
+    }
+    // Sprechblase über dem Kopf eines Affen
+    function sprechblase(gruppe, text) {
+      if (!gruppe) return;
+      if (gruppe.userData.blase) gruppe.remove(gruppe.userData.blase);
+      const lw = document.createElement('canvas');
+      lw.width = 512; lw.height = 128;
+      const p = lw.getContext('2d');
+      p.font = 'bold 30px sans-serif';
+      // Text auf höchstens 2 Zeilen umbrechen
+      const zeilen = [''];
+      for (const wort of text.split(' ')) {
+        const probe = (zeilen.at(-1) + ' ' + wort).trim();
+        if (p.measureText(probe).width > 470 && zeilen.at(-1)) { if (zeilen.length === 2) { zeilen[1] += '…'; break; } zeilen.push(wort); }
+        else zeilen[zeilen.length - 1] = probe;
+      }
+      p.fillStyle = 'rgba(255,255,255,0.95)'; p.beginPath(); p.roundRect(4, 4, 504, zeilen.length * 38 + 20, 24); p.fill();
+      p.fillStyle = '#222'; p.textAlign = 'center'; p.textBaseline = 'top';
+      zeilen.forEach((z, i) => p.fillText(z, 256, 14 + i * 38));
+      const tex = new THREE.CanvasTexture(lw); tex.colorSpace = THREE.SRGBColorSpace;
+      const blase = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+      blase.scale.set(2.4, 0.6, 1);
+      blase.position.y = 1.75;
+      blase.renderOrder = 11;
+      gruppe.add(blase);
+      gruppe.userData.blase = blase;
+      setTimeout(() => { if (gruppe.userData.blase === blase) { gruppe.remove(blase); gruppe.userData.blase = null; tex.dispose(); } }, 6000);
+    }
+    function chatSenden() {
+      const text = chatText.value.trim().slice(0, 80);
+      chatSchliessen();
+      if (!text || !mp.raum) return;
+      if (spielZeit - chatGesendetUm < 0.7) { zeigeMeldung('⏳ Nicht so schnell!', 1); return; }
+      chatGesendetUm = spielZeit;
+      mpSenden('chat', { m: text });
+      chatZeile(mp.name, text, true);
+      sprechblase(affe, text);
+    }
+    function chatEmpfangen(id, text) {
+      text = text.slice(0, 80);
+      const a = mp.andere.get(id);
+      chatZeile(a?.daten?.n || 'Affe', text, false);
+      sprechblase(a?.gruppe, text);
+      hupen(900, 0.05);
+    }
+    chatKnopf.addEventListener('click', e => { e.stopPropagation(); chatOffen ? chatSchliessen() : chatOeffnen(); });
+    chatEingabe.addEventListener('submit', e => { e.preventDefault(); chatSenden(); });
+    // Tasten im Eingabefeld gehören nur dem Chat, nicht dem Spiel
+    chatText.addEventListener('keydown', e => { e.stopPropagation(); if (e.code === 'Escape') chatSchliessen(); });
+    chatText.addEventListener('keyup', e => e.stopPropagation());
+    chatText.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== chatText) chatSchliessen(); }, 150));
+    for (const ev of ['pointerdown', 'touchstart', 'mousedown']) for (const el of [chatEingabe, chatKnopf]) el.addEventListener(ev, e => e.stopPropagation());
+    addEventListener('keydown', e => {
+      if (chatOffen || e.repeat) return;
+      if (e.code === 'KeyT' || e.code === 'Enter') { e.preventDefault(); chatOeffnen(); }
+    });
     function zuSpielerBeamen(id) {
       const a = mp.andere.get(id);
       if (!a || imGefaengnis) return;
