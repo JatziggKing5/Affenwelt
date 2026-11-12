@@ -111,7 +111,27 @@
       background: rgba(0,0,0,0.8); color: #fff; outline: none;
     }
     #chatEingabe button { font-size: 20px; border: none; border-radius: 10px; background: #ffd600; padding: 0 14px; cursor: pointer; }
+    #funkKnopf {
+      position: fixed; top: 12px; right: 314px; width: 44px; height: 44px; border-radius: 12px; z-index: 6;
+      border: 2px solid rgba(255,255,255,0.6); background: rgba(0,0,0,0.55); font-size: 22px; cursor: pointer;
+      touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+    }
+    #funkKnopf.an { background: #e53935; transform: scale(1.12); }
+    #funkAnzeige {
+      position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 23; display: none;
+      background: #e53935; color: #fff; font-weight: bold; padding: 8px 16px; border-radius: 20px; font-size: 16px;
+      pointer-events: none; box-shadow: 0 0 0 4px rgba(229,57,53,0.35); white-space: nowrap;
+    }
+    #funkAnzeige.an { display: block; }
     body.handy #chatKnopf { right: 188px; }
+    body.handy #funkKnopf { right: 240px; }
+    /* Schmaler Bildschirm (Handy): Chat- und Funk-Knopf unter den 👥-Knopf statt daneben */
+    @media (max-width: 600px) {
+      #chatKnopf { right: 210px; top: 88px; }
+      #funkKnopf { right: 210px; top: 138px; }
+      body.handy #chatKnopf, body.handy #funkKnopf { right: 136px; }
+      #funkAnzeige { top: auto; bottom: 45%; }
+    }
     body.handy #chatVerlauf { bottom: auto; top: 130px; width: 42vw; font-size: 12px; }
     body.handy #chatEingabe { bottom: auto; top: 70px; }
     #karteZu {
@@ -288,6 +308,8 @@
   <div id="mehrspieler"></div>
   <button id="chatKnopf" title="Chat (T oder Enter)" hidden>💬</button>
   <div id="chatVerlauf" hidden></div>
+  <button id="funkKnopf" title="Funkgerät: gedrückt halten und sprechen (V)" hidden>🎙️</button>
+  <div id="funkAnzeige"></div>
   <form id="chatEingabe" autocomplete="off"><input id="chatText" maxlength="80" placeholder="Nachricht schreiben … (Enter = senden)"><button>➤</button></form>
   <button id="karteZu" title="Karte schließen">✕</button>
   <div id="stick"><div id="stickKnopf"></div></div>
@@ -304,7 +326,7 @@
     <div id="farben"></div>
     <p class="klein">Zum Verlassen einfach rauslaufen.</p>
   </div>
-  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1–5: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · Shift: rennen · Jetpack: Leertaste halten · M: Karte (Klick = Wegpunkt) · P: 👥 Mehrspieler · T: Chat · 🚔 Nicht über Rot fahren!</div>
+  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1–5: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · Shift: rennen · Jetpack: Leertaste halten · M: Karte (Klick = Wegpunkt) · P: 👥 Mehrspieler · T: Chat · V halten: Funk 🎙️ · 🚔 Nicht über Rot fahren!</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -4052,6 +4074,7 @@
       let n;
       try { n = await auspacken(new Uint8Array(paket)); } catch (e) { return; } // nicht entschlüsselbar: nicht aus unserem Raum
       if (!n || n.i === meineId) return;
+      if (n.t === 'funk') { funkEmpfangen(n.i, n.d); return; }   // Sprachnachricht: eigene Doppel-Prüfung
       if ((gesehen.get(n.i) ?? 0) >= n.s && n.t !== 'weg') return; // schon über den anderen Server bekommen
       gesehen.set(n.i, n.s);
       if (n.t === 'affe' && typeof n.d?.x === 'number') {
@@ -4114,7 +4137,8 @@
     const mpVerbunden = () => mp.raum ? mp.raum.verbindungen.filter(c => c.connected).length : 0;
     function mpLeisteZeigen() {
       mpLeiste.classList.toggle('offen', !!mp.raum);
-      chatKnopf.hidden = chatVerlauf.hidden = !mp.raum;   // Chat gibt es nur im Mehrspieler-Raum
+      chatKnopf.hidden = chatVerlauf.hidden = funkKnopf.hidden = !mp.raum;   // Chat + Funk gibt es nur im Mehrspieler-Raum
+      if (!mp.raum) funkAus();
       if (!mp.raum) chatSchliessen();
       if (mp.raum) mpLeiste.textContent = `👥 AFFE-${mp.code} · ${mp.andere.size + 1} Spieler`;
     }
@@ -4263,6 +4287,108 @@
       if (chatOffen || e.repeat) return;
       if (e.code === 'KeyT' || e.code === 'Enter') { e.preventDefault(); chatOeffnen(); }
     });
+
+    // --- Funkgerät: Taste halten, sprechen, loslassen = an alle im Raum schicken ---
+    const funkKnopf = document.getElementById('funkKnopf');
+    const funkAnzeige = document.getElementById('funkAnzeige');
+    const FUNK_MAX = 10;                       // höchstens 10 Sekunden pro Nachricht
+    let funkMikro = null, funkRecorder = null, funkStart = 0, funkTimer = null, funkWillAufnehmen = false;
+    const funkGesehen = new Set();             // jede Sprachnachricht kommt über 2 Server – nur einmal abspielen
+    const funkSchlange = [];                   // Nachrichten nacheinander abspielen, nicht durcheinander
+    let funkSpieltGerade = false;
+    function funkFormat() {
+      for (const typ of ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg;codecs=opus'])
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported(typ)) return typ;
+      return '';
+    }
+    async function funkStarten() {
+      if (!mp.raum || funkRecorder || funkWillAufnehmen) return;
+      if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { zeigeMeldung('🎙️ Dein Browser kann kein Funkgerät', 2); return; }
+      funkWillAufnehmen = true;
+      try {
+        funkMikro ??= await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      } catch (e) {
+        funkWillAufnehmen = false;
+        zeigeMeldung('🎙️ Kein Mikrofon erlaubt', 2); return;
+      }
+      if (!funkWillAufnehmen) return;          // schon wieder losgelassen, während der Browser gefragt hat
+      const typ = funkFormat();
+      const teile = [];
+      const rec = new MediaRecorder(funkMikro, { ...(typ && { mimeType: typ }), audioBitsPerSecond: 24000 });
+      rec.ondataavailable = e => { if (e.data.size) teile.push(e.data); };
+      rec.onstop = async () => {
+        const dauer = (performance.now() - funkStart) / 1000;
+        if (dauer < 0.4 || !teile.length) return;     // nur kurz getippt: nichts senden
+        const blob = new Blob(teile, { type: rec.mimeType || typ });
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        mpSenden('funk', { id: meineId + '-' + Math.random().toString(36).slice(2, 8), typ: blob.type, ton: btoa(bin) });
+        chatZeile(mp.name, `🎙️ Sprachnachricht (${dauer.toFixed(1)} s)`, true);
+      };
+      funkRecorder = rec;
+      funkStart = performance.now();
+      rec.start();
+      funkKnopf.classList.add('an'); funkAnzeige.classList.add('an');
+      const zaehlen = () => {
+        if (funkRecorder !== rec) return;
+        const rest = FUNK_MAX - (performance.now() - funkStart) / 1000;
+        if (rest <= 0) { funkStoppen(); return; }
+        funkAnzeige.textContent = `🔴 Funk an · ${Math.ceil(rest)} s`;
+        funkTimer = setTimeout(zaehlen, 200);
+      };
+      zaehlen();
+    }
+    function funkStoppen() {
+      funkWillAufnehmen = false;
+      clearTimeout(funkTimer);
+      funkKnopf.classList.remove('an'); funkAnzeige.classList.remove('an');
+      if (funkRecorder) { const r = funkRecorder; funkRecorder = null; if (r.state !== 'inactive') r.stop(); }
+    }
+    function funkAus() {                       // Raum verlassen: Mikrofon ganz ausschalten
+      funkStoppen();
+      if (funkMikro) { funkMikro.getTracks().forEach(t => t.stop()); funkMikro = null; }
+    }
+    function funkEmpfangen(id, d) {
+      if (typeof d?.ton !== 'string' || typeof d.id !== 'string' || funkGesehen.has(d.id)) return;
+      if (d.ton.length > 200000) return;       // viel zu groß: ignorieren
+      funkGesehen.add(d.id);
+      const a = mp.andere.get(id);
+      chatZeile(a?.daten?.n || 'Affe', '🔊 Sprachnachricht', false);
+      funkSchlange.push({ a, d });
+      funkNaechste();
+    }
+    async function funkNaechste() {
+      if (funkSpieltGerade || !funkSchlange.length) return;
+      funkSpieltGerade = true;
+      const { a, d } = funkSchlange.shift();
+      const bin = atob(d.ton);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      sprechblase(a?.gruppe, '🔊 spricht …');
+      const fertig = () => { funkSpieltGerade = false; if (a?.gruppe?.userData.blase) { a.gruppe.remove(a.gruppe.userData.blase); a.gruppe.userData.blase = null; } funkNaechste(); };
+      try {   // zuerst über die Ton-Maschine (klappt auch auf dem iPhone, wenn schon mal etwas geklungen hat)
+        tonMaschine ??= new AudioContext();
+        if (tonMaschine.state === 'suspended') await tonMaschine.resume();
+        const puffer = await tonMaschine.decodeAudioData(bytes.buffer.slice(0));
+        const quelle = tonMaschine.createBufferSource();
+        quelle.buffer = puffer; quelle.connect(tonMaschine.destination);
+        quelle.onended = fertig; quelle.start();
+      } catch (e) {   // sonst ganz normal als Audio-Datei
+        const url = URL.createObjectURL(new Blob([bytes], { type: d.typ || 'audio/webm' }));
+        const ton = new Audio(url);
+        ton.onended = ton.onerror = () => { URL.revokeObjectURL(url); fertig(); };
+        ton.play().catch(() => { URL.revokeObjectURL(url); fertig(); });
+      }
+    }
+    // Knopf gedrückt halten (Maus oder Finger)
+    funkKnopf.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); funkKnopf.setPointerCapture?.(e.pointerId); funkStarten(); });
+    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) funkKnopf.addEventListener(ev, e => { e.stopPropagation(); funkStoppen(); });
+    for (const ev of ['touchstart', 'mousedown', 'click', 'contextmenu']) funkKnopf.addEventListener(ev, e => { e.stopPropagation(); if (ev === 'contextmenu') e.preventDefault(); });
+    // Taste V halten
+    addEventListener('keydown', e => { if (e.code === 'KeyV' && !e.repeat && !chatOffen) funkStarten(); });
+    addEventListener('keyup', e => { if (e.code === 'KeyV') funkStoppen(); });
+    addEventListener('blur', funkStoppen);
     function zuSpielerBeamen(id) {
       const a = mp.andere.get(id);
       if (!a || imGefaengnis) return;
