@@ -2,10 +2,12 @@
 <html lang="de">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Mein erstes Spiel</title>
   <style>
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #87ceeb; font-family: sans-serif; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #87ceeb; font-family: sans-serif; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+    canvas { touch-action: none; }
+    button { touch-action: manipulation; }
     #hilfe {
       position: fixed; top: 12px; left: 12px; padding: 8px 12px;
       background: rgba(0,0,0,0.5); color: #fff; border-radius: 8px; font-size: 14px;
@@ -52,6 +54,45 @@
       width: min(92vw, 92vh); height: min(92vw, 92vh); z-index: 20; border-width: 4px;
       pointer-events: auto; cursor: crosshair;
     }
+    #karte { pointer-events: auto; cursor: pointer; }
+    #karteZu {
+      position: fixed; top: 14px; right: 14px; z-index: 21; width: 48px; height: 48px; border-radius: 50%;
+      border: 3px solid #fff; background: rgba(0,0,0,0.7); color: #fff; font-size: 24px; display: none; cursor: pointer;
+    }
+    #karteZu.offen { display: block; }
+    /* ---------- Handy ---------- */
+    #stick, #handyknoepfe { display: none; }
+    body.handy #handyknoepfe {
+      display: grid; position: fixed; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom));
+      grid-template-columns: repeat(2, 64px); gap: 10px; align-items: end; justify-items: center; z-index: 6;
+    }
+    body.handy #handyknoepfe button {
+      width: 60px; height: 60px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.7);
+      background: rgba(0,0,0,0.45); color: #fff; font-size: 26px; padding: 0;
+    }
+    body.handy #handyknoepfe button[hidden] { display: none; }
+    body.handy #handyknoepfe button.gross { width: 78px; height: 78px; font-size: 34px; grid-column: 2; }
+    body.handy #handyknoepfe button.gedrueckt { background: rgba(255,214,0,0.6); transform: scale(0.92); }
+    body.handy #stick {
+      position: fixed; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
+      border: 3px solid rgba(255,255,255,0.6); background: rgba(0,0,0,0.25); pointer-events: none; z-index: 6;
+      opacity: 0.35; left: 90px; top: calc(100% - 110px); display: block; transition: opacity 0.15s;
+    }
+    body.handy #stick.an { opacity: 1; }
+    #stickKnopf {
+      position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; border-radius: 50%;
+      background: rgba(255,255,255,0.85); transform: translate(-50%, -50%);
+    }
+    body.handy #waffenleiste { bottom: auto; top: 60px; left: 12px; transform: none; }
+    body.handy #waffenleiste .feld { width: 70px; padding: 6px 4px 4px; }
+    body.handy #waffenleiste .symbol { font-size: 20px; }
+    body.handy #fahrinfo { bottom: auto; top: 60px; max-width: calc(100vw - 220px); left: auto; right: 12px; transform: none; top: 220px; font-size: 12px; }
+    body.handy #fahrinfo b { font-size: 14px; }
+    body.handy #fahndung { bottom: auto; top: 12px; font-size: 13px; max-width: 60vw; }
+    body.handy #kabine, body.handy #haendler { bottom: auto; top: 12px; max-height: 55vh; overflow-y: auto; }
+    body.handy #kleider { max-height: 55vh; }
+    body.handy #punkte { font-size: 16px; padding: 6px 10px; }
+    body.handy #meldung { font-size: 26px; }
     #wegpunkt {
       position: fixed; top: 252px; right: 12px; padding: 3px 10px; border-radius: 8px;
       background: #ff4081; color: #fff; font-weight: bold; font-size: 14px; display: none; pointer-events: none;
@@ -183,6 +224,15 @@
   </div>
   <canvas id="karte" width="180" height="180" title="Mini-Karte"></canvas>
   <div id="wegpunkt"></div>
+  <button id="karteZu" title="Karte schließen">✕</button>
+  <div id="stick"><div id="stickKnopf"></div></div>
+  <div id="handyknoepfe">
+    <button data-taste="rauch" hidden>💨</button>
+    <button data-taste="zielen" hidden>🎯</button>
+    <button data-taste="schuss" hidden>🔫</button>
+    <button data-taste="aktion">✋</button>
+    <button data-taste="sprung" class="gross">⬆️</button>
+  </div>
   <div id="kabine">
     <h2>👕 Umkleidekabine</h2>
     <p>Klick auf eine Farbe für das Fell deines Affen:</p>
@@ -204,7 +254,11 @@
     // WebGPU-Renderer: malt mit der modernen Grafik-Schnittstelle WebGPU
     const renderer = new THREE.WebGPURenderer({ antialias: true });
     renderer.setSize(innerWidth, innerHeight);
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    // Handy oder Tablet? (Touchscreen) – mit ?handy=1 kann man die Handy-Steuerung auch am Computer testen
+    const IST_HANDY = new URLSearchParams(location.search).has('handy') || matchMedia('(pointer: coarse)').matches;
+    if (IST_HANDY) document.body.classList.add('handy');
+    const E_TASTE = IST_HANDY ? '✋' : 'E'; // so heißt die Aktions-Taste in den Hinweisen
+    renderer.setPixelRatio(Math.min(devicePixelRatio, IST_HANDY ? 1.5 : 2)); // auf dem Handy etwas sparsamer
     renderer.shadowMap.enabled = true;
     document.body.appendChild(renderer.domElement);
     await renderer.init(); // WebGPU starten (dauert einen Moment)
@@ -228,7 +282,7 @@
     sonne.castShadow = true;
     sonne.shadow.bias = -0.0005;      // verhindert Streifen-Muster auf den Blöcken
     sonne.shadow.normalBias = 0.02;
-    sonne.shadow.mapSize.set(2048, 2048); // schärfere Schatten
+    sonne.shadow.mapSize.set(IST_HANDY ? 1024 : 2048, IST_HANDY ? 1024 : 2048); // schärfere Schatten (Handy: etwas weniger)
     sonne.shadow.camera.left = -30; sonne.shadow.camera.right = 30;
     sonne.shadow.camera.top = 30;   sonne.shadow.camera.bottom = -30;
     szene.add(sonne);
@@ -1781,12 +1835,12 @@
 
     // Ein Bild lang fahren
     function fahren(f, dt) {
-      const gas = (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0);
-      const lenkRichtung = (tasten.KeyA ? 1 : 0) - (tasten.KeyD ? 1 : 0); // A = links, D = rechts
+      const gas = stick.aktiv ? stick.y : (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0);                 // Handy: Stick hoch = Gas
+      const lenkRichtung = stick.aktiv ? -stick.x : (tasten.KeyA ? 1 : 0) - (tasten.KeyD ? 1 : 0); // A = links, D = rechts
 
       // Gas geben, bremsen, rückwärts fahren
-      if (gas > 0) f.tempo += (f.tempo < 0 ? 25 : f.beschl) * dt;
-      else if (gas < 0) f.tempo -= (f.tempo > 0 ? 25 : f.beschl * 0.6) * dt;
+      if (gas > 0.2) f.tempo += (f.tempo < 0 ? 25 : f.beschl) * dt;
+      else if (gas < -0.2) f.tempo -= (f.tempo > 0 ? 25 : f.beschl * 0.6) * dt;
       else f.tempo -= Math.sign(f.tempo) * Math.min(Math.abs(f.tempo), 6 * dt); // ausrollen
       f.tempo = THREE.MathUtils.clamp(f.tempo, -f.maxTempo * 0.35, f.maxTempo);
 
@@ -3112,6 +3166,7 @@
     function karteUmschalten(gross = !karteGross) {
       karteGross = gross;
       karte.classList.toggle('gross', karteGross);
+      document.getElementById('karteZu').classList.toggle('offen', karteGross);
       karte.width = karte.height = karteGross ? 900 : 180;
     }
     karteUmschalten(false);
@@ -3126,6 +3181,8 @@
     wegpunktStrahl.visible = false;
     szene.add(wegpunktStrahl);
     const wegpunktAnzeige = document.getElementById('wegpunkt');
+    karte.addEventListener('pointerdown', e => { if (!karteGross) { e.preventDefault(); e.stopPropagation(); karteUmschalten(true); } }); // kleine Karte antippen = groß
+    document.getElementById('karteZu').addEventListener('pointerdown', e => { e.preventDefault(); karteUmschalten(false); });
     karte.addEventListener('mousedown', e => {
       if (!karteGross) return;
       e.preventDefault();
@@ -3186,7 +3243,7 @@
         }
         pin.font = `${Math.round(groesse / 70)}px sans-serif`;
         pin.fillStyle = 'rgba(255,255,255,0.9)';
-        pin.fillText('Klick = Wegpunkt setzen · M oder Esc = schließen', groesse / 2, groesse - groesse / 40);
+        pin.fillText(IST_HANDY ? 'Tippen = Wegpunkt setzen · ✕ = schließen' : 'Klick = Wegpunkt setzen · M oder Esc = schließen', groesse / 2, groesse - groesse / 40);
       }
       // Polizei: blinkender Punkt
       if (polizei.aktiv) {
@@ -3299,7 +3356,7 @@
         figur.position.y = 0; figur.rotation.x = 0;
         const kmh = Math.round(Math.abs(f.tempo) * 3.6);
         fahrInfo.innerHTML = `<b>${f.emoji} ${f.name} · ${kmh} km/h</b>` +
-          `<small>W Gas · S Bremse/Rückwärts · A/D lenken · Leertaste hupen · E aussteigen</small>`;
+          (IST_HANDY ? '<small>Stick: Gas, Bremse und lenken · 📯 hupen · ✋ aussteigen</small>' : `<small>W Gas · S Bremse/Rückwärts · A/D lenken · Leertaste hupen · E aussteigen</small>`);
         fahrInfo.classList.add('offen');
       } else {
         // ===== LAUFEN =====
@@ -3313,13 +3370,14 @@
         }
 
         // Bewegen mit W A S D – immer so, wie die Kamera gerade schaut
-        const vor   = (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0); // W = nach vorne, S = nach hinten
-        const seite = (tasten.KeyD ? 1 : 0) - (tasten.KeyA ? 1 : 0); // D = nach rechts, A = nach links
+        let vor   = (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0); // W = nach vorne, S = nach hinten
+        let seite = (tasten.KeyD ? 1 : 0) - (tasten.KeyA ? 1 : 0); // D = nach rechts, A = nach links
+        if (stick.aktiv) { vor = stick.y; seite = stick.x; }        // Handy: Joystick (auch halb gedrückt = langsamer)
         const sin = Math.sin(kameraWinkel), cos = Math.cos(kameraWinkel);
         let wx = -sin * vor + cos * seite, wz = -cos * vor - sin * seite;
         const laenge = Math.hypot(wx, wz);
-        if (laenge > 0) { wx /= laenge; wz /= laenge; }                // schräg ist nicht schneller als geradeaus
-        const rennt = (tasten.ShiftLeft || tasten.ShiftRight) && laenge > 0;
+        if (laenge > 1) { wx /= laenge; wz /= laenge; }                // schräg ist nicht schneller als geradeaus
+        const rennt = ((tasten.ShiftLeft || tasten.ShiftRight) && laenge > 0) || (stick.aktiv && laenge > 0.93); // Handy: Stick ganz außen = rennen
         const laufTempo = (hatJetpack() && !zuletztAmBoden ? TEMPO * 1.7 : rennt ? RENN_TEMPO : TEMPO) * (zielModus ? 0.5 : 1);
         // Sanft schneller und langsamer werden (in der Luft lenkt man etwas weniger)
         const griff = Math.min(1, (zuletztAmBoden ? 12 : 5) * dt);
@@ -3397,15 +3455,15 @@
           const loch = !bloecke.includes(lockereStelle);
           const amStein = Math.hypot(p.x - lockereStelle.x, p.z - lockereStelle.z) < 1.9;
           fahrInfo.innerHTML = loch ? '<b>🕳️ Durchs Loch – dann die Gefängnis-Obby hoch bis auf die Mauer!</b><small>Achte auf den Wärter. Nicht in die Lava fallen!</small>'
-            : amStein ? `<b>⛏️ E drücken zum Graben (${grabZaehler}/${GRAB_NOETIG})</b>`
+            : amStein ? `<b>⛏️ ${E_TASTE} drücken zum Graben (${grabZaehler}/${GRAB_NOETIG})</b>`
             : '<b>🔒 Du bist im Gefängnis!</b><small>Tipp: Ein Stück der Rückwand sieht locker aus …</small>';
           fahrInfo.classList.add('offen');
         } else if (amTresor(p)) {
           fahrInfo.innerHTML = spielZeit - BANK.geraubtUm < BANK_PAUSE ? '<b>Der Tresor ist leer.</b><small>In ein paar Minuten ist wieder Geld drin …</small>'
-            : `<b>💰 E drücken: Tresor knacken (${BANK.zaehler}/10)</b><small>Achtung: Danach kommt die Polizei!</small>`;
+            : `<b>💰 ${E_TASTE} drücken: Tresor knacken (${BANK.zaehler}/10)</b><small>Achtung: Danach kommt die Polizei!</small>`;
           fahrInfo.classList.add('offen');
         } else if (nah) {
-          fahrInfo.innerHTML = `<b>Drücke E zum Einsteigen: ${nah.emoji} ${nah.name}</b>`;
+          fahrInfo.innerHTML = `<b>Drücke ${E_TASTE} zum Einsteigen: ${nah.emoji} ${nah.name}</b>`;
           fahrInfo.classList.add('offen');
         } else {
           fahrInfo.classList.remove('offen');
@@ -3453,6 +3511,7 @@
       kabinenMenue.classList.toggle('offen', !aktuellesFahrzeug && inKabine(p));
       haendlerMenue.classList.toggle('offen', !aktuellesFahrzeug && imHaendlerLaden(p));
       kleiderladenPruefen(p);
+      handyKnoepfeZeigen();
       jetpackFlammen(dt);
       if (regenbogen) fell.color.setHSL((spielZeit * 0.2) % 1, 0.8, 0.45);
 
@@ -3520,6 +3579,85 @@
 
       renderer.render(szene, kamera);
     }
+    // ================= HANDY-STEUERUNG =================
+    // Links: Joystick zum Laufen/Fahren (erscheint da, wo der Daumen hinkommt).
+    // Rechts: wischen = herumschauen. Knöpfe rechts unten. Auf die Karte tippen = groß.
+    const stick = { aktiv: false, id: null, x: 0, y: 0, startX: 0, startY: 0 };
+    const STICK_RADIUS = 55;
+    const stickBild = document.getElementById('stick'), stickKnopf = document.getElementById('stickKnopf');
+    let schauFinger = null, schauX = 0, schauY = 0;
+    const spielFlaeche = renderer.domElement;
+    spielFlaeche.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' && !IST_HANDY) return;      // am Computer bleibt alles wie bisher
+      e.preventDefault();
+      if (e.clientX < innerWidth * 0.45 && !stick.aktiv) {       // linke Seite: Joystick
+        Object.assign(stick, { aktiv: true, id: e.pointerId, x: 0, y: 0, startX: e.clientX, startY: e.clientY });
+        stickBild.style.left = e.clientX + 'px'; stickBild.style.top = e.clientY + 'px';
+        stickKnopf.style.transform = 'translate(-50%, -50%)';
+        stickBild.classList.add('an');
+      } else if (schauFinger === null) {                          // rechte Seite: herumschauen
+        schauFinger = e.pointerId; schauX = e.clientX; schauY = e.clientY;
+      }
+    }, { passive: false });
+    addEventListener('pointermove', e => {
+      if (stick.aktiv && e.pointerId === stick.id) {
+        let dx = e.clientX - stick.startX, dy = e.clientY - stick.startY;
+        const l = Math.hypot(dx, dy);
+        if (l > STICK_RADIUS) { dx *= STICK_RADIUS / l; dy *= STICK_RADIUS / l; }
+        const staerke = Math.min(1, l / STICK_RADIUS);
+        const tot = staerke < 0.15 ? 0 : 1;                          // kleine Bewegungen zählen nicht
+        stick.x = dx / STICK_RADIUS * tot; stick.y = -dy / STICK_RADIUS * tot;
+        stickKnopf.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      } else if (e.pointerId === schauFinger) {
+        const dx = e.clientX - schauX, dy = e.clientY - schauY;
+        schauX = e.clientX; schauY = e.clientY;
+        if (zielModus) {                                             // beim Zielen: Fadenkreuz bewegen
+          kameraWinkel -= dx * 0.004;
+          zielNeigung = THREE.MathUtils.clamp(zielNeigung - dy * 0.004, -0.6, 0.8);
+        } else {
+          kameraWinkel -= dx * 0.008;
+          kameraNeigung = THREE.MathUtils.clamp(kameraNeigung + dy * 0.006, 0.1, 1.4);
+        }
+      }
+    });
+    function fingerWeg(e) {
+      if (stick.aktiv && e.pointerId === stick.id) { Object.assign(stick, { aktiv: false, id: null, x: 0, y: 0 }); stickBild.classList.remove('an'); }
+      if (e.pointerId === schauFinger) schauFinger = null;
+    }
+    addEventListener('pointerup', fingerWeg);
+    addEventListener('pointercancel', fingerWeg);
+
+    // --- Knöpfe ---
+    const handyKnoepfe = document.getElementById('handyknoepfe');
+    for (const k of handyKnoepfe.querySelectorAll('button')) {
+      k.addEventListener('pointerdown', e => {
+        e.preventDefault(); e.stopPropagation();
+        k.classList.add('gedrueckt');
+        const was = k.dataset.taste;
+        if (was === 'sprung') { tasten.Space = true; sprungGedrueckt = true; sprungGedruecktUm = spielZeit; }
+        if (was === 'aktion') eGedrueckt = true;
+        if (was === 'schuss') { if (inventar.pistole && !aktuellesFahrzeug && auswahl !== 1) { auswahl = 1; inventarZeigen(); } fGedrueckt = true; }
+        if (was === 'zielen') zielfernrohrBenutzen(!zielModus);
+        if (was === 'rauch') gGedrueckt = true;
+      });
+      const los = () => { k.classList.remove('gedrueckt'); if (k.dataset.taste === 'sprung') tasten.Space = false; };
+      k.addEventListener('pointerup', los);
+      k.addEventListener('pointercancel', los);
+      k.addEventListener('pointerleave', los);
+    }
+    // Welche Knöpfe gerade gebraucht werden
+    function handyKnoepfeZeigen() {
+      if (!IST_HANDY) return;
+      handyKnoepfe.querySelector('[data-taste="schuss"]').hidden = !inventar.pistole || !!aktuellesFahrzeug;
+      handyKnoepfe.querySelector('[data-taste="zielen"]').hidden = !inventar.pistole || !!aktuellesFahrzeug;
+      handyKnoepfe.querySelector('[data-taste="rauch"]').hidden = inventar.rauch <= 0;
+      handyKnoepfe.querySelector('[data-taste="sprung"]').textContent = aktuellesFahrzeug ? '📯' : '⬆️';
+    }
+    if (IST_HANDY) {
+      document.querySelector('#hilfe .text').textContent =
+        'Links: Stick = laufen (ganz außen = rennen) · Rechts wischen = umschauen · ⬆️ springen (halten = Jetpack) · ✋ einsteigen/graben/Tresor · Karte antippen = groß · H/❓ = Hilfe';
+    }
+
     // ================= LIVE-VERBINDUNG ZU BLENDER =================
     // Alle 2 Sekunden schaut das Spiel nach, ob Blender neue Modelle gespeichert hat.
     // Wenn ja: Spielstand merken, Seite neu laden, Spielstand wiederherstellen.
