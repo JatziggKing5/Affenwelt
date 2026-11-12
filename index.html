@@ -44,6 +44,31 @@
       box-shadow: 0 2px 10px rgba(0,0,0,0.4); pointer-events: none;
     }
     @media (max-width: 500px) { #karte { width: 110px; height: 110px; } }
+    #kleider {
+      position: fixed; top: 12px; left: 12px; z-index: 10; width: min(380px, calc(100vw - 24px)); max-height: calc(100vh - 130px);
+      box-sizing: border-box; overflow-y: auto; padding: 12px 14px; border-radius: 14px;
+      background: rgba(74, 20, 90, 0.98); color: #fff; display: none; user-select: none;
+    }
+    #kleider.offen { display: block; }
+    #kleider h2 { margin: 0 0 2px; font-size: 22px; text-align: center; }
+    #kleider p { margin: 2px 0 8px; font-size: 12px; text-align: center; opacity: 0.85; }
+    #kleider p.klein { font-size: 11px; opacity: 0.6; margin-top: 8px; }
+    #kleider .reiterleiste { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; justify-content: center; }
+    #kleider .reiter { border: none; border-radius: 14px; padding: 4px 9px; font-size: 12px; cursor: pointer; background: rgba(255,255,255,0.15); color: #fff; }
+    #kleider .reiter.aktiv { background: #ffd600; color: #000; font-weight: bold; }
+    #kleider .auswahl { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 6px; }
+    #kleider .karte {
+      display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border-radius: 10px; cursor: pointer;
+      background: rgba(255,255,255,0.1); border: 2px solid transparent; text-align: center;
+    }
+    #kleider .karte:hover { background: rgba(255,255,255,0.2); }
+    #kleider .karte.an { border-color: #ffd600; background: rgba(255,214,0,0.18); }
+    #kleider .bild { font-size: 28px; }
+    #kleider .name { font-size: 12px; font-weight: bold; }
+    #kleider .knopf { font-size: 11px; padding: 2px 8px; border-radius: 8px; background: #ffd600; color: #000; font-weight: bold; }
+    #kleider .karte.hab .knopf { background: #81c784; }
+    #kleider .karte.an .knopf { background: #ff8a65; }
+    #kleider .allesAus { display: block; margin: 10px auto 0; border: none; border-radius: 8px; padding: 6px 12px; cursor: pointer; background: rgba(255,255,255,0.2); color: #fff; }
     #waffenleiste {
       position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
       display: none; gap: 8px; user-select: none;
@@ -125,6 +150,14 @@
   <div id="fahrinfo"></div>
   <div id="fahndung"></div>
   <div id="waffenleiste"></div>
+  <div id="kleider">
+    <h2>👕 Affen-Mode</h2>
+    <p>Klick: kaufen, anziehen oder ausziehen · bezahlt wird mit Punkten</p>
+    <div class="reiterleiste"></div>
+    <div class="auswahl"></div>
+    <button class="allesAus">Alles ausziehen</button>
+    <p class="klein">Zum Verlassen einfach rauslaufen</p>
+  </div>
   <div id="zielfernrohr"></div>
   <div id="haendler">
     <h2>🍌 Bananen-Waffen</h2>
@@ -141,7 +174,7 @@
     <div id="farben"></div>
     <p class="klein">Zum Verlassen einfach rauslaufen.</p>
   </div>
-  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1/2: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · 🚔 Nicht über Rot fahren!</div>
+  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1/2: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · Jetpack: Leertaste halten · 🚔 Nicht über Rot fahren!</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -955,6 +988,47 @@
       freiHalten.push({ x: cx, z: cz, r: 9 });
     }
 
+    // ================= KLEIDERLADEN "AFFEN-MODE" =================
+    // In der Stadt an der Querstraße bei z = 290. Drinnen: Kleiderstangen, Spiegel und Schaufensterpuppen.
+    const KLEIDERLADEN = { x: -40, z: 277.5, b: 16, t: 12, h: 5, vorne: 1 };
+    {
+      const { x: cx, z: cz, b: B, t: T, h: H, vorne } = KLEIDERLADEN, W = 0.3;
+      const fz = cz + vorne * T / 2, hz = cz - vorne * T / 2;
+      const rosa = 0xf8bbd0;
+      neuerBlock(cx, hz, B, W, 0, H, 'block', rosa);
+      neuerBlock(cx - B / 2, cz, W, T, 0, H, 'block', rosa);
+      neuerBlock(cx + B / 2, cz, W, T, 0, H, 'block', rosa);
+      neuerBlock(cx - (B / 4 + 0.75), fz, B / 2 - 1.5, W, 0, H, 'block', rosa);
+      neuerBlock(cx + (B / 4 + 0.75), fz, B / 2 - 1.5, W, 0, H, 'block', rosa);
+      neuerBlock(cx, fz, 3, W, 3, H, 'block', rosa);
+      neuerBlock(cx, cz, B + 0.6, T + 0.6, H, H + 0.3, 'block', 0x8e24aa);            // lila Dach
+      for (const sx of [-1, 1]) instanz(einheitsKiste, schaufenster, cx + sx * (B / 4 + 0.75), 1.9, fz + vorne * 0.17, B / 2 - 2.6, 2.2, 0.05, 0, null, false);
+      flach(new THREE.MeshStandardMaterial({ color: 0xfce4ec, roughness: 0.5 }), cx, cz, B - 0.4, T - 0.4, 0.03);
+      schildBauen('👕 AFFEN-MODE', 8, 1.4, '#8e24aa', '#ffffff', cx, H - 0.9, fz + vorne * 0.2, vorne > 0 ? 0 : Math.PI);
+      // Kleiderstangen mit bunten Shirts an den Seitenwänden
+      const stange = new THREE.MeshStandardMaterial({ color: 0xbdbdbd, metalness: 0.8, roughness: 0.3 });
+      const stoff = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
+      const SHIRT_FARBEN = [0xe53935, 0x1e88e5, 0x43a047, 0xfdd835, 0x8e24aa, 0xff7043, 0x00acc1, 0xffffff, 0x212121];
+      for (const sx of [-1, 1]) {
+        const x = cx + sx * (B / 2 - 0.7);
+        instanz(einheitsKiste, stange, x, 1.7, cz, 0.05, 0.05, T - 3, 0, null, false);
+        for (let i = 0; i < 12; i++) {
+          instanz(einheitsKiste, stoff, x, 1.25, cz - (T - 4) / 2 + i * (T - 4) / 11, 0.5, 0.8, 0.06, 0, SHIRT_FARBEN[(i + (sx > 0 ? 4 : 0)) % SHIRT_FARBEN.length], false);
+        }
+      }
+      // großer Spiegel an der Rückwand
+      const spiegel = new THREE.Mesh(new THREE.PlaneGeometry(4, 2.6), new THREE.MeshStandardMaterial({ color: 0xcfe8ff, metalness: 1, roughness: 0.05 }));
+      spiegel.position.set(cx, 1.9, hz + vorne * 0.17);
+      spiegel.rotation.y = vorne > 0 ? 0 : Math.PI;
+      szene.add(spiegel);
+      // Kasse
+      neuerBlock(cx + 5, fz - vorne * 2, 2.6, 0.8, 0, 1.0, 'block', 0x6a1b9a);
+      KLEIDERLADEN.puppenOrte = [ // hier stehen später die Schaufensterpuppen
+        { x: cx - 4, z: cz + vorne * 0.5 }, { x: cx - 1.5, z: cz - vorne * 2.5 }, { x: cx + 2, z: cz + vorne * 0.5 },
+      ];
+      KLEIDERLADEN.verkaeufer = { x: cx + 5, z: fz - vorne * 2.8 };
+    }
+
     // ================= GEFÄNGNIS =================
     // Ein Hof mit hoher Mauer, in der Mitte eine Zelle. In der Rückwand der Zelle ist eine lockere Stelle …
     const GEF = { x: -135, z: 20 };
@@ -1028,7 +1102,7 @@
         for (let z = gebiet.z1 + 8; z < gebiet.z2 - 4; z += 14) {
           const b = zwischen(7, 10), t = zwischen(7, 10);
           if (nahAnStrasse(x, z, Math.max(b, t) / 2 + 2.6)) continue;
-          if ([...LAEDEN, BANK].some(l => Math.abs(l.x - x) < (l.b + b) / 2 + 3 && Math.abs(l.z - z) < (l.t + t) / 2 + 3)) continue;
+          if ([...LAEDEN, BANK, KLEIDERLADEN].some(l => Math.abs(l.x - x) < (l.b + b) / 2 + 3 && Math.abs(l.z - z) < (l.t + t) / 2 + 3)) continue;
           const hoch = zufall() < 0.25; // manche sind Hochhäuser
           const h = hoch ? zwischen(12, 22) : zwischen(4, 7);
           const wandFarbe = HAUS_FARBEN[Math.floor(zufall() * HAUS_FARBEN.length)];
@@ -1378,6 +1452,7 @@
     let sprungZaehler = 0;    // wie oft er seit dem letzten Landen gesprungen ist
     let sprungGedrueckt = false;
     let fGedrueckt = false, gGedrueckt = false;
+    let zuletztAmBoden = true; // stand der Affe im letzten Bild auf dem Boden?
 
     // --- Kamera-Werte ---
     const KAMERA_ABSTAND = 10;   // wie weit die Kamera vom Affe weg ist
@@ -2352,6 +2427,7 @@
       punkteZeigen();
       const hatteSachen = inventar.pistole || inventar.rauch > 0;
       Object.assign(inventar, { pistole: false, munition: 0, zielfernrohr: false, rauch: 0 }); // die Polizei nimmt alles weg
+      if (kleider.an.ruecken === 'jetpack') { ausziehen('ruecken'); kleiderMerken(); } // Jetpack ab (bleibt aber deiner)
       auswahl = 0;
       zielfernrohrBenutzen(false);
       inventarZeigen();
@@ -2682,6 +2758,290 @@
       if (spielZeit < alarmBis && spielZeit > naechsterAlarmTon) { hupen(1250); naechsterAlarmTon = spielZeit + 0.3; }
     }
 
+    // ================= KLEIDER: 32 Sachen zum Anziehen =================
+    // Jedes Kleidungsstück wird aus einfachen Formen gebaut und an den Affen geheftet:
+    // Hüte und Brillen an den Kopf, Oberteile, Halssachen und Rucksäcke an den Körper, Schuhe an die Beine.
+    const stoffMat = (farbe, extra = {}) => new THREE.MeshStandardMaterial({ color: farbe, roughness: 0.75, ...extra });
+    const glanzMat = (farbe, extra = {}) => new THREE.MeshStandardMaterial({ color: farbe, roughness: 0.25, metalness: 0.7, ...extra });
+    function teil(form, material, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) {
+      const m = new THREE.Mesh(form, material);
+      m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.scale.set(sx, sy, sz);
+      m.castShadow = true;
+      return m;
+    }
+    const gruppe = (...teile) => { const g = new THREE.Group(); g.add(...teile); return g; };
+    const kuppel = r => new THREE.SphereGeometry(r, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2); // halbe Kugel (für Mützen)
+    // Muster auf eine Leinwand malen (für Hemden). Vorne auf dem Körper ist bei u = 0,25.
+    function muster(malen) {
+      const lw = document.createElement('canvas');
+      lw.width = 512; lw.height = 256;
+      malen(lw.getContext('2d'), 512, 256);
+      const tex = new THREE.CanvasTexture(lw);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+    // Ein Oberteil: eine Kugel, die etwas größer ist als der Bauch
+    const hemd = material => gruppe(teil(new THREE.SphereGeometry(0.315, 28, 16), material, 0, -0.07, 0, 0, 0, 0, 1, 1.08, 0.93));
+    // Brillengläser vor den Augen (Augen bei x = ±0,1, y = 0,085)
+    const glasForm = new THREE.CylinderGeometry(0.075, 0.075, 0.02, 20);
+
+    const KLEIDER = [
+      // ---------- HÜTE ----------
+      { id: 'cap', kat: 'hut', name: 'Basecap', emoji: '🧢', preis: 20, bauen: () => gruppe(
+        teil(kuppel(0.305), stoffMat(0xe53935), 0, 0.03, 0),
+        teil(new THREE.BoxGeometry(0.34, 0.025, 0.22), stoffMat(0xe53935), 0, 0.05, 0.3, 0.12)) },
+      { id: 'zylinder', kat: 'hut', name: 'Zylinder', emoji: '🎩', preis: 60, bauen: () => gruppe(
+        teil(new THREE.CylinderGeometry(0.3, 0.3, 0.025, 28), stoffMat(0x111111), 0, 0.22, 0),
+        teil(new THREE.CylinderGeometry(0.18, 0.18, 0.38, 28), stoffMat(0x111111), 0, 0.42, 0),
+        teil(new THREE.CylinderGeometry(0.185, 0.185, 0.06, 28), stoffMat(0xb71c1c), 0, 0.27, 0)) },
+      { id: 'cowboy', kat: 'hut', name: 'Cowboyhut', emoji: '🤠', preis: 45, bauen: () => gruppe(
+        teil(new THREE.CylinderGeometry(0.46, 0.46, 0.03, 28), stoffMat(0x8d6e63), 0, 0.2, 0, 0, 0, 0, 1, 1, 0.85),
+        teil(new THREE.CylinderGeometry(0.2, 0.23, 0.24, 24), stoffMat(0x8d6e63), 0, 0.33, 0),
+        teil(new THREE.CylinderGeometry(0.235, 0.235, 0.05, 24), stoffMat(0x3e2723), 0, 0.24, 0)) },
+      { id: 'krone', kat: 'hut', name: 'Krone', emoji: '👑', preis: 150, bauen: () => {
+        const gold = glanzMat(0xffc107, { side: THREE.DoubleSide, emissive: 0x3e2a00 });
+        const g = gruppe(teil(new THREE.CylinderGeometry(0.21, 0.21, 0.14, 28, 1, true), gold, 0, 0.3, 0));
+        for (let i = 0; i < 6; i++) {
+          const w = i / 6 * Math.PI * 2;
+          g.add(teil(new THREE.ConeGeometry(0.045, 0.14, 8), gold, Math.sin(w) * 0.2, 0.43, Math.cos(w) * 0.2));
+          g.add(teil(new THREE.SphereGeometry(0.025, 8, 6), glanzMat(i % 2 ? 0xe53935 : 0x1e88e5), Math.sin(w) * 0.215, 0.3, Math.cos(w) * 0.215));
+        }
+        return g; } },
+      { id: 'party', kat: 'hut', name: 'Partyhut', emoji: '🥳', preis: 15, bauen: () => {
+        const tex = muster((p, b, h) => { p.fillStyle = '#ec407a'; p.fillRect(0, 0, b, h); p.fillStyle = '#ffeb3b';
+          for (let i = 0; i < 60; i++) { p.beginPath(); p.arc((i * 97) % b, (i * 53) % h, 9, 0, 7); p.fill(); } });
+        return gruppe(teil(new THREE.ConeGeometry(0.17, 0.42, 24), stoffMat(0xffffff, { map: tex }), 0.04, 0.46, 0, 0, 0, -0.2),
+                      teil(new THREE.SphereGeometry(0.05, 10, 8), stoffMat(0xfff176), 0.08, 0.68, 0)); } },
+      { id: 'helm', kat: 'hut', name: 'Bauhelm', emoji: '👷', preis: 30, bauen: () => gruppe(
+        teil(kuppel(0.315), glanzMat(0xfdd835, { metalness: 0.1 }), 0, 0.03, 0),
+        teil(new THREE.CylinderGeometry(0.36, 0.36, 0.025, 28), glanzMat(0xfdd835, { metalness: 0.1 }), 0, 0.04, 0.02),
+        teil(new THREE.BoxGeometry(0.06, 0.05, 0.6), glanzMat(0xfbc02d, { metalness: 0.1 }), 0, 0.31, 0, 0.0)) },
+      { id: 'muetze', kat: 'hut', name: 'Wollmütze', emoji: '🧶', preis: 20, bauen: () => gruppe(
+        teil(kuppel(0.318), stoffMat(0x1565c0), 0, 0.02, 0, 0, 0, 0, 1, 1.15, 1),
+        teil(new THREE.TorusGeometry(0.3, 0.045, 10, 28), stoffMat(0xffffff), 0, 0.04, 0, Math.PI / 2),
+        teil(new THREE.SphereGeometry(0.08, 12, 10), stoffMat(0xffffff), 0, 0.4, 0)) },
+      { id: 'wikinger', kat: 'hut', name: 'Wikingerhelm', emoji: '⚔️', preis: 70, bauen: () => gruppe(
+        teil(kuppel(0.318), glanzMat(0x90a4ae), 0, 0.02, 0),
+        teil(new THREE.TorusGeometry(0.31, 0.03, 8, 28), glanzMat(0x8d6e63, { metalness: 0.2 }), 0, 0.04, 0, Math.PI / 2),
+        teil(new THREE.ConeGeometry(0.055, 0.28, 12), stoffMat(0xfff8e1), -0.3, 0.24, 0, 0, 0, 0.9),
+        teil(new THREE.ConeGeometry(0.055, 0.28, 12), stoffMat(0xfff8e1), 0.3, 0.24, 0, 0, 0, -0.9)) },
+      // ---------- BRILLEN ----------
+      { id: 'sonnenbrille', kat: 'brille', name: 'Sonnenbrille', emoji: '🕶️', preis: 25, bauen: () => gruppe(
+        teil(glasForm, glanzMat(0x111111), -0.1, 0.085, 0.31, Math.PI / 2), teil(glasForm, glanzMat(0x111111), 0.1, 0.085, 0.31, Math.PI / 2),
+        teil(new THREE.BoxGeometry(0.06, 0.015, 0.015), glanzMat(0x111111), 0, 0.1, 0.31),
+        teil(new THREE.BoxGeometry(0.015, 0.015, 0.3), glanzMat(0x111111), -0.2, 0.1, 0.17),
+        teil(new THREE.BoxGeometry(0.015, 0.015, 0.3), glanzMat(0x111111), 0.2, 0.1, 0.17)) },
+      { id: 'nerd', kat: 'brille', name: 'Nerd-Brille', emoji: '🤓', preis: 20, bauen: () => {
+        const rahmen = stoffMat(0x212121), glas = new THREE.MeshStandardMaterial({ color: 0xe1f5fe, transparent: true, opacity: 0.35 });
+        return gruppe(
+          teil(new THREE.TorusGeometry(0.075, 0.016, 8, 20), rahmen, -0.1, 0.085, 0.31), teil(new THREE.TorusGeometry(0.075, 0.016, 8, 20), rahmen, 0.1, 0.085, 0.31),
+          teil(glasForm, glas, -0.1, 0.085, 0.31, Math.PI / 2), teil(glasForm, glas, 0.1, 0.085, 0.31, Math.PI / 2),
+          teil(new THREE.BoxGeometry(0.06, 0.02, 0.02), rahmen, 0, 0.1, 0.31)); } },
+      { id: 'herzbrille', kat: 'brille', name: 'Herzbrille', emoji: '😍', preis: 30, bauen: () => {
+        const herz = new THREE.Shape();
+        herz.moveTo(0, -0.06); herz.bezierCurveTo(-0.1, 0, -0.06, 0.07, 0, 0.03); herz.bezierCurveTo(0.06, 0.07, 0.1, 0, 0, -0.06);
+        const form = new THREE.ExtrudeGeometry(herz, { depth: 0.02, bevelEnabled: false });
+        const rot = glanzMat(0xff4081, { metalness: 0.2, transparent: true, opacity: 0.9 });
+        return gruppe(teil(form, rot, -0.1, 0.09, 0.3, 0, 0, 0, 1.2, 1.2, 1), teil(form, rot, 0.1, 0.09, 0.3, 0, 0, 0, 1.2, 1.2, 1),
+                      teil(new THREE.BoxGeometry(0.06, 0.015, 0.015), rot, 0, 0.1, 0.31)); } },
+      { id: 'skibrille', kat: 'brille', name: 'Skibrille', emoji: '🎿', preis: 35, bauen: () => gruppe(
+        teil(new THREE.BoxGeometry(0.42, 0.13, 0.05), glanzMat(0xff9800, { metalness: 0.4, emissive: 0x4e2600 }), 0, 0.09, 0.3),
+        teil(new THREE.TorusGeometry(0.305, 0.02, 8, 32), stoffMat(0x212121), 0, 0.09, 0, Math.PI / 2)) },
+      { id: 'monokel', kat: 'brille', name: 'Monokel', emoji: '🧐', preis: 40, bauen: () => gruppe(
+        teil(new THREE.TorusGeometry(0.075, 0.012, 8, 20), glanzMat(0xffc107), 0.1, 0.085, 0.31),
+        teil(glasForm, new THREE.MeshStandardMaterial({ color: 0xe1f5fe, transparent: true, opacity: 0.3 }), 0.1, 0.085, 0.31, Math.PI / 2),
+        teil(new THREE.CylinderGeometry(0.004, 0.004, 0.3, 4), glanzMat(0xffc107), 0.15, -0.06, 0.28, 0.2, 0, 0.3)) },
+      // ---------- OBERTEILE ----------
+      { id: 'shirtRot', kat: 'oberteil', name: 'T-Shirt rot', emoji: '👕', preis: 15, bauen: () => hemd(stoffMat(0xe53935)) },
+      { id: 'shirtBlau', kat: 'oberteil', name: 'T-Shirt blau', emoji: '👕', preis: 15, bauen: () => hemd(stoffMat(0x1e88e5)) },
+      { id: 'pulli', kat: 'oberteil', name: 'Pulli grün', emoji: '🧥', preis: 25, bauen: () => hemd(stoffMat(0x2e7d32, { roughness: 1 })) },
+      { id: 'ringel', kat: 'oberteil', name: 'Ringelshirt', emoji: '🦓', preis: 25, bauen: () => hemd(stoffMat(0xffffff, { map: muster((p, b, h) => {
+          for (let y = 0; y < h; y += 32) { p.fillStyle = (y / 32) % 2 ? '#ffffff' : '#1a237e'; p.fillRect(0, y, b, 32); } }) })) },
+      { id: 'hawaii', kat: 'oberteil', name: 'Hawaii-Hemd', emoji: '🌺', preis: 35, bauen: () => hemd(stoffMat(0xffffff, { map: muster((p, b, h) => {
+          p.fillStyle = '#00acc1'; p.fillRect(0, 0, b, h);
+          for (let i = 0; i < 40; i++) { const x = (i * 131) % b, y = (i * 71) % h;
+            p.fillStyle = i % 2 ? '#ff4081' : '#ffeb3b';
+            for (let k = 0; k < 5; k++) { p.beginPath(); p.arc(x + Math.cos(k * 1.26) * 9, y + Math.sin(k * 1.26) * 9, 7, 0, 7); p.fill(); }
+            p.fillStyle = '#ffffff'; p.beginPath(); p.arc(x, y, 4, 0, 7); p.fill(); } }) })) },
+      { id: 'anzug', kat: 'oberteil', name: 'Anzug', emoji: '🤵', preis: 80, bauen: () => hemd(stoffMat(0xffffff, { map: muster((p, b, h) => {
+          p.fillStyle = '#212121'; p.fillRect(0, 0, b, h);
+          const vx = b * 0.25; // vorne: weißes Hemd als V und rote Krawatte
+          p.fillStyle = '#ffffff'; p.beginPath(); p.moveTo(vx - 45, 0); p.lineTo(vx + 45, 0); p.lineTo(vx, 130); p.fill();
+          p.fillStyle = '#c62828'; p.fillRect(vx - 7, 10, 14, 110);
+          p.fillStyle = '#ffd54f'; for (const y of [150, 185, 220]) { p.beginPath(); p.arc(vx, y, 6, 0, 7); p.fill(); } }) })) },
+      { id: 'superheld', kat: 'oberteil', name: 'Superhelden-Anzug', emoji: '🦸', preis: 90, bauen: () => hemd(stoffMat(0xffffff, { map: muster((p, b, h) => {
+          p.fillStyle = '#1565c0'; p.fillRect(0, 0, b, h);
+          p.fillStyle = '#c62828'; p.fillRect(0, h * 0.72, b, 14);                  // Gürtel
+          const vx = b * 0.25, vy = h * 0.4;                                             // Stern vorne auf der Brust
+          p.fillStyle = '#ffd600'; p.beginPath();
+          for (let i = 0; i < 10; i++) { const r = i % 2 ? 18 : 42, w = -Math.PI / 2 + i * Math.PI / 5; p.lineTo(vx + Math.cos(w) * r, vy + Math.sin(w) * r * 0.9); }
+          p.fill(); }) })) },
+      { id: 'trikot', kat: 'oberteil', name: 'Fußball-Trikot', emoji: '⚽', preis: 40, bauen: () => hemd(stoffMat(0xffffff, { map: muster((p, b, h) => {
+          p.fillStyle = '#ffffff'; p.fillRect(0, 0, b, h);
+          p.fillStyle = '#d50000'; p.fillRect(0, 0, b, 26); p.fillRect(0, h - 30, b, 30);
+          p.font = 'bold 110px sans-serif'; p.textAlign = 'center'; p.textBaseline = 'middle';
+          p.fillText('10', b * 0.75, h * 0.5);                                           // Rückennummer
+          p.font = 'bold 40px sans-serif'; p.fillText('10', b * 0.25 + 30, h * 0.38); }) })) },
+      // ---------- HALS ----------
+      { id: 'fliege', kat: 'hals', name: 'Fliege', emoji: '🎀', preis: 20, bauen: () => gruppe(
+        teil(new THREE.ConeGeometry(0.06, 0.1, 4), stoffMat(0xd50000), -0.05, 0.19, 0.27, 0, 0, Math.PI / 2),
+        teil(new THREE.ConeGeometry(0.06, 0.1, 4), stoffMat(0xd50000), 0.05, 0.19, 0.27, 0, 0, -Math.PI / 2),
+        teil(new THREE.SphereGeometry(0.025, 8, 6), stoffMat(0xb71c1c), 0, 0.19, 0.28)) },
+      { id: 'krawatte', kat: 'hals', name: 'Krawatte', emoji: '👔', preis: 25, bauen: () => gruppe(
+        teil(new THREE.BoxGeometry(0.06, 0.05, 0.03), stoffMat(0x1565c0), 0, 0.2, 0.27),
+        teil(new THREE.BoxGeometry(0.075, 0.26, 0.02), stoffMat(0x1565c0), 0, 0.05, 0.285, -0.35)) },
+      { id: 'goldkette', kat: 'hals', name: 'Goldkette', emoji: '📿', preis: 100, bauen: () => gruppe(
+        teil(new THREE.TorusGeometry(0.2, 0.018, 8, 32), glanzMat(0xffc107, { emissive: 0x3e2a00 }), 0, 0.16, 0.04, Math.PI / 2 - 0.45),
+        teil(new THREE.CylinderGeometry(0.06, 0.06, 0.02, 20), glanzMat(0xffc107, { emissive: 0x3e2a00 }), 0, 0.04, 0.27, Math.PI / 2 - 0.3)) },
+      { id: 'schal', kat: 'hals', name: 'Schal', emoji: '🧣', preis: 25, bauen: () => {
+        const tex = muster((p, b, h) => { for (let x = 0; x < b; x += 40) { p.fillStyle = (x / 40) % 2 ? '#ffffff' : '#c62828'; p.fillRect(x, 0, 40, h); } });
+        const mat = stoffMat(0xffffff, { map: tex });
+        return gruppe(teil(new THREE.TorusGeometry(0.2, 0.065, 10, 28), mat, 0, 0.2, 0, Math.PI / 2),
+                      teil(new THREE.BoxGeometry(0.1, 0.3, 0.04), mat, 0.1, 0.03, 0.26, -0.2, 0, 0.15)); } },
+      // ---------- RÜCKEN ----------
+      { id: 'umhang', kat: 'ruecken', name: 'Umhang', emoji: '🦹', preis: 50, bauen: () => gruppe(
+        teil(new THREE.CylinderGeometry(0.33, 0.48, 0.8, 20, 1, true, Math.PI * 0.62, Math.PI * 0.76), stoffMat(0xc62828, { side: THREE.DoubleSide }), 0, -0.15, -0.02)) },
+      { id: 'rucksack', kat: 'ruecken', name: 'Rucksack', emoji: '🎒', preis: 30, bauen: () => gruppe(
+        teil(new THREE.BoxGeometry(0.38, 0.42, 0.18), stoffMat(0xff7043), 0, -0.05, -0.34),
+        teil(new THREE.BoxGeometry(0.39, 0.14, 0.2), stoffMat(0xe64a19), 0, 0.12, -0.34),
+        teil(new THREE.BoxGeometry(0.05, 0.5, 0.04), stoffMat(0x5d4037), -0.15, 0.0, -0.05, 0.3),
+        teil(new THREE.BoxGeometry(0.05, 0.5, 0.04), stoffMat(0x5d4037), 0.15, 0.0, -0.05, 0.3)) },
+      { id: 'fluegel', kat: 'ruecken', name: 'Engelsflügel', emoji: '😇', preis: 120, bauen: () => gruppe(
+        teil(new THREE.SphereGeometry(0.35, 16, 10), stoffMat(0xffffff, { emissive: 0x333333 }), -0.25, 0.1, -0.3, 0, 0.5, 0.7, 0.18, 0.9, 0.5),
+        teil(new THREE.SphereGeometry(0.35, 16, 10), stoffMat(0xffffff, { emissive: 0x333333 }), 0.25, 0.1, -0.3, 0, -0.5, -0.7, 0.18, 0.9, 0.5)) },
+      { id: 'jetpack', kat: 'ruecken', name: 'Jetpack', emoji: '🚀', preis: 110, bauen: () => gruppe(
+        teil(new THREE.CylinderGeometry(0.08, 0.08, 0.42, 14), glanzMat(0xb0bec5), -0.1, -0.03, -0.34),
+        teil(new THREE.CylinderGeometry(0.08, 0.08, 0.42, 14), glanzMat(0xb0bec5), 0.1, -0.03, -0.34),
+        Object.assign(teil(new THREE.ConeGeometry(0.07, 0.16, 12), stoffMat(0xff6d00, { emissive: 0xff3d00, emissiveIntensity: 2 }), -0.1, -0.33, -0.34, Math.PI), { name: 'Flamme' }),
+        Object.assign(teil(new THREE.ConeGeometry(0.07, 0.16, 12), stoffMat(0xff6d00, { emissive: 0xff3d00, emissiveIntensity: 2 }), 0.1, -0.33, -0.34, Math.PI), { name: 'Flamme' })) },
+      // ---------- SCHUHE (werden an beide Beine geheftet; Fuß bei y = -0,16, z = 0,05) ----------
+      { id: 'turnschuhe', kat: 'schuhe', name: 'Turnschuhe', emoji: '👟', preis: 30, bauen: () => gruppe(
+        teil(new THREE.BoxGeometry(0.19, 0.09, 0.3), stoffMat(0xffffff), 0, -0.16, 0.06),
+        teil(new THREE.BoxGeometry(0.2, 0.03, 0.31), stoffMat(0xd50000), 0, -0.2, 0.06),
+        teil(new THREE.BoxGeometry(0.195, 0.02, 0.12), stoffMat(0x1e88e5), 0, -0.13, 0.08)) },
+      { id: 'stiefel', kat: 'schuhe', name: 'Stiefel', emoji: '🥾', preis: 40, bauen: () => gruppe(
+        teil(new THREE.BoxGeometry(0.19, 0.1, 0.3), stoffMat(0x5d4037), 0, -0.16, 0.06),
+        teil(new THREE.CylinderGeometry(0.085, 0.09, 0.2, 14), stoffMat(0x5d4037), 0, -0.07, 0)) },
+      { id: 'clown', kat: 'schuhe', name: 'Clownsschuhe', emoji: '🤡', preis: 35, bauen: () => gruppe(
+        teil(new THREE.SphereGeometry(0.12, 16, 12), glanzMat(0xd50000, { metalness: 0.1 }), 0, -0.17, 0.14, 0, 0, 0, 1.1, 0.7, 2.2)) },
+    ];
+    const KATEGORIEN = { hut: '🎩 Hüte', brille: '🕶️ Brillen', oberteil: '👕 Oberteile', hals: '🎀 Hals', ruecken: '🎒 Rücken', schuhe: '👟 Schuhe' };
+
+    // An welches Körperteil kommt ein Kleidungsstück?
+    function anheften(teile, stueck) {
+      const objekte = [];
+      if (stueck.kat === 'schuhe') {
+        for (const bein of [teile.beinL, teile.beinR]) { const o = stueck.bauen(); bein.add(o); objekte.push(o); }
+      } else {
+        const o = stueck.bauen();
+        (stueck.kat === 'hut' || stueck.kat === 'brille' ? teile.kopf : teile.koerper).add(o);
+        objekte.push(o);
+      }
+      return objekte;
+    }
+
+    // --- Was du besitzt und anhast (wird im Browser gemerkt) ---
+    const kleider = { besitz: new Set(), an: {} };     // an: { kat: id }
+    const angezogen = {};                               // kat: [3D-Objekte]
+    const spielerTeile = () => ({ kopf, koerper: figur, beinL: beinLinks, beinR: beinRechts });
+    try {
+      const gespeichert = JSON.parse(localStorage.getItem('affenKleider') || 'null');
+      if (gespeichert) { kleider.besitz = new Set(gespeichert.besitz); kleider.an = gespeichert.an || {}; }
+    } catch (e) {}
+    function kleiderMerken() {
+      try { localStorage.setItem('affenKleider', JSON.stringify({ besitz: [...kleider.besitz], an: kleider.an })); } catch (e) {}
+    }
+    function ausziehen(kat) {
+      for (const o of angezogen[kat] || []) o.removeFromParent();
+      delete angezogen[kat];
+      delete kleider.an[kat];
+    }
+    function anziehen(id) {
+      const stueck = KLEIDER.find(k => k.id === id);
+      if (!stueck) return;
+      ausziehen(stueck.kat);
+      angezogen[stueck.kat] = anheften(spielerTeile(), stueck);
+      kleider.an[stueck.kat] = id;
+    }
+
+    // --- Schaufensterpuppen im Laden (mit Beispiel-Outfits) und der Verkäufer ---
+    const PUPPEN_OUTFITS = [['zylinder', 'monokel', 'anzug', 'fliege'], ['cowboy', 'sonnenbrille', 'hawaii', 'stiefel'], ['krone', 'superheld', 'umhang', 'turnschuhe']];
+    KLEIDERLADEN.puppenOrte.forEach((ort, i) => {
+      const puppe = affenKlon(0xeeeeee);
+      puppe.gruppe.position.set(ort.x, 0.5, ort.z);
+      puppe.gruppe.rotation.y = KLEIDERLADEN.vorne > 0 ? 0 : Math.PI;
+      for (const id of PUPPEN_OUTFITS[i]) anheften({ kopf: puppe.teile.kopf, koerper: puppe.figur, beinL: puppe.teile.beinL, beinR: puppe.teile.beinR }, KLEIDER.find(k => k.id === id));
+      szene.add(puppe.gruppe);
+      bloecke.push({ x: ort.x, z: ort.z, b: 0.7, t: 0.7, unten: 0, oben: 1.2, art: 'block' }); // Puppen sind fest
+    });
+    {
+      const v = affenKlon(0x6d4c41);
+      v.gruppe.position.set(KLEIDERLADEN.verkaeufer.x, 0.5, KLEIDERLADEN.verkaeufer.z);
+      v.gruppe.rotation.y = KLEIDERLADEN.vorne > 0 ? Math.PI : 0;
+      for (const id of ['nerd', 'ringel', 'schal']) anheften({ kopf: v.teile.kopf, koerper: v.figur, beinL: v.teile.beinL, beinR: v.teile.beinR }, KLEIDER.find(k => k.id === id));
+      szene.add(v.gruppe);
+    }
+
+    // Erst jetzt (nach den Puppen-Kopien) deine gespeicherten Kleider wieder anziehen
+    for (const id of Object.values({ ...kleider.an })) anziehen(id);
+
+    // --- Das Laden-Menü ---
+    const kleiderMenue = document.getElementById('kleider');
+    let kleiderKategorie = 'alle';
+    const imKleiderladen = p => Math.abs(p.x - KLEIDERLADEN.x) < KLEIDERLADEN.b / 2 && Math.abs(p.z - KLEIDERLADEN.z) < KLEIDERLADEN.t / 2 && p.y < 2;
+    function kleiderMenueZeigen() {
+      const reiter = ['alle', ...Object.keys(KATEGORIEN)].map(k =>
+        `<button class="reiter${k === kleiderKategorie ? ' aktiv' : ''}" data-kat="${k}">${k === 'alle' ? 'Alle' : KATEGORIEN[k]}</button>`).join('');
+      const karten = KLEIDER.filter(k => kleiderKategorie === 'alle' || k.kat === kleiderKategorie).map(k => {
+        const hab = kleider.besitz.has(k.id), traeg = kleider.an[k.kat] === k.id;
+        const knopf = traeg ? 'Ausziehen' : hab ? 'Anziehen' : `${k.preis} Punkte`;
+        return `<div class="karte${traeg ? ' an' : ''}${hab ? ' hab' : ''}" data-id="${k.id}"><span class="bild">${k.emoji}</span><span class="name">${k.name}</span><span class="knopf">${knopf}</span></div>`;
+      }).join('');
+      kleiderMenue.querySelector('.reiterleiste').innerHTML = reiter;
+      kleiderMenue.querySelector('.auswahl').innerHTML = karten;
+    }
+    kleiderMenue.addEventListener('mousedown', e => {
+      e.preventDefault(); // die Tastatur bleibt beim Spiel
+      const reiter = e.target.closest('.reiter');
+      if (reiter) { kleiderKategorie = reiter.dataset.kat; kleiderMenueZeigen(); return; }
+      if (e.target.closest('.allesAus')) { for (const kat of Object.keys(angezogen)) ausziehen(kat); kleiderMerken(); kleiderMenueZeigen(); return; }
+      const karte = e.target.closest('.karte');
+      if (!karte) return;
+      const stueck = KLEIDER.find(k => k.id === karte.dataset.id);
+      if (kleider.an[stueck.kat] === stueck.id) { ausziehen(stueck.kat); }
+      else if (kleider.besitz.has(stueck.id)) { anziehen(stueck.id); }
+      else if (punkte >= stueck.preis) {
+        punkte -= stueck.preis; punkteZeigen();
+        kleider.besitz.add(stueck.id);
+        anziehen(stueck.id);
+        hupen(1300);
+        zeigeMeldung(`${stueck.emoji} ${stueck.name} gekauft!`, 1.5);
+      } else { zeigeMeldung(`Zu wenig Punkte! (${stueck.preis} nötig)`, 1.5); return; }
+      kleiderMerken();
+      kleiderMenueZeigen();
+    });
+    kleiderMenueZeigen();
+    let warImKleiderladen = false;
+    // Beim Reingehen: Menü auf und die Kamera dreht sich, damit du dich von vorne siehst
+    function kleiderladenPruefen(p) {
+      const drin = !aktuellesFahrzeug && imKleiderladen(p);
+      kleiderMenue.classList.toggle('offen', drin);
+      if (drin && !warImKleiderladen) { kameraWinkel = blickRichtung + 0.4; kameraNeigung = 0.25; kleiderMenueZeigen(); }
+      warImKleiderladen = drin;
+    }
+
+    // --- Jetpack: Leertaste gedrückt halten = fliegen ---
+    const JETPACK_MAX_HOEHE = 60;
+    let jetSchub = 0; // 0 = aus, 1 = volle Kraft (für die Flammen)
+    const hatJetpack = () => kleider.an.ruecken === 'jetpack' && !imGefaengnis;
+    function jetpackFlammen(dt) {
+      for (const o of angezogen.ruecken || []) o.traverse(f => {
+        if (f.name !== 'Flamme') return;
+        f.scale.set(1 + jetSchub * 0.5, 1 + jetSchub * 2.5 + Math.random() * jetSchub, 1 + jetSchub * 0.5);
+        f.position.y = -0.33 - jetSchub * 0.15;
+      });
+    }
+
     // ================= MINI-KARTE =================
     const karte = document.getElementById('karte');
     const kartenPinsel = karte.getContext('2d');
@@ -2706,6 +3066,7 @@
       for (const l of LAEDEN) p.fillRect(kx2(l.x - l.b / 2), kz2(l.z + l.t / 2), l.b * massstab, l.t * massstab);
       p.fillStyle = '#ffd54f'; p.fillRect(kx2(BANK.x - BANK.b / 2), kz2(BANK.z + BANK.t / 2), BANK.b * massstab, BANK.t * massstab); // Bank
       p.fillStyle = '#d32f2f'; p.fillRect(kx2(HAENDLER.x - 4), kz2(HAENDLER.z + 3), 8 * massstab + 1, 6 * massstab + 1);            // Waffenhändler
+      p.fillStyle = '#ec407a'; p.fillRect(kx2(KLEIDERLADEN.x - 8), kz2(KLEIDERLADEN.z + 6), 16 * massstab, 12 * massstab);         // Kleiderladen
       p.fillStyle = '#37474f'; p.strokeStyle = '#ffffff'; p.lineWidth = 1; // Gefängnis
       p.fillRect(kx2(GEF.x - 13), kz2(GEF.z + 13), 26 * massstab, 26 * massstab);
       p.strokeRect(kx2(GEF.x - 13), kz2(GEF.z + 13), 26 * massstab, 26 * massstab);
@@ -2829,8 +3190,9 @@
         const vor   = (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0); // W = nach vorne, S = nach hinten
         const seite = (tasten.KeyD ? 1 : 0) - (tasten.KeyA ? 1 : 0); // D = nach rechts, A = nach links
         const sin = Math.sin(kameraWinkel), cos = Math.cos(kameraWinkel);
-        dx = (-sin * vor + cos * seite) * TEMPO * dt;
-        dz = (-cos * vor - sin * seite) * TEMPO * dt;
+        const laufTempo = hatJetpack() && !zuletztAmBoden ? TEMPO * 1.7 : TEMPO; // fliegen ist schneller
+        dx = (-sin * vor + cos * seite) * laufTempo * dt;
+        dz = (-cos * vor - sin * seite) * laufTempo * dt;
 
         // Nur bewegen, wenn dort kein Hindernis im Weg ist
         if (!stoesstAn(p.x + dx, p.y, p.z)) p.x += dx;
@@ -2842,6 +3204,7 @@
 
         // Springen: am Boden immer, in der Luft noch einmal (Doppelsprung)
         amBoden = p.y <= standHoehe + 0.001 && fallTempo <= 0;
+        zuletztAmBoden = amBoden;
         if (amBoden) sprungZaehler = 0; // gelandet: Sprünge wieder auffüllen
         if (sprungGedrueckt) {
           if (amBoden) {
@@ -2852,8 +3215,13 @@
           sprungGedrueckt = false;
         }
 
+        // Jetpack: Leertaste halten = nach oben fliegen (bis 60 m hoch)
+        const fliegt = hatJetpack() && tasten.Space && p.y < JETPACK_MAX_HOEHE;
+        jetSchub += ((fliegt ? 1 : 0) - jetSchub) * Math.min(1, 8 * dt);
+        if (fliegt) fallTempo = Math.min(fallTempo + (SCHWERKRAFT + 16) * dt, 7);
         // Schwerkraft zieht ihn wieder herunter, bis er auf etwas landet
         fallTempo -= SCHWERKRAFT * dt;
+        if (hatJetpack() && !amBoden) fallTempo = Math.max(fallTempo, -9); // mit Jetpack fällt man sanfter
         p.y += fallTempo * dt;
         if (p.y < standHoehe) { p.y = standHoehe; fallTempo = 0; }
 
@@ -2945,6 +3313,8 @@
       // Umkleidekabine: Menü zeigen, solange der Affe (zu Fuß) drin steht
       kabinenMenue.classList.toggle('offen', !aktuellesFahrzeug && inKabine(p));
       haendlerMenue.classList.toggle('offen', !aktuellesFahrzeug && imHaendlerLaden(p));
+      kleiderladenPruefen(p);
+      jetpackFlammen(dt);
       if (regenbogen) fell.color.setHSL((spielZeit * 0.2) % 1, 0.8, 0.45);
 
       // Münzen drehen sich, werden eingesammelt und kommen nach 7 Sekunden wieder
