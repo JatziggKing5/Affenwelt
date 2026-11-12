@@ -271,7 +271,7 @@
     <div id="farben"></div>
     <p class="klein">Zum Verlassen einfach rauslaufen.</p>
   </div>
-  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1/2: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · Shift: rennen · Jetpack: Leertaste halten · M: Karte (Klick = Wegpunkt) · P: 👥 Mehrspieler · 🚔 Nicht über Rot fahren!</div>
+  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1–5: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · Shift: rennen · Jetpack: Leertaste halten · M: Karte (Klick = Wegpunkt) · P: 👥 Mehrspieler · 🚔 Nicht über Rot fahren!</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -1095,6 +1095,80 @@
       freiHalten.push({ x: cx, z: cz, r: 9 });
     }
 
+    // ================= GEHEIMVERSTECK =================
+    // Ein alter, hohler Baum im Wald (nicht auf der Karte!). Wer davor E drückt, kriecht hinein
+    // und landet im Geheimbunker – der liegt weit draußen, außerhalb der Welt.
+    const GEHEIM_BAUM = { x: -60, z: 40 };           // das Loch im Stamm zeigt zur Straße (+z)
+    const GEHEIM = { x: 600, z: 600, b: 30, t: 20, h: 6 };
+    freiHalten.push({ x: GEHEIM_BAUM.x, z: GEHEIM_BAUM.z, r: 5 });
+    {
+      const { x: bx, z: bz } = GEHEIM_BAUM;
+      const rinde = new THREE.MeshStandardMaterial({ color: 0x4e342e, roughness: 1 });
+      const dunkel = new THREE.MeshStandardMaterial({ color: 0x0a0605, roughness: 1 });
+      const laub = new THREE.MeshStandardMaterial({ color: 0x2e5d1f, roughness: 0.9, flatShading: true });
+      // dicker, alter Stamm (etwas krumm) mit einem dunklen Loch
+      const stamm = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.0, 4.5, 10), rinde);
+      stamm.position.set(bx, 2.25, bz); stamm.rotation.z = 0.06; stamm.castShadow = true;
+      szene.add(stamm);
+      const loch = new THREE.Mesh(new THREE.CircleGeometry(0.42, 16), dunkel);
+      loch.scale.set(1, 1.5, 1);
+      loch.position.set(bx, 0.75, bz + 0.86); loch.rotation.x = -0.12;
+      szene.add(loch);
+      for (const [x, y, z, r] of [[0, 5.2, 0, 2.2], [1.2, 4.6, 0.6, 1.4], [-1.1, 4.8, -0.4, 1.5], [0.2, 4.5, -1.2, 1.3]]) {
+        const k = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), laub);
+        k.position.set(bx + x, y, bz + z); k.castShadow = true; szene.add(k);
+      }
+      // kleine leuchtende Pilze im Kreis – der einzige Hinweis
+      const leuchtPilz = new THREE.MeshStandardMaterial({ color: 0x80deea, emissive: 0x00bcd4, emissiveIntensity: 1.5 });
+      for (let i = 0; i < 9; i++) {
+        const w = i / 9 * Math.PI * 2;
+        const p = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), leuchtPilz);
+        p.position.set(bx + Math.sin(w) * 1.6, 0.05, bz + Math.cos(w) * 1.6);
+        szene.add(p);
+      }
+      bloecke.push({ x: bx, z: bz, b: 1.6, t: 1.6, unten: 0, oben: 4.5, art: 'block', krone: 2.4 });
+    }
+    // --- Der Bunker ---
+    {
+      const { x: cx, z: cz, b: B, t: T, h: H } = GEHEIM;
+      const metall = 0x263238;
+      neuerBlock(cx, cz, B, T, -0.5, 0, 'block', 0x78909c);                    // Boden (hell, damit man genug sieht)
+      neuerBlock(cx, cz - T / 2, B, 0.5, 0, H, 'block', metall);               // Wände
+      neuerBlock(cx, cz + T / 2, B, 0.5, 0, H, 'block', metall);
+      neuerBlock(cx - B / 2, cz, 0.5, T, 0, H, 'block', metall);
+      neuerBlock(cx + B / 2, cz, 0.5, T, 0, H, 'block', metall);
+      neuerBlock(cx, cz, B, T, H, H + 0.5, 'block', 0x1c272c);                  // Decke
+      // Neon-Leisten an den Wänden
+      const neonGruen = new THREE.MeshStandardMaterial({ color: 0x00e676, emissive: 0x00e676, emissiveIntensity: 2 });
+      const neonPink = new THREE.MeshStandardMaterial({ color: 0xff4081, emissive: 0xff4081, emissiveIntensity: 2 });
+      for (const [x, z, b, t, mat] of [[cx, cz - T / 2 + 0.3, B - 1, 0.08, neonGruen], [cx, cz + T / 2 - 0.3, B - 1, 0.08, neonPink],
+                                       [cx - B / 2 + 0.3, cz, 0.08, T - 1, neonPink], [cx + B / 2 - 0.3, cz, 0.08, T - 1, neonGruen]]) {
+        const m = new THREE.Mesh(einheitsKiste, mat); m.scale.set(b, 0.12, t); m.position.set(x, H - 0.4, z); szene.add(m);
+      }
+      // Lichter, damit es drinnen hell ist
+      schildBauen('🤫 GEHEIMVERSTECK', 8, 1.2, '#000000', '#00e676', cx, H - 1.4, cz + T / 2 - 0.3, Math.PI);
+      // Ausgang (zu Fuß) an der Südwand, Ausfahrt (mit dem Auto) an der Nordwand
+      const tuer = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 3), new THREE.MeshStandardMaterial({ color: 0x00e676, emissive: 0x00c853, emissiveIntensity: 0.8 }));
+      tuer.position.set(cx - 9, 1.5, cz + T / 2 - 0.3); tuer.rotation.y = Math.PI; szene.add(tuer);
+      schildBauen('🚪 AUSGANG (E)', 3, 0.6, '#00c853', '#ffffff', cx - 9, 3.4, cz + T / 2 - 0.3, Math.PI);
+      const tor = new THREE.Mesh(new THREE.PlaneGeometry(5, 4), new THREE.MeshStandardMaterial({ color: 0xff4081, emissive: 0xff4081, emissiveIntensity: 1, transparent: true, opacity: 0.7 }));
+      tor.position.set(cx + 5, 2, cz - T / 2 + 0.3); szene.add(tor);
+      schildBauen('🚀 AUSFAHRT – einfach durchfahren!', 6, 0.7, '#ff4081', '#ffffff', cx + 5, 4.5, cz - T / 2 + 0.3, 0);
+      // Waffenwand an der Westseite: drei Gestelle
+      GEHEIM.gestelle = [
+        { waffe: 'minigun', name: 'Bananen-Minigun', emoji: '🍌🔁', z: cz - 5 },
+        { waffe: 'bazooka', name: 'Bananen-Bazooka', emoji: '🍌💥', z: cz },
+        { waffe: 'schrot', name: 'Bananen-Schrotflinte', emoji: '🍌🍌', z: cz + 5 },
+      ].map(g => ({ ...g, x: cx - B / 2 + 1.2 }));
+      for (const g of GEHEIM.gestelle) {
+        neuerBlock(g.x - 0.4, g.z, 0.6, 3, 0, 1.0, 'block', 0x455a64);
+        schildBauen(`${g.emoji} ${g.name} (E)`, 3, 0.5, '#000000', '#ffeb3b', g.x + 0.05, 3.2, g.z, Math.PI / 2);
+      }
+      GEHEIM.start = { x: cx - 9, z: cz + T / 2 - 2.5 };   // hier kommt man an
+      GEHEIM.ausgang = { x: cx - 9, z: cz + T / 2 - 1 };
+      GEHEIM.ausfahrt = { x: cx + 5, z: cz - T / 2 + 1.5 };
+    }
+
     // ================= KLEIDERLADEN "AFFEN-MODE" =================
     // In der Stadt an der Querstraße bei z = 290. Drinnen: Kleiderstangen, Spiegel und Schaufensterpuppen.
     const KLEIDERLADEN = { x: -40, z: 277.5, b: 16, t: 12, h: 5, vorne: 1 };
@@ -1545,6 +1619,9 @@
       if (e.code === 'KeyG' && !e.repeat) gGedrueckt = true;       // G = Rauchbombe
       if (e.code === 'Digit1' && !e.repeat) waehlen(1);            // 1 = Bananen-Pistole
       if (e.code === 'Digit2' && !e.repeat) waehlen(2);            // 2 = Rauchbombe
+      if (e.code === 'Digit3' && !e.repeat) waehlen(3);            // 3 = Minigun
+      if (e.code === 'Digit4' && !e.repeat) waehlen(4);            // 4 = Bazooka
+      if (e.code === 'Digit5' && !e.repeat) waehlen(5);            // 5 = Schrotflinte
       if (e.code === 'KeyZ' && !e.repeat) zielfernrohrBenutzen(!zielModus); // Z = zielen an/aus (für Trackpads)
       if (e.code === 'KeyM' && !e.repeat) karteUmschalten();         // M = große Karte
       if (e.code === 'Escape' && karteGross) karteUmschalten(false);
@@ -1561,6 +1638,7 @@
     let sprungZaehler = 0;    // wie oft er seit dem letzten Landen gesprungen ist
     let sprungGedrueckt = false;
     let fGedrueckt = false, gGedrueckt = false;
+    let naechsterMiniSchuss = 0, handySchussGehalten = false;
     let zuletztAmBoden = true; // stand der Affe im letzten Bild auf dem Boden?
     const RENN_TEMPO = 10;      // mit Shift
     const laufV = { x: 0, z: 0 }; // aktuelle Laufgeschwindigkeit
@@ -1655,6 +1733,7 @@
       sport:   { name: 'Sportwagen',  emoji: '🏎️', maxTempo: 28, beschl: 14, lenk: 2.0, breite: 1.9, laenge: 4.1, hoehe: 1.0, sitz: [0, 0.85, -0.4], hupe: 660 },
       monster: { name: 'Monstertruck',emoji: '🛻', maxTempo: 14, beschl: 8,  lenk: 1.5, breite: 2.7, laenge: 4.2, hoehe: 2.3, sitz: [0, 2.15, 0.1],  hupe: 200 },
       motorrad:{ name: 'Motorrad',    emoji: '🏍️', maxTempo: 24, beschl: 15, lenk: 2.6, breite: 0.8, laenge: 2.1, hoehe: 1.1, sitz: [0, 1.15, -0.25], hupe: 880 },
+      rakete:  { name: 'Raketenwagen', emoji: '🚀', maxTempo: 58, beschl: 32, lenk: 2.2, breite: 2.0, laenge: 4.4, hoehe: 1.0, sitz: [0, 0.8, -0.45], hupe: 520 },
       kart:    { name: 'Go-Kart',     emoji: '🏁', maxTempo: 19, beschl: 18, lenk: 3.0, breite: 1.3, laenge: 2.0, hoehe: 0.6, sitz: [0, 0.65, -0.25], hupe: 1100 },
     };
 
@@ -1703,6 +1782,22 @@
         kiste(karosserie, 0.22, 0.16, 0.08, vorderLicht, 0, 0.98, 0.85);
         kiste(karosserie, 0.16, 0.1, 0.05, ruecklicht, 0, 0.82, -0.97);
         kiste(karosserie, 0.12, 0.12, 0.6, chrom, 0.2, 0.42, -0.45);  // Auspuff
+      } else if (typ === 'rakete') {                  // schwarz-goldener Raketenwagen aus dem Geheimversteck
+        const lack = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8, roughness: 0.2 });
+        const gold = new THREE.MeshStandardMaterial({ color: 0xffc107, metalness: 0.9, roughness: 0.2, emissive: 0x3e2a00 });
+        kiste(karosserie, 2.0, 0.4, 4.4, lack, 0, 0.45, 0);
+        const nase = kiste(karosserie, 1.7, 0.25, 1.5, lack, 0, 0.72, 1.3); nase.rotation.x = 0.18;
+        kiste(karosserie, 0.3, 0.02, 4.42, gold, -0.45, 0.66, 0); kiste(karosserie, 0.3, 0.02, 4.42, gold, 0.45, 0.66, 0); // goldene Streifen
+        kiste(karosserie, 1.0, 0.4, 0.25, dunkel, 0, 0.9, -1.0);                                  // Sitzlehne
+        const scheibe = kiste(karosserie, 1.6, 0.3, 0.06, glas, 0, 0.92, 0.3); scheibe.rotation.x = -0.7;
+        kiste(karosserie, 2.1, 0.06, 0.5, gold, 0, 1.15, -2.0);                                    // Heckflügel
+        for (const sx of [-0.55, 0.55]) {                                                         // zwei Raketen hinten
+          const rohr = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 0.9, 14), gold);
+          rohr.rotation.x = Math.PI / 2; rohr.position.set(sx, 0.75, -2.3); karosserie.add(rohr);
+          const flamme = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.9, 12), new THREE.MeshStandardMaterial({ color: 0xff6d00, emissive: 0xff3d00, emissiveIntensity: 3 }));
+          flamme.rotation.x = -Math.PI / 2; flamme.position.set(sx, 0.75, -3.1); flamme.name = 'Raketenflamme';
+          karosserie.add(flamme);
+        }
       } else if (typ === 'kart') {                    // gelbes Go-Kart
         const lack = new THREE.MeshStandardMaterial({ color: 0xfdd835, roughness: 0.4 });
         kiste(karosserie, 1.1, 0.12, 1.9, dunkel, 0, 0.18, 0);        // Bodenplatte
@@ -1729,6 +1824,7 @@
       if (typ === 'sport')    { for (const s of [-1, 1]) { rad(f, 0.36, 0.32, s * 0.95, 0.36, 1.3, true); rad(f, 0.4, 0.38, s * 0.95, 0.4, -1.3, false); } lichter(f, 0.65, 0.55, 2.01, -2.01); }
       if (typ === 'monster')  { for (const s of [-1, 1]) { rad(f, 0.8, 0.65, s * 1.2, 0.8, 1.35, true); rad(f, 0.8, 0.65, s * 1.2, 0.8, -1.35, false); } lichter(f, 0.6, 1.5, 1.91, -1.91); }
       if (typ === 'motorrad') { rad(f, 0.36, 0.16, 0, 0.36, 0.8, true); rad(f, 0.36, 0.2, 0, 0.36, -0.8, false); }
+      if (typ === 'rakete')   { for (const s of [-1, 1]) { rad(f, 0.36, 0.34, s * 1.0, 0.36, 1.4, true); rad(f, 0.42, 0.42, s * 1.0, 0.42, -1.4, false); } lichter(f, 0.7, 0.5, 2.21, -2.21); }
       if (typ === 'kart')     { for (const s of [-1, 1]) { rad(f, 0.22, 0.22, s * 0.65, 0.22, 0.7, true); rad(f, 0.25, 0.28, s * 0.65, 0.25, -0.7, false); } }
       // Gibt es das Fahrzeug in Blender? Dann dieses Modell nehmen (Räder heißen dort z. B. "Cabrio_Rad_vorne_1")
       const m = modell(f.name);
@@ -1761,6 +1857,7 @@
     neuesFahrzeug('monster',  gx + 0.5, gz + 0.5, Math.PI);
     neuesFahrzeug('motorrad', gx + 3.4, gz + 0.5, Math.PI);
     neuesFahrzeug('kart',     gx + 5.9, gz + 0.5, Math.PI);
+    neuesFahrzeug('rakete', GEHEIM.ausfahrt.x, GEHEIM.z + 2, Math.PI); // im Geheimversteck, Nase zur Ausfahrt
 
     // Liegt ein Punkt (mit Abstand r) in einem Fahrzeug? Rechnet in die Sicht des Fahrzeugs um.
     function punktInFahrzeug(f, px, pz, r) {
@@ -1788,7 +1885,8 @@
       const halb = f.breite / 2;
       letzterTreffer = 'block';
       for (const [px, pz] of fahrzeugPunkte(f, x, z, richtung)) {
-        if (px < WIESE.x1 + halb || px > WIESE.x2 - halb || pz < WIESE.z1 + halb || pz > WIESE.z2 - halb) return true;
+        const imBunker = Math.abs(px - GEHEIM.x) < GEHEIM.b / 2 && Math.abs(pz - GEHEIM.z) < GEHEIM.t / 2;
+        if (!imBunker && (px < WIESE.x1 + halb || px > WIESE.x2 - halb || pz < WIESE.z1 + halb || pz > WIESE.z2 - halb)) return true;
         for (const o of bloecke) {
           if (o.art === 'lava' || o.unten > f.hoehe || o.oben < 0.1) continue;
           if (Math.abs(px - o.x) < o.b / 2 + halb && Math.abs(pz - o.z) < o.t / 2 + halb) return true;
@@ -1896,6 +1994,13 @@
         r.drehHalter.rotation.x += (f.tempo * dt) / r.r;
         if (r.vorne) r.lenkHalter.rotation.y = f.lenkung * 0.45;
       }
+      // Raketenwagen: je schneller, desto größer die Flammen
+      if (f.typ === 'rakete') f.karosserie.traverse(o => {
+        if (o.name !== 'Raketenflamme') return;
+        const staerke = Math.max(0.15, Math.abs(f.tempo) / f.maxTempo);
+        o.scale.set(1, 0.4 + staerke * 2.2 + Math.random() * 0.3, 1);
+        o.position.z = -2.75 - staerke * 1.0;
+      });
       // Motorrad legt sich in die Kurve
       if (f.typ === 'motorrad') {
         f.karosserie.rotation.z = -f.lenkung * THREE.MathUtils.clamp(f.tempo / f.maxTempo, 0, 1) * 0.45;
@@ -2538,8 +2643,8 @@
       polizeiBeenden();
       punkte = Math.max(0, punkte - 20);
       punkteZeigen();
-      const hatteSachen = inventar.pistole || inventar.rauch > 0;
-      Object.assign(inventar, { pistole: false, munition: 0, zielfernrohr: false, rauch: 0 }); // die Polizei nimmt alles weg
+      const hatteSachen = hatWaffe() || inventar.rauch > 0;
+      Object.assign(inventar, { pistole: false, munition: 0, zielfernrohr: false, rauch: 0, minigun: false, mgMun: 0, bazooka: false, bzMun: 0, schrot: false, srMun: 0 }); // die Polizei nimmt alles weg
       if (kleider.an.ruecken === 'jetpack') { ausziehen('ruecken'); kleiderMerken(); } // Jetpack ab (bleibt aber deiner)
       auswahl = 0;
       zielfernrohrBenutzen(false);
@@ -2599,7 +2704,11 @@
     }
 
     // ================= WAFFENHÄNDLER: BANANEN-PISTOLE, ZIELFERNROHR, RAUCHBOMBE =================
-    const inventar = { pistole: false, munition: 0, zielfernrohr: false, rauch: 0 };
+    const inventar = { pistole: false, munition: 0, zielfernrohr: false, rauch: 0,
+                       minigun: false, mgMun: 0, bazooka: false, bzMun: 0, schrot: false, srMun: 0 }; // die drei aus dem Geheimversteck
+    const WAFFEN_NR = [1, 3, 4, 5];   // Auswahl-Nummern, die eine Waffe in der Hand bedeuten
+    const hatWaffe = () => inventar.pistole || inventar.minigun || inventar.bazooka || inventar.schrot;
+    const ersteWaffe = () => inventar.pistole ? 1 : inventar.minigun ? 3 : inventar.bazooka ? 4 : inventar.schrot ? 5 : 0;
     let auswahl = 0;          // was der Affe in der Hand hat: 0 = nichts, 1 = Bananen-Pistole, 2 = Rauchbombe
     let zielModus = false;    // gerade durchs Zielfernrohr schauen?
     let zielNeigung = 0;      // mit dem Zielfernrohr nach oben (+) oder unten (−) zielen
@@ -2655,6 +2764,56 @@
     pistoleImArm.visible = false;
     armRechts.add(pistoleImArm);
 
+    // --- Die drei krassen Waffen aus dem Geheimversteck (zeigen nach vorne, +z) ---
+    const waffenGelb = new THREE.MeshStandardMaterial({ color: 0xffd600, roughness: 0.4 });
+    const waffenSchwarz = new THREE.MeshStandardMaterial({ color: 0x212121, metalness: 0.7, roughness: 0.3 });
+    const waffenGruen = new THREE.MeshStandardMaterial({ color: 0x2e7d32, roughness: 0.6 });
+    const waffenHolz = new THREE.MeshStandardMaterial({ color: 0x6d4c41, roughness: 0.8 });
+    const mitPos = (m, x, y, z) => { m.position.set(x, y, z); m.castShadow = true; return m; };
+    function rohr(r, laenge, mat, x, y, z) { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, laenge, 12), mat); m.rotation.x = Math.PI / 2; m.position.set(x, y, z); m.castShadow = true; return m; }
+    function minigunBauen() {
+      const g = new THREE.Group();
+      g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.3), waffenGelb), { castShadow: true }));
+      for (let i = 0; i < 6; i++) { const w = i / 6 * Math.PI * 2; g.add(rohr(0.022, 0.5, waffenSchwarz, Math.cos(w) * 0.05, Math.sin(w) * 0.05, 0.38)); }
+      g.add(rohr(0.075, 0.04, waffenGelb, 0, 0, 0.5));
+      const magazin = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.035, 6, 12, Math.PI), waffenGelb); // Bananen-Magazin
+      magazin.position.set(0, -0.12, 0); magazin.rotation.y = Math.PI / 2; g.add(magazin);
+      g.add(mitPos(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.13, 0.07), waffenSchwarz), 0, -0.12, -0.08));
+      return g;
+    }
+    function bazookaBauen() {
+      const g = new THREE.Group();
+      g.add(rohr(0.11, 1.0, waffenGruen, 0, 0.08, 0.1));
+      g.add(rohr(0.13, 0.12, waffenSchwarz, 0, 0.08, -0.38));
+      const spitze = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.06, 8, 14, Math.PI * 0.9), waffenGelb); // Banane schaut vorne raus
+      spitze.position.set(0, 0.08, 0.62); spitze.rotation.set(Math.PI / 2, 0, Math.PI / 2); g.add(spitze);
+      g.add(mitPos(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.08), waffenSchwarz), 0, -0.06, 0));
+      return g;
+    }
+    function schrotBauen() {
+      const g = new THREE.Group();
+      g.add(rohr(0.03, 0.6, waffenSchwarz, -0.033, 0.03, 0.3), rohr(0.03, 0.6, waffenSchwarz, 0.033, 0.03, 0.3));
+      g.add(mitPos(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.09, 0.28), waffenHolz), 0, 0, -0.08));
+      const kolben = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.24), waffenHolz); kolben.position.set(0, -0.06, -0.3); kolben.rotation.x = 0.3; g.add(kolben);
+      g.add(mitPos(new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.012, 6, 10, Math.PI), waffenGelb), 0, -0.06, 0.05));
+      return g;
+    }
+    const WAFFEN_BAUEN = { 3: minigunBauen, 4: bazookaBauen, 5: schrotBauen };
+    const handWaffen = {};
+    for (const [nr, bauen] of Object.entries(WAFFEN_BAUEN)) {
+      const m = bauen();
+      m.position.set(0, -0.47, 0.03); m.rotation.x = Math.PI / 2; m.scale.setScalar(1.4); m.visible = false;
+      armRechts.add(m);
+      handWaffen[nr] = m;
+    }
+    // Ausstellungsstücke auf den Gestellen im Geheimversteck
+    GEHEIM.gestelle.forEach((g, i) => {
+      const m = WAFFEN_BAUEN[3 + i]();
+      m.scale.setScalar(2.2); m.position.set(g.x - 0.4, 1.35, g.z); m.rotation.y = Math.PI / 2;
+      szene.add(m);
+      g.modell = m;
+    });
+
     // --- Waffenleiste unten in der Mitte ---
     function inventarZeigen() {
       const feld = (nr, symbol, text, gewaehlt) =>
@@ -2662,9 +2821,13 @@
       const felder = [];
       if (inventar.pistole) felder.push(feld(1, '🍌🔫', `${inventar.munition} Schuss${inventar.zielfernrohr ? ' · 🔭' : ''}`, auswahl === 1));
       if (inventar.rauch > 0) felder.push(feld(2, '💨', `${inventar.rauch}× Rauch`, auswahl === 2));
+      if (inventar.minigun) felder.push(feld(3, '🍌🔁', `${inventar.mgMun} Schuss`, auswahl === 3));
+      if (inventar.bazooka) felder.push(feld(4, '🍌💥', `${inventar.bzMun} Raketen`, auswahl === 4));
+      if (inventar.schrot) felder.push(feld(5, '🍌🍌', `${inventar.srMun} Ladungen`, auswahl === 5));
       waffenLeiste.innerHTML = felder.join('');
       waffenLeiste.classList.toggle('offen', felder.length > 0);
       pistoleImArm.visible = auswahl === 1 && !aktuellesFahrzeug;
+      for (const [nr, modell] of Object.entries(handWaffen)) modell.visible = auswahl === +nr && !aktuellesFahrzeug;
       fernrohrModell.visible = inventar.zielfernrohr;
       // Händler-Knöpfe passend beschriften
       haendlerMenue.querySelector('[data-ware="pistole"]').textContent = inventar.pistole ? `+10 Schuss · ${PREISE.munition}` : `${PREISE.pistole} Punkte`;
@@ -2681,8 +2844,9 @@
     function waehlen(nr) {
       if (nr === 1 && !inventar.pistole) { zeigeMeldung('Du hast noch keine Bananen-Pistole – der Waffenhändler hat eine! 🍌', 2); return; }
       if (nr === 2 && inventar.rauch <= 0) { zeigeMeldung('Keine Rauchbombe – der Waffenhändler hat welche! 💨', 2); return; }
+      if ((nr === 3 && !inventar.minigun) || (nr === 4 && !inventar.bazooka) || (nr === 5 && !inventar.schrot)) { zeigeMeldung('🤫 Diese Waffe gibt es nur im Geheimversteck …', 2); return; }
       auswahl = auswahl === nr ? 0 : nr;
-      if (auswahl !== 1) zielfernrohrBenutzen(false);
+      if (!WAFFEN_NR.includes(auswahl)) zielfernrohrBenutzen(false);
       inventarZeigen();
     }
 
@@ -2709,8 +2873,8 @@
     // --- Zielfernrohr: heranzoomen, mit Fadenkreuz ---
     function zielfernrohrBenutzen(an) {
       if (an) {
-        if (aktuellesFahrzeug || !inventar.pistole) return;
-        if (auswahl !== 1) { auswahl = 1; inventarZeigen(); }
+        if (aktuellesFahrzeug || !hatWaffe()) return;
+        if (!WAFFEN_NR.includes(auswahl)) { auswahl = ersteWaffe(); inventarZeigen(); }
         if (!zielModus) zielNeigung = 0;
       }
       zielModus = an;
@@ -2727,12 +2891,17 @@
     let rechteMausGedrueckt = false;
     renderer.domElement.addEventListener('mousedown', e => {
       if (e.button === 2) { rechteMausGedrueckt = true; zielfernrohrBenutzen(true); }
-      if (e.button === 0 && inventar.pistole && !aktuellesFahrzeug) {   // linke Maustaste = schießen
-        if (auswahl !== 1) { auswahl = 1; inventarZeigen(); }
+      if (e.button === 0 && hatWaffe() && !aktuellesFahrzeug) {   // linke Maustaste = schießen
+        if (!WAFFEN_NR.includes(auswahl)) { auswahl = ersteWaffe(); inventarZeigen(); }
         fGedrueckt = true;
+        linkeMausGedrueckt = true;                                  // gedrückt halten = Minigun feuert weiter
       }
     });
-    addEventListener('mouseup', e => { if (e.button === 2) { rechteMausGedrueckt = false; zielfernrohrBenutzen(false); } });
+    let linkeMausGedrueckt = false;
+    addEventListener('mouseup', e => {
+      if (e.button === 0) linkeMausGedrueckt = false;
+      if (e.button === 2) { rechteMausGedrueckt = false; zielfernrohrBenutzen(false); }
+    });
     addEventListener('blur', () => { rechteMausGedrueckt = false; });   // Fenster verlassen: Maus gilt als losgelassen
     addEventListener('mousemove', e => {
       if (zielModus) {                       // beim Zielen: Fadenkreuz bewegen
@@ -2747,28 +2916,92 @@
     // --- Schießen: eine Banane fliegt los ---
     const bananenForm = new THREE.TorusGeometry(0.12, 0.045, 6, 12, Math.PI * 0.9);
     const bananenMaterial = new THREE.MeshStandardMaterial({ color: 0xffe135, roughness: 0.5 });
+    const bazookaMaterial = new THREE.MeshStandardMaterial({ color: 0xffd600, emissive: 0xff6d00, emissiveIntensity: 0.6, roughness: 0.4 });
     const geschosse = [];
     const _hand = new THREE.Vector3();
+    // Eine Banane abfeuern. art: 'normal', 'mini' (Minigun), 'bazooka' (explodiert), 'schrot'
+    function abfeuern(r, tempo, art = 'normal', groesse = 1, leben = 2) {
+      const modell = handWaffen[auswahl] || pistoleImArm;
+      modell.getWorldPosition(_hand);
+      const start = zielModus ? kamera.position.clone().addScaledVector(r, 0.6) : _hand.addScaledVector(r, 0.4);
+      const m = new THREE.Mesh(bananenForm, art === 'bazooka' ? bazookaMaterial : bananenMaterial);
+      m.position.copy(start);
+      m.scale.setScalar(groesse);
+      m.castShadow = true;
+      szene.add(m);
+      const g = { mesh: m, vx: r.x * tempo, vy: r.y * tempo, vz: r.z * tempo, leben, art };
+      geschosse.push(g);
+      eigeneBananeGeschossen(g); // auch die Mitspieler sehen die Banane
+    }
+    // Wohin wird gezielt? Beim Zielen: Fadenkreuz. Sonst: dahin, wo der Affe schaut. "streuung" = etwas ungenau
+    function schussRichtung(streuung = 0) {
+      const r = zielModus ? zielRichtung() : new THREE.Vector3(Math.sin(blickRichtung), 0.06, Math.cos(blickRichtung)).normalize();
+      if (streuung) { r.x += (Math.random() - 0.5) * streuung; r.y += (Math.random() - 0.5) * streuung * 0.6; r.z += (Math.random() - 0.5) * streuung; r.normalize(); }
+      return r;
+    }
     function benutzen() {
       if (auswahl === 2) { rauchbombe(); return; }
-      if (auswahl !== 1) {
-        zeigeMeldung(inventar.pistole ? 'Nimm die Bananen-Pistole mit Taste 1 in die Hand' : 'Du hast keine Waffe – geh zum Waffenhändler 🍌', 1.8);
+      if (!WAFFEN_NR.includes(auswahl)) {
+        zeigeMeldung(hatWaffe() ? 'Nimm eine Waffe mit 1, 3, 4 oder 5 in die Hand' : 'Du hast keine Waffe – geh zum Waffenhändler 🍌', 1.8);
         return;
       }
       if (aktuellesFahrzeug) return;
-      if (inventar.munition <= 0) { zeigeMeldung('Keine Schuss mehr! Beim Waffenhändler gibt es +10 🍌', 1.8); return; }
-      inventar.munition--;
+      if (auswahl === 1) {                                      // Bananen-Pistole
+        if (inventar.munition <= 0) { zeigeMeldung('Keine Schuss mehr! Beim Waffenhändler gibt es +10 🍌', 1.8); return; }
+        inventar.munition--;
+        abfeuern(schussRichtung(), 40);
+        hupen(700); // "Peng!"
+      } else if (auswahl === 3) {                               // Minigun: ganz viele kleine Bananen
+        if (inventar.mgMun <= 0) { zeigeMeldung('Minigun leer! Im Geheimversteck nachladen 🤫', 1.5); return; }
+        inventar.mgMun--;
+        abfeuern(schussRichtung(0.08), 45, 'mini', 0.7, 1.0);
+        if (Math.random() < 0.5) hupen(900 + Math.random() * 300);
+      } else if (auswahl === 4) {                               // Bazooka: Riesen-Banane, die explodiert
+        if (inventar.bzMun <= 0) { zeigeMeldung('Bazooka leer! Im Geheimversteck nachladen 🤫', 1.5); return; }
+        inventar.bzMun--;
+        abfeuern(schussRichtung(), 30, 'bazooka', 2.6, 2.5);
+        hupen(150); hupen(110);
+      } else if (auswahl === 5) {                               // Schrotflinte: 7 Bananen auf einmal
+        if (inventar.srMun <= 0) { zeigeMeldung('Schrotflinte leer! Im Geheimversteck nachladen 🤫', 1.5); return; }
+        inventar.srMun--;
+        for (let i = 0; i < 7; i++) abfeuern(schussRichtung(0.3), 35, 'schrot', 0.9, 0.7);
+        hupen(400); hupen(300);
+      }
       inventarZeigen();
-      const r = zielModus ? zielRichtung() : new THREE.Vector3(Math.sin(blickRichtung), 0.06, Math.cos(blickRichtung)).normalize();
-      pistoleImArm.getWorldPosition(_hand);
-      const start = zielModus ? kamera.position.clone().addScaledVector(r, 0.6) : _hand.addScaledVector(r, 0.3);
-      const m = new THREE.Mesh(bananenForm, bananenMaterial);
-      m.position.copy(start);
-      m.castShadow = true;
+    }
+    // --- Explosion der Bazooka-Banane: wirft alle im Umkreis von 6 m um ---
+    const KNALL_RADIUS = 6;
+    const knallMaterial = new THREE.MeshBasicMaterial({ color: 0xffab00, transparent: true, opacity: 0.85 });
+    const knalle = [];
+    function knallZeigen(x, y, z) {
+      const m = new THREE.Mesh(kugelForm, knallMaterial.clone());
+      m.position.set(x, y, z);
       szene.add(m);
-      geschosse.push({ mesh: m, vx: r.x * 40, vy: r.y * 40, vz: r.z * 40, leben: 2 });
-      eigeneBananeGeschossen(geschosse[geschosse.length - 1]); // auch die Mitspieler sehen die Banane
-      hupen(700); // "Peng!"
+      knalle.push({ mesh: m, alter: 0 });
+    }
+    function explosion(x, y, z, vonMir) {
+      knallZeigen(x, y, z);
+      hupen(55); hupen(80);
+      if (!vonMir) return;
+      mpSenden('knall', { x, y, z });                               // Mitspieler sehen den Knall (und fallen um, wenn sie nah dran sind)
+      const nah = (px, pz) => Math.hypot(px - x, pz - z) < KNALL_RADIUS;
+      let umgeworfen = 0;
+      if (polizei.aktiv && polizei.laeufer.gruppe.visible && nah(polizei.laeufer.x, polizei.laeufer.z)) { polizei.betaeubtBis = spielZeit + LIEGEZEIT; umgeworfen++; }
+      if (polizei.aktiv && nah(polizei.x, polizei.z)) { polizei.betaeubtBis = spielZeit + LIEGEZEIT; umgeworfen++; }
+      if (nah(waerter.x, waerter.z)) { waerter.betaeubtBis = spielZeit + LIEGEZEIT; umgeworfen++; }
+      let fussgaengerGetroffen = false;
+      for (const f of fussgaenger) if (f.zustand !== 'liegt' && f.zustand !== 'einkaufen' && nah(f.x, f.z)) { umwerfen(f, LIEGEZEIT); umgeworfen++; fussgaengerGetroffen = true; }
+      if (fussgaengerGetroffen) straftat('Explosion in der Stadt!');
+      if (umgeworfen) zeigeMeldung(`💥 BUMM! ${umgeworfen} umgeworfen!`, 1.5);
+    }
+    function knalleBewegen(dt) {
+      for (let i = knalle.length - 1; i >= 0; i--) {
+        const k = knalle[i];
+        k.alter += dt;
+        k.mesh.scale.setScalar(0.5 + k.alter * 14);
+        k.mesh.material.opacity = Math.max(0, 0.85 * (1 - k.alter / 0.45));
+        if (k.alter > 0.45) { szene.remove(k.mesh); knalle.splice(i, 1); }
+      }
     }
     // Getroffen? Dann rutscht man aus und liegt 5 Sekunden am Boden.
     function getroffen(g) {
@@ -2794,7 +3027,7 @@
         const g = geschosse[i];
         g.vy -= 4 * dt; // fällt nur ganz wenig
         // in kleinen Schritten fliegen, damit sie nicht durch dünne Ziele "durchspringt"
-        const schritte = 4;
+        const schritte = g.art === 'mini' || g.art === 'schrot' ? 2 : 4;
         let weg = false;
         for (let s = 0; s < schritte && !weg; s++) {
           g.mesh.position.x += g.vx * dt / schritte; g.mesh.position.y += g.vy * dt / schritte; g.mesh.position.z += g.vz * dt / schritte;
@@ -2804,7 +3037,10 @@
         }
         g.mesh.rotation.x += 14 * dt; g.mesh.rotation.y += 9 * dt;
         g.leben -= dt;
-        if (weg || g.leben < 0) { szene.remove(g.mesh); geschosse.splice(i, 1); }
+        if (weg || g.leben < 0) {
+          if (g.art === 'bazooka' && !g.fremd) explosion(g.mesh.position.x, Math.max(0.5, g.mesh.position.y), g.mesh.position.z, true);
+          szene.remove(g.mesh); geschosse.splice(i, 1);
+        }
       }
     }
 
@@ -3343,13 +3579,16 @@
       geschosseBewegen(dt);          // fliegende Bananen
       rauchBewegen(dt);              // Rauchwolken
       bankBewegen();                 // Alarmglocke
-      if (fGedrueckt) { fGedrueckt = false; benutzen(); }
+      if (fGedrueckt) { fGedrueckt = false; benutzen(); naechsterMiniSchuss = spielZeit + 0.07; }
+      // Minigun: solange F, linke Maustaste oder der 🔫-Knopf gedrückt ist, feuert sie weiter
+      if (auswahl === 3 && (tasten.KeyF || linkeMausGedrueckt || handySchussGehalten) && spielZeit > naechsterMiniSchuss) { naechsterMiniSchuss = spielZeit + 0.07; benutzen(); }
+      knalleBewegen(dt);
       if (gGedrueckt) { gGedrueckt = false; rauchbombe(); }
 
       // E-Taste: einsteigen oder aussteigen
       if (eGedrueckt) {
         eGedrueckt = false;
-        if (!aktuellesFahrzeug && (graben(p) || tresorKnacken(p))) { /* graben im Gefängnis oder Tresor knacken */ }
+        if (!aktuellesFahrzeug && (graben(p) || tresorKnacken(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
         else if (aktuellesFahrzeug) aussteigen();
         else if (!imGefaengnis) { const f = naechstesFahrzeug(p); if (f) einsteigen(f); }
       }
@@ -3362,6 +3601,7 @@
         if (sprungGedrueckt) { hupen(f.hupe); sprungGedrueckt = false; } // Leertaste = hupen
         if (f.vorherX === undefined) { f.vorherX = f.x; f.vorherZ = f.z; }
         fahren(f, dt);
+        ausfahrtPruefen(f);                       // aus dem Geheimversteck hinausfahren
         // --- Verbotenes beim Fahren? ---
         // Über eine rote Ampel in die Kreuzung gefahren?
         for (const k of knotenListe.values()) {
@@ -3486,7 +3726,7 @@
         } else {
           armLinks.rotation.z = -0.35; armRechts.rotation.z = 0.35;
         }
-        if (auswahl === 1) armRechts.rotation.set(-Math.PI / 2 + (zielModus ? zielNeigung : 0), 0, 0.1); // Pistole nach vorne halten
+        if (WAFFEN_NR.includes(auswahl)) armRechts.rotation.set(-Math.PI / 2 + (zielModus ? zielNeigung : 0), 0, 0.1); // Waffe nach vorne halten
 
         // Hinweis, wenn ein Fahrzeug in der Nähe ist (oder im Gefängnis)
         const nah = imGefaengnis ? null : naechstesFahrzeug(p);
@@ -3496,6 +3736,9 @@
           fahrInfo.innerHTML = loch ? '<b>🕳️ Durchs Loch – dann die Gefängnis-Obby hoch bis auf die Mauer!</b><small>Achte auf den Wärter. Nicht in die Lava fallen!</small>'
             : amStein ? `<b>⛏️ ${E_TASTE} drücken zum Graben (${grabZaehler}/${GRAB_NOETIG})</b>`
             : '<b>🔒 Du bist im Gefängnis!</b><small>Tipp: Ein Stück der Rückwand sieht locker aus …</small>';
+          fahrInfo.classList.add('offen');
+        } else if (geheimHinweis(p)) {
+          fahrInfo.innerHTML = geheimHinweis(p);
           fahrInfo.classList.add('offen');
         } else if (amTresor(p)) {
           fahrInfo.innerHTML = spielZeit - BANK.geraubtUm < BANK_PAUSE ? '<b>Der Tresor ist leer.</b><small>In ein paar Minuten ist wieder Geld drin …</small>'
@@ -3618,6 +3861,59 @@
 
       renderer.render(szene, kamera);
     }
+    // ================= GEHEIMVERSTECK: rein, raus, Waffen nehmen =================
+    const MUNITION_VOLL = { minigun: ['mgMun', 300], bazooka: ['bzMun', 12], schrot: ['srMun', 40] };
+    const amBaumloch = p => Math.hypot(p.x - GEHEIM_BAUM.x, p.z - (GEHEIM_BAUM.z + 1.4)) < 1.6 && p.y < 2;
+    const imGeheimversteck = p => Math.abs(p.x - GEHEIM.x) < GEHEIM.b / 2 && Math.abs(p.z - GEHEIM.z) < GEHEIM.t / 2;
+    const naechstesGestell = p => GEHEIM.gestelle.find(g => Math.hypot(p.x - g.x, p.z - g.z) < 2.2);
+    const amAusgang = p => Math.hypot(p.x - GEHEIM.ausgang.x, p.z - GEHEIM.ausgang.z) < 2;
+    // E-Taste: gibt true zurück, wenn hier etwas Geheimes passiert ist
+    function geheimAktion(p) {
+      if (imGefaengnis) return false;
+      if (amBaumloch(p)) {
+        affe.position.set(GEHEIM.start.x, 0.5, GEHEIM.start.z);
+        kameraWinkel = 0; blickRichtung = Math.PI; fallTempo = 0;
+        zeigeMeldung('🌳 Du kriechst durch den hohlen Baum … 🤫 GEHEIMVERSTECK!', 3);
+        hupen(200);
+        return true;
+      }
+      if (!imGeheimversteck(p)) return false;
+      const g = naechstesGestell(p);
+      if (g) {
+        const [mun, voll] = MUNITION_VOLL[g.waffe];
+        const neu = !inventar[g.waffe];
+        inventar[g.waffe] = true; inventar[mun] = voll;
+        auswahl = { minigun: 3, bazooka: 4, schrot: 5 }[g.waffe];
+        inventarZeigen();
+        zeigeMeldung(neu ? `${g.emoji} ${g.name}! (Taste ${auswahl})` : `${g.emoji} Nachgeladen!`, 2);
+        hupen(1300);
+        return true;
+      }
+      if (amAusgang(p)) {
+        affe.position.set(GEHEIM_BAUM.x, 0.5, GEHEIM_BAUM.z + 2.5);
+        fallTempo = 0; blickRichtung = 0; kameraWinkel = Math.PI;
+        zeigeMeldung('🌳 Du kriechst wieder aus dem Baum.', 2);
+        return true;
+      }
+      return false;
+    }
+    function geheimHinweis(p) {
+      if (imGefaengnis) return null;
+      if (amBaumloch(p)) return `<b>🌳 Ein hohler Baum … (${E_TASTE}: hineinkriechen)</b>`;
+      if (!imGeheimversteck(p)) return null;
+      const g = naechstesGestell(p);
+      if (g) return `<b>${g.emoji} ${g.name} – ${E_TASTE}: ${inventar[g.waffe] ? 'nachladen' : 'nehmen'}</b>`;
+      if (amAusgang(p)) return `<b>🚪 ${E_TASTE}: zurück zum Baum</b>`;
+      return null;
+    }
+    // Mit dem Auto durch die Ausfahrt: man kommt neben dem Baum auf der Straße heraus
+    function ausfahrtPruefen(f) {
+      if (Math.hypot(f.x - GEHEIM.ausfahrt.x, f.z - GEHEIM.ausfahrt.z) > 2.6) return;
+      f.x = GEHEIM_BAUM.x + 6; f.z = 52; f.richtung = Math.PI / 2; // rechte Spur, Richtung Osten
+      fahrzeugZeigen(f);
+      zeigeMeldung('🚀 Aus dem Geheimversteck – Vollgas!', 2.5);
+    }
+
     // ================= MEHRSPIELER =================
     // Freunde spielen zusammen in einem "Raum". Wer den Raum-Code kennt, kommt hinein.
     // Die Nachrichten laufen verschlüsselt über öffentliche MQTT-Server – ohne eigenen Server und ohne Konto.
@@ -3731,6 +4027,11 @@
       }
       if (n.t === 'banane' && typeof n.d?.x === 'number') fremdeBananeFliegt(n.d);
       if (n.t === 'weg') mitspielerEntfernen(n.i);
+      if (n.t === 'knall' && typeof n.d?.x === 'number') {   // ein Mitspieler hat mit der Bazooka geschossen
+        knallZeigen(n.d.x, n.d.y, n.d.z); hupen(60);
+        const p = affe.position;
+        if (!aktuellesFahrzeug && Math.hypot(p.x - n.d.x, p.z - n.d.z) < KNALL_RADIUS) { selbstLiegtBis = spielZeit + LIEGEZEIT; zeigeMeldung('💥 Von einer Bananen-Bazooka umgehauen!', 2); }
+      }
     }
     async function raumBeitreten(code) {
       if (mp.raum) raumVerlassen();
@@ -3862,7 +4163,7 @@
         mpSenden('affe', {
           n: mp.name, x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), r: +blickRichtung.toFixed(2),
           t: +Math.hypot(laufV.x, laufV.z).toFixed(1), l: zuletztAmBoden ? 0 : 1, g: spielZeit < selbstLiegtBis ? 1 : 0,
-          f: regenbogen ? 0xff00ff : fell.color.getHex(), k: Object.values(kleider.an), w: auswahl === 1 ? 1 : 0,
+          f: regenbogen ? 0xff00ff : fell.color.getHex(), k: Object.values(kleider.an), w: WAFFEN_NR.includes(auswahl) ? 1 : 0,
           v: f ? f.typ : null, vx: f ? +f.x.toFixed(2) : 0, vz: f ? +f.z.toFixed(2) : 0, vr: f ? +f.richtung.toFixed(2) : 0,
         });
       }
@@ -3898,11 +4199,12 @@
 
     // --- Bananen zwischen Spielern ---
     function eigeneBananeGeschossen(g) {     // wird beim eigenen Schuss aufgerufen
-      mpSenden('banane', { x: g.mesh.position.x, y: g.mesh.position.y, z: g.mesh.position.z, vx: g.vx, vy: g.vy, vz: g.vz });
+      mpSenden('banane', { s: g.mesh.scale.x, x: g.mesh.position.x, y: g.mesh.position.y, z: g.mesh.position.z, vx: g.vx, vy: g.vy, vz: g.vz });
     }
     function fremdeBananeFliegt(b) {          // ein Mitspieler hat geschossen: Banane auch bei uns zeigen
       const m = new THREE.Mesh(bananenForm, bananenMaterial);
       m.position.set(b.x, b.y, b.z);
+      m.scale.setScalar(Math.min(3, b.s || 1));
       szene.add(m);
       geschosse.push({ mesh: m, vx: b.vx, vy: b.vy, vz: b.vz, leben: 2, fremd: true });
     }
@@ -3988,11 +4290,11 @@
         const was = k.dataset.taste;
         if (was === 'sprung') { tasten.Space = true; sprungGedrueckt = true; sprungGedruecktUm = spielZeit; }
         if (was === 'aktion') eGedrueckt = true;
-        if (was === 'schuss') { if (inventar.pistole && !aktuellesFahrzeug && auswahl !== 1) { auswahl = 1; inventarZeigen(); } fGedrueckt = true; }
+        if (was === 'schuss') { if (hatWaffe() && !aktuellesFahrzeug && !WAFFEN_NR.includes(auswahl)) { auswahl = ersteWaffe(); inventarZeigen(); } fGedrueckt = true; handySchussGehalten = true; }
         if (was === 'zielen') zielfernrohrBenutzen(!zielModus);
         if (was === 'rauch') gGedrueckt = true;
       });
-      const los = () => { k.classList.remove('gedrueckt'); if (k.dataset.taste === 'sprung') tasten.Space = false; };
+      const los = () => { k.classList.remove('gedrueckt'); if (k.dataset.taste === 'sprung') tasten.Space = false; if (k.dataset.taste === 'schuss') handySchussGehalten = false; };
       k.addEventListener('pointerup', los);
       k.addEventListener('pointercancel', los);
       k.addEventListener('pointerleave', los);
@@ -4000,8 +4302,8 @@
     // Welche Knöpfe gerade gebraucht werden
     function handyKnoepfeZeigen() {
       if (!IST_HANDY) return;
-      handyKnoepfe.querySelector('[data-taste="schuss"]').hidden = !inventar.pistole || !!aktuellesFahrzeug;
-      handyKnoepfe.querySelector('[data-taste="zielen"]').hidden = !inventar.pistole || !!aktuellesFahrzeug;
+      handyKnoepfe.querySelector('[data-taste="schuss"]').hidden = !hatWaffe() || !!aktuellesFahrzeug;
+      handyKnoepfe.querySelector('[data-taste="zielen"]').hidden = !hatWaffe() || !!aktuellesFahrzeug;
       handyKnoepfe.querySelector('[data-taste="rauch"]').hidden = inventar.rauch <= 0;
       handyKnoepfe.querySelector('[data-taste="sprung"]').textContent = aktuellesFahrzeug ? '📯' : '⬆️';
     }
