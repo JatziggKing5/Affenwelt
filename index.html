@@ -16,6 +16,28 @@
       padding: 8px 16px; background: rgba(0,0,0,0.6); color: #ffd700;
       border-radius: 10px; font-size: 22px; font-weight: bold; white-space: nowrap;
     }
+    #kabine {
+      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+      width: min(440px, calc(100vw - 32px)); box-sizing: border-box;
+      padding: 14px 16px; background: rgba(30, 10, 40, 0.85); color: #fff;
+      border-radius: 14px; text-align: center; display: none;
+    }
+    #kabine.offen { display: block; }
+    #kabine h2 { margin: 0 0 4px; font-size: 22px; }
+    #kabine p { margin: 4px 0 10px; font-size: 14px; }
+    #kabine p.klein { margin: 10px 0 0; font-size: 12px; opacity: 0.7; }
+    #farben { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+    #farben button {
+      aspect-ratio: 1; border-radius: 50%; border: 3px solid rgba(255,255,255,0.3);
+      cursor: pointer; padding: 0; position: relative;
+    }
+    #farben button:hover { transform: scale(1.12); }
+    #farben button.gewaehlt { border-color: #fff; box-shadow: 0 0 0 3px #ffd700; }
+    #farben button span {
+      position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
+      font-size: 10px; white-space: nowrap; opacity: 0; transition: opacity 0.2s;
+    }
+    #farben button:hover span { opacity: 1; }
     #meldung {
       position: fixed; top: 35%; left: 50%; transform: translate(-50%, -50%);
       color: #fff; font-size: 40px; font-weight: bold; text-align: center;
@@ -34,6 +56,12 @@
 <body>
   <div id="punkte"></div>
   <div id="meldung"></div>
+  <div id="kabine">
+    <h2>👕 Umkleidekabine</h2>
+    <p>Klick auf eine Farbe für das Fell deines Affen:</p>
+    <div id="farben"></div>
+    <p class="klein">Zum Verlassen einfach rauslaufen.</p>
+  </div>
   <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera drehen · Leertaste: springen (2× = Doppelsprung) · Obby: mit W nach hinten über den Rand der Wiese!</div>
 
   <script type="module">
@@ -217,6 +245,95 @@
       [ 9,  0, 1, 2,   6, 0x607d8b],
     ];
     for (const [x, z, b, h, t, farbe] of hindernisListe) neuerBlock(x, z, b, t, 0, h, 'block', farbe);
+
+    // ================= UMKLEIDEKABINE =================
+    // Steht links hinten auf der Wiese. Die offene Seite zeigt zur Mitte (nach rechts).
+    const KABINE = { x: -14, z: 10 };
+    const KABINEN_FARBE = 0xf8bbd0; // rosa
+    const kx = KABINE.x, kz = KABINE.z;
+    neuerBlock(kx - 1.6, kz,       0.2, 3.4, 0, 3, 'block', KABINEN_FARBE); // Rückwand
+    neuerBlock(kx,       kz - 1.6, 3.4, 0.2, 0, 3, 'block', KABINEN_FARBE); // Seitenwand
+    neuerBlock(kx,       kz + 1.6, 3.4, 0.2, 0, 3, 'block', KABINEN_FARBE); // Seitenwand
+    neuerBlock(kx,       kz,       3.6, 3.6, 3, 3.25, 'block', 0xec407a);   // Dach
+    // Teppich am Boden (nur zum Anschauen)
+    const teppich = new THREE.Mesh(
+      new THREE.BoxGeometry(2.8, 0.02, 2.8),
+      new THREE.MeshStandardMaterial({ color: 0x7e57c2 })
+    );
+    teppich.position.set(kx, 0.01, kz);
+    teppich.receiveShadow = true;
+    szene.add(teppich);
+    // Vorhang an der Seite (rot, halb offen)
+    const vorhang = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 2.7, 0.8),
+      new THREE.MeshStandardMaterial({ color: 0xc62828 })
+    );
+    vorhang.position.set(kx + 1.6, 1.6, kz - 1.15);
+    vorhang.castShadow = true;
+    szene.add(vorhang);
+    // Schild "UMKLEIDE" über dem Eingang – auf eine Leinwand gemalt
+    const leinwand = document.createElement('canvas');
+    leinwand.width = 512; leinwand.height = 128;
+    const pinsel = leinwand.getContext('2d');
+    pinsel.fillStyle = '#ffffff'; pinsel.fillRect(0, 0, 512, 128);
+    pinsel.fillStyle = '#ad1457'; pinsel.font = 'bold 80px sans-serif';
+    pinsel.textAlign = 'center'; pinsel.textBaseline = 'middle';
+    pinsel.fillText('UMKLEIDE', 256, 68);
+    const schildTextur = new THREE.CanvasTexture(leinwand);
+    schildTextur.colorSpace = THREE.SRGBColorSpace;
+    const schild = new THREE.Mesh(
+      new THREE.PlaneGeometry(3, 0.75),
+      new THREE.MeshBasicMaterial({ map: schildTextur })
+    );
+    schild.position.set(kx + 1.82, 3.6, kz);
+    schild.rotation.y = Math.PI / 2; // zur Wiese hin drehen
+    szene.add(schild);
+
+    // Ist der Affe in der Kabine?
+    function inKabine(p) {
+      return Math.abs(p.x - kx) < 1.3 && Math.abs(p.z - kz) < 1.3 && p.y < 1.5;
+    }
+
+    // Farben zum Aussuchen
+    const FELL_FARBEN = [
+      ['Dunkelbraun', 0x3b2314], ['Hellbraun', 0x8b5a2b], ['Schwarz', 0x1a1a1a],
+      ['Grau', 0x8a8a8a], ['Weiß', 0xf2f2f2], ['Rot', 0xd32f2f],
+      ['Orange', 0xf57c00], ['Gelb', 0xfdd835], ['Grün', 0x43a047],
+      ['Blau', 0x1e88e5], ['Lila', 0x8e24aa], ['Pink', 0xf06292],
+      ['Gold', 0xd4a017], ['Regenbogen', 'regenbogen'],
+    ];
+    let regenbogen = false;
+
+    function fellFarbeSetzen(wert) {
+      regenbogen = wert === 'regenbogen';
+      if (!regenbogen) fell.color.set(wert);
+      try { localStorage.setItem('affenFarbe', String(wert)); } catch (e) {} // Farbe merken
+      for (const knopf of farbKnoepfe) knopf.classList.toggle('gewaehlt', knopf.dataset.wert === String(wert));
+    }
+
+    // Menü-Knöpfe bauen
+    const kabinenMenue = document.getElementById('kabine');
+    const farbFeld = document.getElementById('farben');
+    const farbKnoepfe = FELL_FARBEN.map(([name, wert]) => {
+      const knopf = document.createElement('button');
+      knopf.title = name;
+      knopf.dataset.wert = String(wert);
+      knopf.tabIndex = -1;
+      knopf.style.background = wert === 'regenbogen'
+        ? 'conic-gradient(red, orange, yellow, lime, cyan, blue, magenta, red)'
+        : '#' + wert.toString(16).padStart(6, '0');
+      knopf.innerHTML = `<span>${name}</span>`;
+      knopf.addEventListener('mousedown', (e) => e.preventDefault()); // Knopf soll die Tastatur nicht "klauen"
+      knopf.addEventListener('click', () => fellFarbeSetzen(wert));
+      farbFeld.appendChild(knopf);
+      return knopf;
+    });
+
+    // Gespeicherte Farbe vom letzten Mal laden
+    let gespeichert = null;
+    try { gespeichert = localStorage.getItem('affenFarbe'); } catch (e) {}
+    const gefunden = FELL_FARBEN.find(([, wert]) => String(wert) === gespeichert);
+    fellFarbeSetzen(gefunden ? gefunden[1] : 0x3b2314);
 
     // ================= OBBY =================
     // Startet hinten am Ende der Wiese (z = -25) und geht über den Abgrund.
@@ -517,6 +634,10 @@
 
       // Affe dreht sich in die Laufrichtung (sanft, nicht ruckartig)
       const laeuft = dx !== 0 || dz !== 0;
+
+      // Umkleidekabine: Menü zeigen, solange der Affe drin steht
+      kabinenMenue.classList.toggle('offen', inKabine(p));
+      if (regenbogen) fell.color.setHSL((spielZeit * 0.2) % 1, 0.8, 0.45);
       if (laeuft) {
         const ziel = Math.atan2(dx, dz);
         let unterschied = ziel - blickRichtung;
