@@ -71,7 +71,7 @@
     const szene = new THREE.Scene();
     szene.background = new THREE.Color(0x87ceeb); // hellblauer Himmel
 
-    const kamera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 200);
+    const kamera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 300);
 
     // WebGPU-Renderer: malt mit der modernen Grafik-Schnittstelle WebGPU
     const renderer = new THREE.WebGPURenderer({ antialias: true });
@@ -101,14 +101,59 @@
     szene.add(sonne.target); // damit die Sonne dem Affen folgen kann
 
     // --- Grüner Boden: eine große flache Fläche ---
-    const BODEN_GROESSE = 50;
+    // Die Wiese geht von links -60 bis rechts 60 und von hinten -25 (dort beginnt die Obby) bis vorne 95.
+    const WIESE = { x1: -60, x2: 60, z1: -25, z2: 95 };
     const boden = new THREE.Mesh(
-      new THREE.PlaneGeometry(BODEN_GROESSE, BODEN_GROESSE),
+      new THREE.PlaneGeometry(WIESE.x2 - WIESE.x1, WIESE.z2 - WIESE.z1),
       new THREE.MeshStandardMaterial({ color: 0x4caf50 })
     );
     boden.rotation.x = -Math.PI / 2; // flach hinlegen
+    boden.position.set((WIESE.x1 + WIESE.x2) / 2, 0, (WIESE.z1 + WIESE.z2) / 2);
     boden.receiveShadow = true;
     szene.add(boden);
+
+    // Nebel in der Ferne: die große Welt verschwindet sanft im Himmel
+    szene.fog = new THREE.Fog(0x87ceeb, 50, 170);
+
+    // ================= STRASSEN =================
+    // Jede Straße ist ein Rechteck: x1..x2 und z1..z2
+    const STRASSEN = [
+      { x1: -3, x2: 3, z1: 6, z2: WIESE.z2, richtung: 'z' },          // Hauptstraße: vom Start nach vorne
+      { x1: WIESE.x1, x2: WIESE.x2, z1: 47, z2: 53, richtung: 'x' },  // Querstraße: von links nach rechts
+    ];
+    const asphalt = new THREE.MeshStandardMaterial({ color: 0x424242, roughness: 0.95 });
+    const linie   = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 });
+    const gelb    = new THREE.MeshStandardMaterial({ color: 0xfdd835, roughness: 0.6 });
+
+    function flach(material, x, z, b, t, y) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(b, 0.02, t), material);
+      m.position.set(x, y, z);
+      m.receiveShadow = true;
+      szene.add(m);
+    }
+    function aufKreuzung(x, z) { // liegt der Punkt auf beiden Straßen gleichzeitig?
+      return STRASSEN.filter(s => x > s.x1 - 0.5 && x < s.x2 + 0.5 && z > s.z1 - 0.5 && z < s.z2 + 0.5).length > 1;
+    }
+    STRASSEN.forEach((s, i) => {
+      const mx = (s.x1 + s.x2) / 2, mz = (s.z1 + s.z2) / 2;
+      flach(asphalt, mx, mz, s.x2 - s.x1, s.z2 - s.z1, 0.01 + i * 0.002);
+      // Gestrichelte gelbe Mittellinie (nicht auf der Kreuzung)
+      if (s.richtung === 'z') {
+        for (let z = s.z1 + 1.5; z < s.z2; z += 4) if (!aufKreuzung(mx, z)) flach(gelb, mx, z, 0.18, 2, 0.03);
+        flach(linie, s.x1 + 0.3, mz, 0.12, s.z2 - s.z1, 0.025); // weiße Randlinien
+        flach(linie, s.x2 - 0.3, mz, 0.12, s.z2 - s.z1, 0.025);
+      } else {
+        for (let x = s.x1 + 1.5; x < s.x2; x += 4) if (!aufKreuzung(x, mz)) flach(gelb, x, mz, 2, 0.18, 0.03);
+        flach(linie, mx, s.z1 + 0.3, s.x2 - s.x1, 0.12, 0.025);
+        flach(linie, mx, s.z2 - 0.3, s.x2 - s.x1, 0.12, 0.025);
+      }
+      // Zebrastreifen direkt vor dem Start
+      if (i === 0) for (let x = s.x1 + 0.5; x < s.x2; x += 1) flach(linie, x, s.z1 + 1.2, 0.5, 1.8, 0.035);
+    });
+    // Ist ein Punkt auf (oder nah an) einer Straße?
+    function nahAnStrasse(x, z, abstand) {
+      return STRASSEN.some(s => x > s.x1 - abstand && x < s.x2 + abstand && z > s.z1 - abstand && z < s.z2 + abstand);
+    }
 
     // --- Der Affe: unsere Spielfigur, gebaut aus Kugeln und Röhren ---
     // "affe" ist der unsichtbare Halter (1×1×1 groß, für Zusammenstöße),
@@ -345,23 +390,56 @@
       return 4 * groesse;
     }
 
+    // --- Straßenlaternen am Straßenrand ---
+    const mastFarbe = new THREE.MeshStandardMaterial({ color: 0x546e7a, roughness: 0.5, metalness: 0.4 });
+    const lampenLicht = new THREE.MeshStandardMaterial({ color: 0xfff59d, emissive: 0xffeb3b, emissiveIntensity: 1.5 });
+    const mastForm = new THREE.CylinderGeometry(0.09, 0.12, 1, 8);
+    function laterne(x, z, armX, armZ) {
+      teil(mastForm, mastFarbe, x, 2, z, 1, 4, 1);                             // Mast (4 hoch)
+      const arm = teil(mastForm, mastFarbe, x + armX * 0.5, 3.95, z + armZ * 0.5, 0.6, 1, 0.6);
+      arm.rotation.set(armZ * Math.PI / 2, 0, -armX * Math.PI / 2);            // Arm zur Straße hin
+      teil(kugelForm, lampenLicht, x + armX, 3.85, z + armZ, 0.22, 0.15, 0.22); // leuchtende Lampe
+      bloecke.push({ x, z, b: 0.3, t: 0.3, unten: 0, oben: 4, art: 'block' });   // Mast ist fest
+    }
+    for (let z = 14; z < WIESE.z2; z += 12) {          // an der Hauptstraße, abwechselnd links/rechts
+      if (Math.abs(z - 50) < 6) continue;              // nicht auf der Kreuzung
+      const seite = (z / 12) % 2 < 1 ? 1 : -1;
+      laterne(seite * 3.6, z, -seite, 0);
+    }
+    for (let x = WIESE.x1 + 6; x < WIESE.x2; x += 12) { // an der Querstraße
+      if (Math.abs(x) < 6) continue;
+      const seite = (x / 12) % 2 < 1 ? 1 : -1;
+      laterne(x, 50 + seite * 3.6, 0, -seite);
+    }
+
     // Wo darf ein Baum stehen? Im Wald-Gebiet, nicht zu nah an anderen Sachen
     const waldGebiete = [
-      { x1: 13.5, x2: 24.5, z1: -24.5, z2: 24.5 },  // rechte Seite der Wiese
-      { x1: -24.5, x2: 13.5, z1: 15, z2: 24.5 },    // vorne quer über die Wiese
+      { x1: 13.5, x2: 59.5, z1: -24.5, z2: 15 },    // rechts
+      { x1: -59.5, x2: -25, z1: -24.5, z2: 15 },    // links
+      { x1: -59.5, x2: 59.5, z1: 15, z2: 94.5 },    // der große Wald vorne
     ];
+    // Ein zufälliges Wald-Gebiet wählen – große Gebiete kommen öfter dran
+    const flaechen = waldGebiete.map(g => (g.x2 - g.x1) * (g.z2 - g.z1));
+    const gesamt = flaechen.reduce((a, b) => a + b, 0);
+    function zufallsGebiet() {
+      let r = zufall() * gesamt;
+      for (let i = 0; i < waldGebiete.length; i++) { r -= flaechen[i]; if (r <= 0) return waldGebiete[i]; }
+      return waldGebiete[0];
+    }
     const freiHalten = [
       { x: KABINE.x, z: KABINE.z, r: 4 },           // Umkleidekabine
       { x: 0, z: 0, r: 4 },                         // Startplatz
+      { x: 0, z: 50, r: 9 },                        // Platz an der Kreuzung
     ];
     const baumOrte = [];
     let versuche = 0;
-    while (baumOrte.length < 70 && versuche < 3000) {
+    while (baumOrte.length < 220 && versuche < 8000) {
       versuche++;
-      const g = waldGebiete[zufall() < 0.6 ? 0 : 1];
+      const g = zufallsGebiet();
       const x = zwischen(g.x1, g.x2), z = zwischen(g.z1, g.z2);
-      if (baumOrte.some(o => Math.hypot(o.x - x, o.z - z) < 2.4)) continue;
+      if (baumOrte.some(o => Math.hypot(o.x - x, o.z - z) < 2.8)) continue;
       if (freiHalten.some(o => Math.hypot(o.x - x, o.z - z) < o.r)) continue;
+      if (nahAnStrasse(x, z, 2)) continue;          // nicht auf die Straße pflanzen
       if (bloecke.some(o => Math.abs(o.x - x) < o.b / 2 + 1 && Math.abs(o.z - z) < o.t / 2 + 1)) continue;
       baumOrte.push({ x, z });
     }
@@ -373,10 +451,11 @@
     }
 
     // Büsche und Pilze zwischen den Bäumen (nur Deko, man kann durchlaufen)
-    for (let i = 0; i < 45; i++) {
-      const g = waldGebiete[zufall() < 0.6 ? 0 : 1];
+    for (let i = 0; i < 140; i++) {
+      const g = zufallsGebiet();
       const x = zwischen(g.x1, g.x2), z = zwischen(g.z1, g.z2);
       if (freiHalten.some(o => Math.hypot(o.x - x, o.z - z) < o.r)) continue;
+      if (nahAnStrasse(x, z, 0.5)) continue;
       if (zufall() < 0.65) {
         const s = zwischen(0.4, 0.8);
         teil(kugelForm, busch, x, s * 0.5, z, s, s * 0.8, s);
@@ -536,10 +615,9 @@
     }
 
     // Was ist unter dem Affen? Gibt Höhe und Block zurück (oder -Unendlich = Abgrund)
-    const WIESE_RAND = BODEN_GROESSE / 2;
     function bodenUnter(px, py, pz) {
       let hoehe = -Infinity, block = null;
-      if (Math.abs(px) <= WIESE_RAND + 0.5 && Math.abs(pz) <= WIESE_RAND + 0.5 && py - 0.5 >= -0.05) {
+      if (px >= WIESE.x1 - 0.5 && px <= WIESE.x2 + 0.5 && pz >= WIESE.z1 - 0.5 && pz <= WIESE.z2 + 0.5 && py - 0.5 >= -0.05) {
         hoehe = 0; // auf der Wiese
       }
       for (const o of bloecke) {
@@ -595,6 +673,9 @@
       // Münzen in der Obby
       [ 0,-32, 1.0], [ 0,-40, 2.0], [ 0,-52, 2.0], [ 0,-62, 2.0],
       [ 3,-72, 4.5], [ 0,-95, 5.0], [ 0,-102, 6.0],
+      // Münzen auf den Straßen
+      [-1, 22, 0], [ 1, 34, 0], [-1, 64, 0], [ 1, 76, 0], [-1, 88, 0],
+      [-48, 51, 0], [-30, 49, 0], [-14, 51, 0], [14, 49, 0], [30, 51, 0], [48, 49, 0],
       [-1,-116, 6.0], [ 0,-135, 6.0], [ 0,-146, 10.5], [ 1,-159, 10.5], [ 0,-191, 10.5], [ 0,-198, 11.5],
     ];
     const muenzForm = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 24);
