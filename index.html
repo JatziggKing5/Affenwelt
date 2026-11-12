@@ -301,6 +301,20 @@
     #haendler .ware small { opacity: 0.75; font-size: 11px; }
     #haendler button { background: #ffd600; border: none; border-radius: 8px; padding: 8px 12px; font-weight: bold; cursor: pointer; white-space: nowrap; }
     #haendler button:hover { background: #ffea00; }
+    #auftrag {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 4; display: none; pointer-events: none;
+      width: min(340px, calc(100vw - 420px)); min-width: 200px; box-sizing: border-box; padding: 8px 12px; border-radius: 12px;
+      background: rgba(255, 143, 0, 0.92); color: #fff; text-align: center; text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    }
+    #auftrag.offen { display: block; }
+    #auftrag b { display: block; font-size: 15px; }
+    #auftrag small { display: block; font-size: 13px; margin-top: 2px; }
+    #auftrag .balken { height: 6px; margin-top: 6px; border-radius: 3px; background: rgba(0,0,0,0.25); overflow: hidden; }
+    #auftrag .balken div { height: 100%; background: #fff; }
+    #auftrag.eilig .balken div { background: #ff1744; }
+    @media (max-width: 600px) { #auftrag { top: 64px; width: 46vw; min-width: 0; left: auto; right: 130px; transform: none; padding: 6px 8px; } #auftrag b { font-size: 12px; } #auftrag small { font-size: 11px; } }
+    body.handy #auftrag { top: 64px; width: 46vw; min-width: 0; left: auto; right: 130px; transform: none; padding: 6px 8px; }
+    body.handy #auftrag b { font-size: 12px; } body.handy #auftrag small { font-size: 11px; }
     #fahndung {
       position: fixed; bottom: 170px; left: 50%; transform: translateX(-50%);
       max-width: calc(100vw - 32px); box-sizing: border-box; text-align: center;
@@ -387,6 +401,7 @@
   </div>
   <button id="hilfe">❓ Hilfe</button>
   <div id="uhr"></div>
+  <div id="auftrag"><b></b><small></small><div class="balken"><div></div></div></div>
   <div id="menue"><div class="fenster">
     <button class="zu" title="Schließen (Esc)">✕</button>
     <div class="reiter"><button data-seite="hilfe" class="an">❓ Hilfe</button><button data-seite="einst">⚙️ Einstellungen</button></div>
@@ -441,7 +456,7 @@
       ['👥 Mehrspieler', [['Raum öffnen / beitreten', k('P')], ['Chat schreiben', k('T') + ' oder ' + k('Enter')], ['Funkgerät', k('V') + ' halten']]],
     ];
     HILFE.push(['🗺️ Zum Entdecken', [
-      ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
+      ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
       ['🔫 Waffenhändler', 'Bananen-Pistole & Zielfernrohr'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
       ['🚔 Polizei', 'nicht über Rot fahren, nichts Verbotenes tun'], ['🔒 Gefängnis', 'man kann ausbrechen …'],
       ['🤫 Geheimversteck', 'irgendwo gibt es eins – nicht auf der Karte!'],
@@ -2023,7 +2038,7 @@
     tanzKnopf.addEventListener('click', e => { e.stopPropagation(); tanzRadOffen ? tanzRadZu() : tanzRadAuf(false); });
     function tanzLos(i) {
       tanz = TAENZE[i]; tanzStart = spielZeit; tanzNaechsterTakt = spielZeit;
-      musikLautstaerke();
+      musikLautstaerke(); auftragEreignis('tanz', tanz.id);
       zeigeMeldung(`${tanz.emoji} ${tanz.name}!`, 1.5);
     }
     function tanzStoppen() {
@@ -3542,6 +3557,7 @@
     function getroffen(g) {
       const q = g.mesh.position;
       const nah = (x, z, r) => Math.hypot(q.x - x, q.z - z) < r && q.y < 1.6 && q.y > -0.1;
+      if (zielscheibeGetroffen(q)) return true;
       if (polizei.aktiv && polizei.laeufer.gruppe.visible && nah(polizei.laeufer.x, polizei.laeufer.z, 0.7)) {
         polizei.betaeubtBis = spielZeit + LIEGEZEIT; zeigeMeldung('🍌 Polizist getroffen!', 1.5); return true;
       }
@@ -4178,6 +4194,157 @@
     const _fensterLicht = new THREE.Color(0xffb84d);
     const uhrAnzeige = document.getElementById('uhr');
 
+    // ================= MISSIONEN: der Auftrags-Affe gibt dir Aufgaben =================
+    // Jede geschaffte Mission macht die nächste etwas schwerer (weniger Zeit, mehr zu tun) – aber auch die Belohnung größer.
+    const AUFTRAGGEBER = { x: -6, z: 7 };
+    const auftraggeber = affenKlon(0xff8f00);
+    auftraggeber.gruppe.position.set(AUFTRAGGEBER.x, 0.5, AUFTRAGGEBER.z);
+    auftraggeber.gruppe.rotation.y = Math.PI * 0.8;
+    szene.add(auftraggeber.gruppe);
+    bloecke.push({ x: AUFTRAGGEBER.x, z: AUFTRAGGEBER.z, b: 0.8, t: 0.8, unten: 0, oben: 1.2, art: 'block' });
+    let auftragSchild = null;
+    function auftragSchildSetzen(text) {
+      if (auftragSchild) auftraggeber.gruppe.remove(auftragSchild);
+      auftragSchild = namensSchild(text);
+      auftragSchild.position.y = 1.5; auftragSchild.scale.set(2.2, 0.55, 1);
+      auftraggeber.gruppe.add(auftragSchild);
+    }
+    auftragSchildSetzen('❗ Aufträge');
+    const auftragBox = document.getElementById('auftrag');
+    let auftrag = null;          // die laufende Mission
+    let auftraegeGeschafft = 0;  // macht die Missionen schwerer (wird nicht gespeichert!)
+    let geheimGefunden = false;
+    const zielscheiben = [];
+    const scheibenForm = new THREE.CylinderGeometry(0.6, 0.6, 0.12, 20).rotateX(Math.PI / 2);
+    const scheibenMaterial = [0xffffff, 0xe53935].map(c => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.25 }));
+    const paket = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.4, 0.55), new THREE.MeshStandardMaterial({ color: 0xa1887f }));
+    paket.position.set(0, 1.25, 0); paket.visible = false;
+    affe.add(paket);
+    // Ein zufälliger Ort auf der Straße, nicht zu nah
+    function ortAufStrasse(minAbstand, von) {
+      const knoten = [...knotenListe.values()].filter(k => Math.hypot(k.x - von.x, k.z - von.z) > minAbstand && Math.hypot(k.x - von.x, k.z - von.z) < minAbstand * 3);
+      const k = knoten[Math.floor(Math.random() * knoten.length)] || [...knotenListe.values()][0];
+      return { x: k.x, z: k.z };
+    }
+    const MISSIONEN = [
+      { id: 'muenzen', titel: '🪙 Münzjagd', start(a, st) { a.ziel = Math.min(18, 6 + st * 2); a.zeit = 100; a.lohn = 120; } ,
+        text: a => `Sammle ${a.ziel} Münzen: ${a.zaehler}/${a.ziel}` },
+      { id: 'liefern', titel: '📦 Paket-Lieferung', start(a, st, p) {
+          const laden = LAEDEN[Math.floor(Math.random() * LAEDEN.length)];
+          a.ort = laden.tuerAussen; a.zeit = Math.max(40, Math.hypot(a.ort.x - p.x, a.ort.z - p.z) / 4 + 45 - st * 4); a.lohn = 150;
+          paket.visible = true; wegpunkt = { ...a.ort };
+        }, text: a => 'Bring das Paket zum 🍌 Supermarkt (📍 folgen)' },
+      { id: 'kurier', titel: '🏎️ Eilfahrt', start(a, st, p) {
+          a.ort = ortAufStrasse(110, p); a.zeit = Math.max(35, Math.hypot(a.ort.x - p.x, a.ort.z - p.z) / 8 + 40 - st * 3); a.lohn = 180;
+          wegpunkt = { ...a.ort };
+        }, text: a => aktuellesFahrzeug ? 'Fahr schnell zum 📍 Ziel!' : 'Steig in ein Fahrzeug und fahr zum 📍 Ziel!' },
+      { id: 'scheiben', titel: '🎯 Zielschießen', geht: () => hatWaffe(), start(a, st, p) {
+          a.ziel = Math.min(10, 5 + st); a.zeit = Math.max(30, 65 - st * 5); a.lohn = 160;
+          for (let i = 0; i < a.ziel; i++) {
+            const w = Math.random() * Math.PI * 2, r = 10 + Math.random() * 14;
+            const s = new THREE.Group();
+            [1, 0.66, 0.33].forEach((g, j) => { const m = new THREE.Mesh(scheibenForm, scheibenMaterial[j % 2]); m.scale.set(g, g, 1); m.position.z = j * 0.02; s.add(m); });
+            s.position.set(p.x + Math.cos(w) * r, 1.4 + Math.random() * 3, p.z + Math.sin(w) * r);
+            s.lookAt(p.x, s.position.y, p.z);
+            szene.add(s); zielscheiben.push(s);
+          }
+        }, text: a => `Triff alle Zielscheiben mit Bananen: ${a.zaehler}/${a.ziel}` },
+      { id: 'obby', titel: '🏁 Obby-Rennen', start(a, st) { a.zeit = Math.max(70, 160 - st * 10); a.lohn = 200; },
+        text: a => 'Schaffe die Obby (hinten über den Rand)!' },
+      { id: 'tanz', titel: '🕺 Tanz-Show', start(a, st) { a.ziel = Math.min(6, 3 + Math.floor(st / 2)); a.zeit = 50; a.lohn = 100; a.taenze = new Set(); },
+        text: a => `Zeig ${a.ziel} verschiedene Tänze (${IST_HANDY ? '🕺' : 'B halten'}): ${a.zaehler}/${a.ziel}` },
+      { id: 'geheim', titel: '🤫 Das Geheimnis', geht: () => !geheimGefunden, start(a) { a.zeit = 240; a.lohn = 300; },
+        text: a => 'Finde das Geheimversteck! Tipp: Such einen Baum mit leuchtenden 🍄' },
+    ];
+    function auftragStarten(p, nurDiese) {
+      const moeglich = MISSIONEN.filter(m => (!m.geht || m.geht()) && (!nurDiese || m.id === nurDiese));
+      let m;
+      do { m = moeglich[Math.floor(Math.random() * moeglich.length)]; } while (moeglich.length > 1 && m.id === auftrag?.letzte);
+      const stufe = auftraegeGeschafft;
+      auftrag = { m, zaehler: 0, start: spielZeit, letzte: m.id };
+      m.start(auftrag, stufe, p);
+      auftrag.lohn = Math.round(auftrag.lohn * (1 + stufe * 0.25));
+      auftrag.ende = spielZeit + auftrag.zeit;
+      auftragSchildSetzen('⏳ Auftrag läuft');
+      klang('start');
+      zeigeMeldung(`${m.titel}! Belohnung: ${auftrag.lohn} Punkte`, 2.5);
+    }
+    function auftragBeenden(geschafft, grund) {
+      if (!auftrag) return;
+      if (geschafft) {
+        punkte += auftrag.lohn; punkteZeigen();
+        auftraegeGeschafft++;
+        if (auftrag.m.id === 'geheim') geheimGefunden = true;
+        klang('erfolg');
+        zeigeMeldung(`✅ Mission geschafft! +${auftrag.lohn} Punkte`, 3);
+      } else {
+        klang('fehler');
+        zeigeMeldung(`❌ ${grund || 'Zeit abgelaufen!'}`, 2.5);
+      }
+      // aufräumen
+      for (const s of zielscheiben) szene.remove(s);
+      zielscheiben.length = 0;
+      paket.visible = false;
+      if (auftrag.ort && wegpunkt && Math.hypot(wegpunkt.x - auftrag.ort.x, wegpunkt.z - auftrag.ort.z) < 1) wegpunkt = null;
+      const letzte = auftrag.m.id;
+      auftrag = null; auftragBox.classList.remove('offen');
+      auftragSchildSetzen('❗ Aufträge');
+      auftrag = null;
+      auftragLetzte = letzte;
+    }
+    let auftragLetzte = null;
+    function auftragEreignis(art, wert) {
+      if (!auftrag) return;
+      const id = auftrag.m.id;
+      if (art === 'muenze' && id === 'muenzen') auftrag.zaehler++;
+      if (art === 'obby' && id === 'obby') auftragBeenden(true);
+      if (art === 'tanz' && id === 'tanz' && !auftrag.taenze.has(wert)) { auftrag.taenze.add(wert); auftrag.zaehler++; klang('tick'); }
+      if (auftrag && auftrag.ziel && auftrag.zaehler >= auftrag.ziel) auftragBeenden(true);
+    }
+    function zielscheibeGetroffen(q) {
+      for (let i = 0; i < zielscheiben.length; i++) {
+        if (zielscheiben[i].position.distanceTo(q) < 0.75) {
+          szene.remove(zielscheiben[i]); zielscheiben.splice(i, 1);
+          klang('tick'); auftrag.zaehler++;
+          if (auftrag.zaehler >= auftrag.ziel) auftragBeenden(true);
+          return true;
+        }
+      }
+      return false;
+    }
+    const amAuftraggeber = p => Math.hypot(p.x - AUFTRAGGEBER.x, p.z - AUFTRAGGEBER.z) < 2.6 && p.y < 3;
+    function auftragAktion(p) {
+      if (!amAuftraggeber(p)) return false;
+      if (auftrag) auftragBeenden(false, 'Auftrag abgebrochen');
+      else { auftrag = { letzte: auftragLetzte }; auftragStarten(p); }
+      return true;
+    }
+    function auftragHinweis(p) {
+      if (!amAuftraggeber(p)) return null;
+      return auftrag ? `<b>⏳ ${auftrag.m.titel} läuft</b><small>${E_TASTE}: Auftrag abbrechen</small>`
+        : `<b>❗ ${E_TASTE} drücken: neuen Auftrag holen</b><small>Geschaffte Missionen: ${auftraegeGeschafft} · jede wird etwas schwerer!</small>`;
+    }
+    function auftragAktualisieren(dt, p) {
+      auftragSchild && (auftragSchild.position.y = 1.5 + Math.sin(spielZeit * 3) * 0.08);   // Schild hüpft leicht
+      if (!auftrag || !auftrag.m) return;
+      const a = auftrag, id = a.m.id;
+      // Ziel erreicht?
+      if (id === 'liefern' && Math.hypot(p.x - a.ort.x, p.z - a.ort.z) < 4) { auftragBeenden(true); return; }
+      if (id === 'kurier' && aktuellesFahrzeug && Math.hypot(p.x - a.ort.x, p.z - a.ort.z) < 7) { auftragBeenden(true); return; }
+      if (id === 'geheim' && imGeheimversteck(affe.position)) { auftragBeenden(true); return; }
+      if (id === 'liefern' || id === 'kurier') { if (!wegpunkt) wegpunkt = { ...a.ort }; }
+      for (const sch of zielscheiben) sch.rotation.z += dt;   // Zielscheiben drehen sich
+      if (imGefaengnis) { auftragBeenden(false, 'Im Gefängnis – Auftrag verloren!'); return; }
+      const rest = a.ende - spielZeit;
+      if (rest <= 0) { auftragBeenden(false); return; }
+      if (rest < 10 && Math.ceil(rest) !== a.letzteSekunde) { a.letzteSekunde = Math.ceil(rest); klang('tick'); }
+      auftragBox.classList.add('offen');
+      auftragBox.classList.toggle('eilig', rest < 10);
+      auftragBox.querySelector('b').textContent = `${a.m.titel} · ⏱️ ${Math.ceil(rest)} s`;
+      auftragBox.querySelector('small').textContent = a.m.text(a);
+      auftragBox.querySelector('.balken div').style.width = (rest / a.zeit * 100) + '%';
+    }
+
     // --- Spiel-Schleife: läuft ca. 60 Mal pro Sekunde ---
     const uhr = new THREE.Clock();
     function spielSchleife() {
@@ -4216,7 +4383,7 @@
       // E-Taste: einsteigen oder aussteigen
       if (eGedrueckt) {
         eGedrueckt = false;
-        if (!aktuellesFahrzeug && (graben(p) || tresorKnacken(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
+        if (!aktuellesFahrzeug && (auftragAktion(p) || graben(p) || tresorKnacken(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
         else if (aktuellesFahrzeug) aussteigen();
         else if (!imGefaengnis) { const f = naechstesFahrzeug(p); if (f) einsteigen(f); }
       }
@@ -4373,6 +4540,9 @@
             : amStein ? `<b>⛏️ ${E_TASTE} drücken zum Graben (${grabZaehler}/${GRAB_NOETIG})</b>`
             : '<b>🔒 Du bist im Gefängnis!</b><small>Tipp: Ein Stück der Rückwand sieht locker aus …</small>';
           fahrInfo.classList.add('offen');
+        } else if (auftragHinweis(p)) {
+          fahrInfo.innerHTML = auftragHinweis(p);
+          fahrInfo.classList.add('offen');
         } else if (geheimHinweis(p)) {
           fahrInfo.innerHTML = geheimHinweis(p);
           fahrInfo.classList.add('offen');
@@ -4406,6 +4576,7 @@
         punkte += 100;
         punkteZeigen();
         zeigeMeldung('🏆 Obby geschafft! +100 Punkte', 3);
+        auftragEreignis('obby');
         zurueckZumStartUm = spielZeit + 3; // in 3 Sekunden geht's zurück zum Start
       }
       // Nach dem Ziel: zurück auf die Wiese, alles wieder von vorne
@@ -4423,6 +4594,7 @@
 
       // Die Sonne (oder nachts der Mond) folgt dem Affen, damit es überall Schatten gibt
       tagNacht(dt, p);
+      auftragAktualisieren(dt, aktuellesFahrzeug || p);
 
       // Umkleidekabine: Menü zeigen, solange der Affe (zu Fuß) drin steht
       kabinenMenue.classList.toggle('offen', !aktuellesFahrzeug && inKabine(p));
@@ -4448,7 +4620,7 @@
           muenze.visible = false;  // Münze verschwindet (nur versteckt)
           muenze.userData.kommtWiederUm = spielZeit + WIEDERKOMMEN_NACH;
           punkte += PUNKTE_PRO_MUENZE;
-          punkteZeigen(); klang('muenze');
+          punkteZeigen(); klang('muenze'); auftragEreignis('muenze');
         }
       }
 
