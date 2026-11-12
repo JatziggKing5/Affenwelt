@@ -9,6 +9,12 @@
     #hilfe {
       position: fixed; top: 12px; left: 12px; padding: 8px 12px;
       background: rgba(0,0,0,0.5); color: #fff; border-radius: 8px; font-size: 14px;
+      max-width: calc(100vw - 240px); /* Platz lassen für die Punkte oben rechts */
+    }
+    #punkte {
+      position: fixed; top: 12px; right: 12px;
+      padding: 8px 16px; background: rgba(0,0,0,0.6); color: #ffd700;
+      border-radius: 10px; font-size: 22px; font-weight: bold; white-space: nowrap;
     }
   </style>
   <!-- Import-Map: sagt dem Browser, wo er Three.js herunterladen soll -->
@@ -20,6 +26,7 @@
   </script>
 </head>
 <body>
+  <div id="punkte"></div>
   <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera drehen · Leertaste: springen (2× = Doppelsprung)</div>
 
   <script type="module">
@@ -120,6 +127,40 @@
       return hoehe;
     }
 
+    // --- Münzen: goldene Scheiben, die Punkte geben ---
+    // [x, z, höhe des Untergrunds]  (0 = Gras, sonst Oberseite eines Blocks)
+    const muenzOrte = [
+      [ 2,  2, 0], [-3,  3, 0], [ 0, -5, 0], [-6,-10, 0], [ 4,-12, 0],
+      [10, -6, 0], [-10,-4, 0], [ 7,  8, 0], [-5,  8, 0], [12,  4, 0],
+      [ 3, -3, 1],   // auf dem braunen Block
+      [ 5,  4, 1.5], // auf dem kleinen Turm
+      [-2,-14, 1],   // auf dem grauen Block hinten
+      [ 9,  0, 2],   // auf der blauen Wand (Doppelsprung!)
+      [-4, -6, 2],   // auf der braunen Wand (Doppelsprung!)
+    ];
+    const muenzForm = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 24);
+    const muenzFarbe = new THREE.MeshStandardMaterial({
+      color: 0xffd700, emissive: 0x664400, metalness: 0.3, roughness: 0.3
+    });
+    const muenzen = muenzOrte.map(([x, z, h]) => {
+      const muenze = new THREE.Mesh(muenzForm, muenzFarbe);
+      muenze.rotation.x = Math.PI / 2; // hochkant stellen
+      muenze.position.set(x, h + 0.8, z);
+      muenze.castShadow = true;
+      szene.add(muenze);
+      return muenze;
+    });
+
+    // Punkte-Anzeige oben rechts
+    const PUNKTE_PRO_MUENZE = 10;
+    let punkte = 0;
+    const punkteAnzeige = document.getElementById('punkte');
+    function punkteZeigen() {
+      punkteAnzeige.textContent = `🪙 ${punkte} Punkte`;
+      if (muenzen.length === 0) punkteAnzeige.textContent += ' · Alle gesammelt! 🎉';
+    }
+    punkteZeigen();
+
     // --- Tasten merken: welche Taste ist gerade gedrückt? ---
     const tasten = {};
     addEventListener('keydown', (e) => {
@@ -190,6 +231,18 @@
       fallTempo -= SCHWERKRAFT * dt;
       p.y += fallTempo * dt;
       if (p.y < standHoehe) { p.y = standHoehe; fallTempo = 0; }
+
+      // Münzen drehen sich und werden eingesammelt, wenn der Würfel sie berührt
+      for (let i = muenzen.length - 1; i >= 0; i--) {
+        const muenze = muenzen[i];
+        muenze.rotation.z += 3 * dt; // drehen
+        if (muenze.position.distanceTo(p) < 1.1) {
+          szene.remove(muenze);   // Münze verschwindet
+          muenzen.splice(i, 1);   // aus der Liste streichen
+          punkte += PUNKTE_PRO_MUENZE;
+          punkteZeigen();
+        }
+      }
 
       // Kamera kreist um den Würfel: Winkel = rundherum, Neigung = wie hoch von oben
       const flach = Math.cos(kameraNeigung) * KAMERA_ABSTAND;
