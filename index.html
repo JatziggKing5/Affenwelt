@@ -38,6 +38,12 @@
       font-size: 10px; white-space: nowrap; opacity: 0; transition: opacity 0.2s;
     }
     #farben button:hover span { opacity: 1; }
+    #karte {
+      position: fixed; top: 64px; right: 12px; width: 180px; height: 180px;
+      border: 3px solid rgba(255,255,255,0.8); border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.4); pointer-events: none;
+    }
+    @media (max-width: 500px) { #karte { width: 110px; height: 110px; } }
     #fahrinfo {
       position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
       max-width: calc(100vw - 32px); box-sizing: border-box;
@@ -66,13 +72,14 @@
   <div id="punkte"></div>
   <div id="meldung"></div>
   <div id="fahrinfo"></div>
+  <canvas id="karte" width="180" height="180" title="Mini-Karte"></canvas>
   <div id="kabine">
     <h2>👕 Umkleidekabine</h2>
     <p>Klick auf eine Farbe für das Fell deines Affen:</p>
     <div id="farben"></div>
     <p class="klein">Zum Verlassen einfach rauslaufen.</p>
   </div>
-  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera drehen · Leertaste: springen (2× = Doppelsprung) · Obby: mit W nach hinten über den Rand der Wiese! · Garage mit Fahrzeugen: an der Kreuzung, E = einsteigen</div>
+  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -110,9 +117,9 @@
     szene.add(sonne);
     szene.add(sonne.target); // damit die Sonne dem Affen folgen kann
 
-    // --- Grüner Boden: eine große flache Fläche ---
-    // Die Wiese geht von links -60 bis rechts 60 und von hinten -25 (dort beginnt die Obby) bis vorne 95.
-    const WIESE = { x1: -60, x2: 60, z1: -25, z2: 95 };
+    // --- Grüner Boden: eine riesige flache Fläche ---
+    // Die Welt geht von links -200 bis rechts 200 und von hinten -25 (dort beginnt die Obby) bis vorne 375.
+    const WIESE = { x1: -200, x2: 200, z1: -25, z2: 375 };
     const boden = new THREE.Mesh(
       new THREE.PlaneGeometry(WIESE.x2 - WIESE.x1, WIESE.z2 - WIESE.z1),
       new THREE.MeshStandardMaterial({ color: 0x4caf50 })
@@ -123,46 +130,130 @@
     szene.add(boden);
 
     // Nebel in der Ferne: die große Welt verschwindet sanft im Himmel
-    szene.fog = new THREE.Fog(0x87ceeb, 50, 170);
+    szene.fog = new THREE.Fog(0x87ceeb, 60, 220);
 
-    // ================= STRASSEN =================
-    // Jede Straße ist ein Rechteck: x1..x2 und z1..z2
+    // ================= INSTANZEN-BAUKASTEN =================
+    // Wenn ganz viele gleiche Teile (Bäume, Laternen, Straßenstriche) gebraucht werden,
+    // sammeln wir sie erst und zeichnen dann alle gleichen auf einmal ("Instanzen").
+    // So kann der Computer tausende Bäume zeichnen, ohne zu ruckeln.
+    const instanzGruppen = new Map();
+    const einheitsKiste = new THREE.BoxGeometry(1, 1, 1);
+    const _pos = new THREE.Vector3(), _gross = new THREE.Vector3(), _dreh = new THREE.Quaternion(), _euler = new THREE.Euler();
+    function instanz(form, material, x, y, z, sx = 1, sy = 1, sz = 1, drehY = 0, farbe = null, schatten = true, drehX = 0, drehZ = 0) {
+      const schluessel = form.uuid + material.uuid + schatten;
+      let g = instanzGruppen.get(schluessel);
+      if (!g) { g = { form, material, schatten, matrizen: [], farben: [] }; instanzGruppen.set(schluessel, g); }
+      _pos.set(x, y, z); _gross.set(sx, sy, sz); _dreh.setFromEuler(_euler.set(drehX, drehY, drehZ));
+      g.matrizen.push(new THREE.Matrix4().compose(_pos, _dreh, _gross));
+      g.farben.push(farbe);
+    }
+    function instanzenBauen() {
+      const farbe = new THREE.Color();
+      for (const g of instanzGruppen.values()) {
+        if (g.matrizen.length === 1) { // nur ein einziges Teil: ganz normal bauen
+          const m = new THREE.Mesh(g.form, g.material);
+          g.matrizen[0].decompose(m.position, m.quaternion, m.scale);
+          m.castShadow = g.schatten; m.receiveShadow = true;
+          szene.add(m);
+          continue;
+        }
+        const im = new THREE.InstancedMesh(g.form, g.material, g.matrizen.length);
+        g.matrizen.forEach((m, i) => im.setMatrixAt(i, m));
+        if (g.farben.some(f => f !== null)) g.farben.forEach((f, i) => im.setColorAt(i, farbe.set(f ?? 0xffffff)));
+        im.castShadow = g.schatten;
+        im.receiveShadow = true;
+        im.frustumCulled = false;
+        szene.add(im);
+      }
+      instanzGruppen.clear();
+    }
+
+    // ================= STRASSENNETZ =================
+    // Längsstraßen (gehen nach vorne/hinten) und Querstraßen (gehen nach links/rechts).
+    // Wo sie sich treffen, sind Kreuzungen mit Ampeln.
+    const BREITE = 8, HALB = BREITE / 2, SPUR = 2; // Straße 8 breit, jede Fahrspur 4 breit
+    const LAENGS = [
+      { x: -180, z1: 50, z2: 360 }, { x: -90, z1: 50, z2: 360 },
+      { x: 0,    z1: 6,  z2: 360 },                                // Hauptstraße: fängt beim Start an
+      { x: 90,   z1: 50, z2: 360 }, { x: 180, z1: 50, z2: 360 },
+    ];
+    const QUER = [50, 130, 210, 290, 360].map(z => ({ z, x1: -180, x2: 180 }));
+    // Jede Straße als Rechteck (für Asphalt, und um zu prüfen, ob etwas auf der Straße steht)
     const STRASSEN = [
-      { x1: -3, x2: 3, z1: 6, z2: WIESE.z2, richtung: 'z' },          // Hauptstraße: vom Start nach vorne
-      { x1: WIESE.x1, x2: WIESE.x2, z1: 47, z2: 53, richtung: 'x' },  // Querstraße: von links nach rechts
+      ...LAENGS.map(s => ({ x1: s.x - HALB, x2: s.x + HALB, z1: s.z1 === 6 ? 6 : s.z1 - HALB, z2: s.z2 + HALB, richtung: 'z', mitte: s.x })),
+      ...QUER.map(s => ({ x1: s.x1 - HALB, x2: s.x2 + HALB, z1: s.z - HALB, z2: s.z + HALB, richtung: 'x', mitte: s.z })),
     ];
     const asphalt = new THREE.MeshStandardMaterial({ color: 0x424242, roughness: 0.95 });
     const linie   = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 });
     const gelb    = new THREE.MeshStandardMaterial({ color: 0xfdd835, roughness: 0.6 });
 
+    // Flaches Teil auf den Boden legen (Asphalt, Striche, Böden)
     function flach(material, x, z, b, t, y) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(b, 0.02, t), material);
-      m.position.set(x, y, z);
-      m.receiveShadow = true;
-      szene.add(m);
+      instanz(einheitsKiste, material, x, y, z, b, 0.02, t, 0, null, false);
     }
-    function aufKreuzung(x, z) { // liegt der Punkt auf beiden Straßen gleichzeitig?
-      return STRASSEN.filter(s => x > s.x1 - 0.5 && x < s.x2 + 0.5 && z > s.z1 - 0.5 && z < s.z2 + 0.5).length > 1;
+    function aufKreuzung(x, z) { // liegt der Punkt auf zwei Straßen gleichzeitig?
+      let n = 0;
+      for (const s of STRASSEN) if (x > s.x1 - 0.5 && x < s.x2 + 0.5 && z > s.z1 - 0.5 && z < s.z2 + 0.5) n++;
+      return n > 1;
     }
-    STRASSEN.forEach((s, i) => {
-      const mx = (s.x1 + s.x2) / 2, mz = (s.z1 + s.z2) / 2;
-      flach(asphalt, mx, mz, s.x2 - s.x1, s.z2 - s.z1, 0.01 + i * 0.002);
-      // Gestrichelte gelbe Mittellinie (nicht auf der Kreuzung)
-      if (s.richtung === 'z') {
-        for (let z = s.z1 + 1.5; z < s.z2; z += 4) if (!aufKreuzung(mx, z)) flach(gelb, mx, z, 0.18, 2, 0.03);
-        flach(linie, s.x1 + 0.3, mz, 0.12, s.z2 - s.z1, 0.025); // weiße Randlinien
-        flach(linie, s.x2 - 0.3, mz, 0.12, s.z2 - s.z1, 0.025);
-      } else {
-        for (let x = s.x1 + 1.5; x < s.x2; x += 4) if (!aufKreuzung(x, mz)) flach(gelb, x, mz, 2, 0.18, 0.03);
-        flach(linie, mx, s.z1 + 0.3, s.x2 - s.x1, 0.12, 0.025);
-        flach(linie, mx, s.z2 - 0.3, s.x2 - s.x1, 0.12, 0.025);
-      }
-      // Zebrastreifen direkt vor dem Start
-      if (i === 0) for (let x = s.x1 + 0.5; x < s.x2; x += 1) flach(linie, x, s.z1 + 1.2, 0.5, 1.8, 0.035);
-    });
     // Ist ein Punkt auf (oder nah an) einer Straße?
     function nahAnStrasse(x, z, abstand) {
       return STRASSEN.some(s => x > s.x1 - abstand && x < s.x2 + abstand && z > s.z1 - abstand && z < s.z2 + abstand);
+    }
+    // Teilt eine Linie in Stücke, die NICHT auf einer Kreuzung liegen
+    function freieStuecke(von, bis, punktBei) {
+      const stuecke = [];
+      let anfang = null;
+      for (let t = von; t <= bis; t += 0.5) {
+        const frei = !aufKreuzung(...punktBei(t));
+        if (frei && anfang === null) anfang = t;
+        if ((!frei || t + 0.5 > bis) && anfang !== null) { stuecke.push([anfang, t]); anfang = null; }
+      }
+      return stuecke;
+    }
+    STRASSEN.forEach((s, i) => {
+      const mx = (s.x1 + s.x2) / 2, mz = (s.z1 + s.z2) / 2;
+      flach(asphalt, mx, mz, s.x2 - s.x1, s.z2 - s.z1, 0.01 + (s.richtung === 'x' ? 0.002 : 0));
+      if (s.richtung === 'z') {
+        // Gestrichelte gelbe Mittellinie (nicht auf Kreuzungen)
+        for (let z = s.z1 + 1.5; z < s.z2; z += 4) if (!aufKreuzung(mx, z)) flach(gelb, mx, z, 0.18, 2, 0.03);
+        // Weiße Randlinien, unterbrochen an den Kreuzungen
+        for (const seite of [s.x1 + 0.3, s.x2 - 0.3]) {
+          for (const [a, b] of freieStuecke(s.z1, s.z2, t => [seite, t])) flach(linie, seite, (a + b) / 2, 0.12, b - a, 0.025);
+        }
+      } else {
+        for (let x = s.x1 + 1.5; x < s.x2; x += 4) if (!aufKreuzung(x, mz)) flach(gelb, x, mz, 2, 0.18, 0.03);
+        for (const seite of [s.z1 + 0.3, s.z2 - 0.3]) {
+          for (const [a, b] of freieStuecke(s.x1, s.x2, t => [t, seite])) flach(linie, (a + b) / 2, seite, b - a, 0.12, 0.025);
+        }
+      }
+    });
+    // Zebrastreifen direkt vor dem Start
+    for (let x = -HALB + 0.5; x < HALB; x += 1) flach(linie, x, 7.2, 0.5, 1.8, 0.035);
+
+    // --- Das Netz für die Autos: Knoten (Kreuzungen, Kurven, Enden) und Verbindungen ---
+    const knotenListe = new Map();
+    function knoten(x, z) {
+      const schluessel = `${x},${z}`;
+      if (!knotenListe.has(schluessel)) knotenListe.set(schluessel, { x, z, nachbarn: [], achsen: new Set() });
+      return knotenListe.get(schluessel);
+    }
+    for (const l of LAENGS) {
+      const punkte = [l.z1, l.z2, ...QUER.filter(q => q.z >= l.z1 && q.z <= l.z2 && l.x >= q.x1 && l.x <= q.x2).map(q => q.z)];
+      const sortiert = [...new Set(punkte)].sort((a, b) => a - b).map(z => knoten(l.x, z));
+      sortiert.forEach(k => k.achsen.add('ns'));
+      for (let i = 1; i < sortiert.length; i++) { sortiert[i - 1].nachbarn.push(sortiert[i]); sortiert[i].nachbarn.push(sortiert[i - 1]); }
+    }
+    for (const q of QUER) {
+      const punkte = [q.x1, q.x2, ...LAENGS.filter(l => l.x >= q.x1 && l.x <= q.x2 && q.z >= l.z1 && q.z <= l.z2).map(l => l.x)];
+      const sortiert = [...new Set(punkte)].sort((a, b) => a - b).map(x => knoten(x, q.z));
+      sortiert.forEach(k => k.achsen.add('ew'));
+      for (let i = 1; i < sortiert.length; i++) { sortiert[i - 1].nachbarn.push(sortiert[i]); sortiert[i].nachbarn.push(sortiert[i - 1]); }
+    }
+    for (const k of knotenListe.values()) {
+      k.hw = (k.achsen.size > 1 || k.nachbarn.length === 1) ? HALB : 0; // wie groß die Kreuzung ist
+      k.ampel = k.nachbarn.length >= 3;       // Ampeln nur an echten Kreuzungen
+      k.versatz = (k.x * 7 + k.z * 3) % 22;   // nicht alle Ampeln schalten gleichzeitig
     }
 
     // --- Der Affe: unsere Spielfigur, gebaut aus Kugeln und Röhren ---
@@ -344,8 +435,8 @@
     schild.rotation.y = Math.PI / 2; // zur Wiese hin drehen
     szene.add(schild);
 
-    // ================= WALD =================
-    // Ein Zufallsgenerator mit festem Startwert: der Wald sieht bei jedem Start gleich aus
+    // ================= WALD, LATERNEN, AMPELN, STADT =================
+    // Ein Zufallsgenerator mit festem Startwert: die Welt sieht bei jedem Start gleich aus
     let saat = 12345;
     function zufall() {
       saat = (saat + 0x6D2B79F5) | 0;
@@ -355,127 +446,208 @@
     }
     const zwischen = (a, b) => a + zufall() * (b - a);
 
-    // Formen und Farben einmal bauen und für alle Bäume wiederverwenden (spart Arbeit)
+    // Formen und Farben einmal bauen und für alles wiederverwenden
     const stammForm  = new THREE.CylinderGeometry(0.2, 0.28, 1, 8);
     const kegelForm  = new THREE.ConeGeometry(1, 1, 9);
     const kugelForm  = new THREE.IcosahedronGeometry(1, 1);
+    const dachForm   = new THREE.ConeGeometry(1, 1, 4);
     const stammFarbe = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 1 });
-    const blattFarben = [0x2e7d32, 0x388e3c, 0x1b5e20, 0x43a047, 0x558b2f].map(
-      c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9, flatShading: true })
-    );
+    const blattMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true });
+    const BLATT_FARBEN = [0x2e7d32, 0x388e3c, 0x1b5e20, 0x43a047, 0x558b2f];
     const busch = new THREE.MeshStandardMaterial({ color: 0x33691e, roughness: 1, flatShading: true });
     const pilzHut = new THREE.MeshStandardMaterial({ color: 0xe53935 });
     const pilzPunkt = new THREE.MeshStandardMaterial({ color: 0xffffff });
 
-    function teil(form, material, x, y, z, sx, sy, sz) {
-      const m = new THREE.Mesh(form, material);
-      m.position.set(x, y, z);
-      m.scale.set(sx, sy, sz);
-      m.castShadow = true;
-      m.receiveShadow = true;
-      szene.add(m);
-      return m;
-    }
-
     // Tannenbaum: Stamm + 3 Kegel übereinander
     function tanne(x, z, groesse) {
-      const blatt = blattFarben[Math.floor(zufall() * blattFarben.length)];
-      teil(stammForm, stammFarbe, x, 0.6 * groesse, z, groesse, 1.2 * groesse, groesse);
+      const blatt = BLATT_FARBEN[Math.floor(zufall() * BLATT_FARBEN.length)];
+      instanz(stammForm, stammFarbe, x, 0.6 * groesse, z, groesse, 1.2 * groesse, groesse);
       for (let i = 0; i < 3; i++) {
         const breite = (1.4 - i * 0.35) * groesse;
-        teil(kegelForm, blatt, x, (1.6 + i * 1.0) * groesse, z, breite, 1.6 * groesse, breite);
+        instanz(kegelForm, blattMaterial, x, (1.6 + i * 1.0) * groesse, z, breite, 1.6 * groesse, breite, 0, blatt);
       }
       return 4.2 * groesse; // Höhe
     }
     // Laubbaum: Stamm + mehrere dicke Blätter-Kugeln
     function laubbaum(x, z, groesse) {
-      const blatt = blattFarben[Math.floor(zufall() * blattFarben.length)];
-      teil(stammForm, stammFarbe, x, 1.1 * groesse, z, groesse, 2.2 * groesse, groesse);
-      teil(kugelForm, blatt, x, 2.9 * groesse, z, 1.3 * groesse, 1.1 * groesse, 1.3 * groesse);
+      const blatt = BLATT_FARBEN[Math.floor(zufall() * BLATT_FARBEN.length)];
+      instanz(stammForm, stammFarbe, x, 1.1 * groesse, z, groesse, 2.2 * groesse, groesse);
+      instanz(kugelForm, blattMaterial, x, 2.9 * groesse, z, 1.3 * groesse, 1.1 * groesse, 1.3 * groesse, 0, blatt);
       for (let i = 0; i < 3; i++) {
         const w = zufall() * Math.PI * 2;
-        teil(kugelForm, blatt, x + Math.cos(w) * 0.7 * groesse, (2.5 + zufall() * 0.8) * groesse,
-             z + Math.sin(w) * 0.7 * groesse, 0.8 * groesse, 0.7 * groesse, 0.8 * groesse);
+        instanz(kugelForm, blattMaterial, x + Math.cos(w) * 0.7 * groesse, (2.5 + zufall() * 0.8) * groesse,
+                z + Math.sin(w) * 0.7 * groesse, 0.8 * groesse, 0.7 * groesse, 0.8 * groesse, 0, blatt);
       }
       return 4 * groesse;
     }
+
+    // Plätze, die frei bleiben sollen (kein Baum, kein Haus)
+    const freiHalten = [
+      { x: KABINE.x, z: KABINE.z, r: 4 },           // Umkleidekabine
+      { x: 0, z: 0, r: 4 },                         // Startplatz
+      { x: 16, z: 62, r: 13 },                      // Garage
+    ];
+    const SPIELPLATZ = { x1: -26, x2: 13.5, z1: -26, z2: 16 };      // die alte Wiese mit den Blöcken
+    const STADT = [{ x1: -86, x2: 86, z1: 134, z2: 206 }, { x1: -86, x2: 86, z1: 214, z2: 286 }];
+    const inRechteck = (r, x, z, rand = 0) => x > r.x1 - rand && x < r.x2 + rand && z > r.z1 - rand && z < r.z2 + rand;
 
     // --- Straßenlaternen am Straßenrand ---
     const mastFarbe = new THREE.MeshStandardMaterial({ color: 0x546e7a, roughness: 0.5, metalness: 0.4 });
     const lampenLicht = new THREE.MeshStandardMaterial({ color: 0xfff59d, emissive: 0xffeb3b, emissiveIntensity: 1.5 });
     const mastForm = new THREE.CylinderGeometry(0.09, 0.12, 1, 8);
     function laterne(x, z, armX, armZ) {
-      teil(mastForm, mastFarbe, x, 2, z, 1, 4, 1);                             // Mast (4 hoch)
-      const arm = teil(mastForm, mastFarbe, x + armX * 0.5, 3.95, z + armZ * 0.5, 0.6, 1, 0.6);
-      arm.rotation.set(armZ * Math.PI / 2, 0, -armX * Math.PI / 2);            // Arm zur Straße hin
-      teil(kugelForm, lampenLicht, x + armX, 3.85, z + armZ, 0.22, 0.15, 0.22); // leuchtende Lampe
-      bloecke.push({ x, z, b: 0.3, t: 0.3, unten: 0, oben: 4, art: 'block' });   // Mast ist fest
+      instanz(mastForm, mastFarbe, x, 2, z, 1, 4, 1);                                   // Mast (4 hoch)
+      instanz(mastForm, mastFarbe, x + armX * 0.5, 3.95, z + armZ * 0.5, 0.6, 1, 0.6, 0, null, true,
+              armZ * Math.PI / 2, -armX * Math.PI / 2);                                 // Arm zur Straße
+      instanz(kugelForm, lampenLicht, x + armX, 3.85, z + armZ, 0.22, 0.15, 0.22, 0, null, false); // Lampe
+      bloecke.push({ x, z, b: 0.3, t: 0.3, unten: 0, oben: 4, art: 'block' });         // Mast ist fest
     }
-    for (let z = 14; z < WIESE.z2; z += 12) {          // an der Hauptstraße, abwechselnd links/rechts
-      if (Math.abs(z - 50) < 6) continue;              // nicht auf der Kreuzung
-      const seite = (z / 12) % 2 < 1 ? 1 : -1;
-      laterne(seite * 3.6, z, -seite, 0);
+    const nahAnKnoten = (x, z, r) => [...knotenListe.values()].some(k => Math.hypot(k.x - x, k.z - z) < r);
+    const RAND = HALB + 0.8; // Abstand der Laternen von der Straßenmitte
+    for (const l of LAENGS) {
+      for (let z = l.z1 + 12, n = 0; z < l.z2; z += 24, n++) {
+        const seite = n % 2 ? 1 : -1;
+        if (nahAnKnoten(l.x, z, 10) || freiHalten.some(o => Math.hypot(o.x - l.x - seite * RAND, o.z - z) < o.r)) continue;
+        laterne(l.x + seite * RAND, z, -seite, 0);
+      }
     }
-    for (let x = WIESE.x1 + 6; x < WIESE.x2; x += 12) { // an der Querstraße
-      if (Math.abs(x) < 6) continue;
-      const seite = (x / 12) % 2 < 1 ? 1 : -1;
-      laterne(x, 50 + seite * 3.6, 0, -seite);
+    for (const q of QUER) {
+      for (let x = q.x1 + 12, n = 0; x < q.x2; x += 24, n++) {
+        const seite = n % 2 ? 1 : -1;
+        if (nahAnKnoten(x, q.z, 10) || freiHalten.some(o => Math.hypot(o.x - x, o.z - q.z - seite * RAND) < o.r)) continue;
+        laterne(x, q.z + seite * RAND, 0, -seite);
+      }
     }
 
-    // Wo darf ein Baum stehen? Im Wald-Gebiet, nicht zu nah an anderen Sachen
-    const waldGebiete = [
-      { x1: 13.5, x2: 59.5, z1: -24.5, z2: 15 },    // rechts
-      { x1: -59.5, x2: -25, z1: -24.5, z2: 15 },    // links
-      { x1: -59.5, x2: 59.5, z1: 15, z2: 94.5 },    // der große Wald vorne
-    ];
-    // Ein zufälliges Wald-Gebiet wählen – große Gebiete kommen öfter dran
-    const flaechen = waldGebiete.map(g => (g.x2 - g.x1) * (g.z2 - g.z1));
-    const gesamt = flaechen.reduce((a, b) => a + b, 0);
-    function zufallsGebiet() {
-      let r = zufall() * gesamt;
-      for (let i = 0; i < waldGebiete.length; i++) { r -= flaechen[i]; if (r <= 0) return waldGebiete[i]; }
-      return waldGebiete[0];
+    // --- Ampeln an jeder Kreuzung: eine für jede Richtung, aus der Autos kommen ---
+    const ampelAus = {
+      rot: new THREE.MeshStandardMaterial({ color: 0x3e1010 }),
+      gelb: new THREE.MeshStandardMaterial({ color: 0x3e3510 }),
+      gruen: new THREE.MeshStandardMaterial({ color: 0x103e14 }),
+    };
+    const ampelAn = {
+      rot: new THREE.MeshStandardMaterial({ color: 0xff1744, emissive: 0xff1744, emissiveIntensity: 2 }),
+      gelb: new THREE.MeshStandardMaterial({ color: 0xffd600, emissive: 0xffd600, emissiveIntensity: 2 }),
+      gruen: new THREE.MeshStandardMaterial({ color: 0x00e676, emissive: 0x00e676, emissiveIntensity: 2 }),
+    };
+    const ampelKasten = new THREE.MeshStandardMaterial({ color: 0x212121 });
+    const lampenForm = new THREE.SphereGeometry(0.13, 12, 8);
+    const ampelKoepfe = []; // alle Ampel-Köpfe, damit wir sie umschalten können
+
+    // Welche Farbe zeigt die Ampel für eine Richtung ('ns' = vorne/hinten, 'ew' = links/rechts)?
+    // Ein Durchgang dauert 22 Sekunden: 9 grün, 2 gelb für die eine Richtung, 1 Sekunde alle rot,
+    // dann 7 grün, 2 gelb für die andere Richtung und wieder 1 Sekunde alle rot.
+    function ampelFarbe(k, achse, zeit) {
+      const t = (((zeit + k.versatz) % 22) + 22) % 22;
+      if (achse === 'ns') return t < 9 ? 'gruen' : t < 11 ? 'gelb' : 'rot';
+      return t < 12 ? 'rot' : t < 19 ? 'gruen' : t < 21 ? 'gelb' : 'rot';
     }
-    const freiHalten = [
-      { x: KABINE.x, z: KABINE.z, r: 4 },           // Umkleidekabine
-      { x: 0, z: 0, r: 4 },                         // Startplatz
-      { x: 0, z: 50, r: 9 },                        // Platz an der Kreuzung
-      { x: 16, z: 62, r: 13 },                      // Garage
-    ];
-    const baumOrte = [];
-    let versuche = 0;
-    while (baumOrte.length < 220 && versuche < 8000) {
-      versuche++;
-      const g = zufallsGebiet();
-      const x = zwischen(g.x1, g.x2), z = zwischen(g.z1, g.z2);
-      if (baumOrte.some(o => Math.hypot(o.x - x, o.z - z) < 2.8)) continue;
-      if (freiHalten.some(o => Math.hypot(o.x - x, o.z - z) < o.r)) continue;
-      if (nahAnStrasse(x, z, 2)) continue;          // nicht auf die Straße pflanzen
-      if (bloecke.some(o => Math.abs(o.x - x) < o.b / 2 + 1 && Math.abs(o.z - z) < o.t / 2 + 1)) continue;
-      baumOrte.push({ x, z });
+    for (const k of knotenListe.values()) {
+      if (!k.ampel) continue;
+      for (const n of k.nachbarn) {
+        const dx = Math.sign(k.x - n.x), dz = Math.sign(k.z - n.z); // Fahrtrichtung zur Kreuzung hin
+        const rx = -dz, rz = dx;                                       // rechts davon
+        const x = k.x - dx * (k.hw + 0.9) + rx * (k.hw + 0.9);
+        const z = k.z - dz * (k.hw + 0.9) + rz * (k.hw + 0.9);
+        instanz(mastForm, mastFarbe, x, 1.6, z, 1, 3.2, 1);
+        bloecke.push({ x, z, b: 0.3, t: 0.3, unten: 0, oben: 3.2, art: 'block' });
+        const kopf = new THREE.Group();
+        kopf.position.set(x, 3.6, z);
+        kopf.rotation.y = Math.atan2(-dx, -dz); // schaut den Autos entgegen
+        const kasten = new THREE.Mesh(einheitsKiste, ampelKasten);
+        kasten.scale.set(0.42, 1.2, 0.3);
+        kopf.add(kasten);
+        const lampen = {};
+        ['rot', 'gelb', 'gruen'].forEach((farbe, i) => {
+          const l = new THREE.Mesh(lampenForm, ampelAus[farbe]);
+          l.position.set(0, 0.38 - i * 0.38, 0.16);
+          kopf.add(l);
+          lampen[farbe] = l;
+        });
+        szene.add(kopf);
+        ampelKoepfe.push({ k, achse: dx !== 0 ? 'ew' : 'ns', lampen });
+        // Haltelinie auf der Fahrspur
+        const hx = k.x - dx * (k.hw + 0.6) + rx * SPUR, hz = k.z - dz * (k.hw + 0.6) + rz * SPUR;
+        flach(linie, hx, hz, dx !== 0 ? 0.35 : HALB - 0.4, dx !== 0 ? HALB - 0.4 : 0.35, 0.035);
+      }
     }
-    for (const { x, z } of baumOrte) {
-      const groesse = zwischen(0.8, 1.4);
-      const hoehe = zufall() < 0.5 ? tanne(x, z, groesse) : laubbaum(x, z, groesse);
-      // Unsichtbarer Klotz am Stamm: man kann nicht durch Bäume laufen
-      bloecke.push({ x, z, b: 0.5 * groesse, t: 0.5 * groesse, unten: 0, oben: hoehe, art: 'block' });
+    function ampelnZeigen(zeit) {
+      for (const a of ampelKoepfe) {
+        const farbe = ampelFarbe(a.k, a.achse, zeit);
+        for (const f of ['rot', 'gelb', 'gruen']) a.lampen[f].material = f === farbe ? ampelAn[f] : ampelAus[f];
+      }
+    }
+
+    // --- Stadt: Häuser in Reihen zwischen den Straßen ---
+    const HAUS_FARBEN = [0xffccbc, 0xfff9c4, 0xc8e6c9, 0xbbdefb, 0xe1bee7, 0xffe0b2, 0xd7ccc8, 0xf5f5f5, 0xb2dfdb];
+    const hausMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
+    const dachMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, flatShading: true });
+    const fensterMaterial = new THREE.MeshStandardMaterial({ color: 0x4fc3f7, roughness: 0.2, metalness: 0.3 });
+    const tuerMaterial = new THREE.MeshStandardMaterial({ color: 0x6d4c41 });
+    const haeuser = []; // für die Mini-Karte
+    for (const gebiet of STADT) {
+      for (let x = gebiet.x1 + 8; x < gebiet.x2 - 4; x += 14) {
+        for (let z = gebiet.z1 + 8; z < gebiet.z2 - 4; z += 14) {
+          const b = zwischen(7, 10), t = zwischen(7, 10);
+          if (nahAnStrasse(x, z, Math.max(b, t) / 2 + 1.5)) continue;
+          const hoch = zufall() < 0.25; // manche sind Hochhäuser
+          const h = hoch ? zwischen(12, 22) : zwischen(4, 7);
+          instanz(einheitsKiste, hausMaterial, x, h / 2, z, b, h, t, 0, HAUS_FARBEN[Math.floor(zufall() * HAUS_FARBEN.length)]);
+          if (!hoch) {
+            instanz(dachForm, dachMaterial, x, h + 1.5, z, b * 0.75, 3, t * 0.75, Math.PI / 4, zufall() < 0.5 ? 0xb71c1c : 0x5d4037);
+          } else {
+            instanz(einheitsKiste, dachMaterial, x, h + 0.3, z, b * 0.6, 0.6, t * 0.6, 0, 0x9e9e9e); // Dachaufbau
+          }
+          // Fenster auf allen vier Seiten, Stockwerk für Stockwerk
+          for (let y = 1.8; y < h - 0.8; y += 3) {
+            for (const s of [-1, 1]) {
+              instanz(einheitsKiste, fensterMaterial, x + s * (b * 0.25), y, z + t / 2 + 0.02, 1.2, 1.1, 0.06, 0, null, false);
+              instanz(einheitsKiste, fensterMaterial, x + s * (b * 0.25), y, z - t / 2 - 0.02, 1.2, 1.1, 0.06, 0, null, false);
+              instanz(einheitsKiste, fensterMaterial, x + b / 2 + 0.02, y, z + s * (t * 0.25), 0.06, 1.1, 1.2, 0, null, false);
+              instanz(einheitsKiste, fensterMaterial, x - b / 2 - 0.02, y, z + s * (t * 0.25), 0.06, 1.1, 1.2, 0, null, false);
+            }
+          }
+          instanz(einheitsKiste, tuerMaterial, x, 1, z - t / 2 - 0.03, 1.2, 2, 0.06, 0, null, false); // Tür
+          bloecke.push({ x, z, b, t, unten: 0, oben: h, art: 'block' });
+          haeuser.push({ x, z, b, t });
+        }
+      }
+    }
+
+    // --- Wald: auf einem Raster verteilt, jedes Feld bekommt vielleicht einen Baum ---
+    const ZELLE = 7;
+    let baumZahl = 0;
+    for (let zx = WIESE.x1 + ZELLE / 2; zx < WIESE.x2; zx += ZELLE) {
+      for (let zz = WIESE.z1 + ZELLE / 2; zz < WIESE.z2; zz += ZELLE) {
+        if (zufall() > 0.72) continue;                                  // manche Felder bleiben leer
+        const x = zx + zwischen(-2.5, 2.5), z = zz + zwischen(-2.5, 2.5);
+        if (x < WIESE.x1 + 1 || x > WIESE.x2 - 1 || z < WIESE.z1 + 1 || z > WIESE.z2 - 1) continue;
+        if (inRechteck(SPIELPLATZ, x, z) || STADT.some(s => inRechteck(s, x, z, 4))) continue;
+        if (freiHalten.some(o => Math.hypot(o.x - x, o.z - z) < o.r)) continue;
+        if (nahAnStrasse(x, z, 2.5)) continue;                         // nicht auf die Straße pflanzen
+        if (bloecke.some(o => Math.abs(o.x - x) < o.b / 2 + 1 && Math.abs(o.z - z) < o.t / 2 + 1)) continue;
+        const groesse = zwischen(0.8, 1.4);
+        const hoehe = zufall() < 0.5 ? tanne(x, z, groesse) : laubbaum(x, z, groesse);
+        // Unsichtbarer Klotz am Stamm: man kann nicht durch Bäume laufen
+        bloecke.push({ x, z, b: 0.5 * groesse, t: 0.5 * groesse, unten: 0, oben: hoehe, art: 'block', krone: 1.5 * groesse });
+        baumZahl++;
+      }
     }
 
     // Büsche und Pilze zwischen den Bäumen (nur Deko, man kann durchlaufen)
-    for (let i = 0; i < 140; i++) {
-      const g = zufallsGebiet();
-      const x = zwischen(g.x1, g.x2), z = zwischen(g.z1, g.z2);
+    for (let i = 0; i < 900; i++) {
+      const x = zwischen(WIESE.x1 + 1, WIESE.x2 - 1), z = zwischen(WIESE.z1 + 1, WIESE.z2 - 1);
+      if (inRechteck(SPIELPLATZ, x, z) || STADT.some(s => inRechteck(s, x, z, 2))) continue;
       if (freiHalten.some(o => Math.hypot(o.x - x, o.z - z) < o.r)) continue;
       if (nahAnStrasse(x, z, 0.5)) continue;
       if (zufall() < 0.65) {
         const s = zwischen(0.4, 0.8);
-        teil(kugelForm, busch, x, s * 0.5, z, s, s * 0.8, s);
+        instanz(kugelForm, busch, x, s * 0.5, z, s, s * 0.8, s);
       } else {
         const s = zwischen(0.6, 1.1);
-        teil(stammForm, pilzPunkt, x, 0.12 * s, z, 0.35 * s, 0.25 * s, 0.35 * s); // Stiel
-        teil(kugelForm, pilzHut, x, 0.27 * s, z, 0.22 * s, 0.12 * s, 0.22 * s); // roter Hut
-        teil(kugelForm, pilzPunkt, x + 0.08 * s, 0.36 * s, z, 0.03 * s, 0.03 * s, 0.03 * s); // Punkt
-        teil(kugelForm, pilzPunkt, x - 0.06 * s, 0.37 * s, z + 0.06 * s, 0.025 * s, 0.025 * s, 0.025 * s);
+        instanz(stammForm, pilzPunkt, x, 0.12 * s, z, 0.35 * s, 0.25 * s, 0.35 * s, 0, null, false); // Stiel
+        instanz(kugelForm, pilzHut, x, 0.27 * s, z, 0.22 * s, 0.12 * s, 0.22 * s, 0, null, false);  // roter Hut
+        instanz(kugelForm, pilzPunkt, x + 0.08 * s, 0.36 * s, z, 0.03 * s, 0.03 * s, 0.03 * s, 0, null, false);
       }
     }
 
@@ -624,7 +796,10 @@
     function stoesstAn(px, py, pz) {
       return bloecke.some(o => o.art !== 'lava' && ueberlappt(o, px, py, pz)) ||
         // geparkte Fahrzeuge sind auch im Weg (außer man steht schon oben drauf)
-        fahrzeuge.some(f => f !== aktuellesFahrzeug && py - 0.5 < f.hoehe - 0.05 && punktInFahrzeug(f, px, pz, 0.45));
+        fahrzeuge.some(f => f !== aktuellesFahrzeug && py - 0.5 < f.hoehe - 0.05 && punktInFahrzeug(f, px, pz, 0.45)) ||
+        // Autos im Straßenverkehr auch (wenn man schon drin "steckt", darf man raus)
+        verkehr.some(a => py - 0.5 < a.hoehe && punktInFahrzeug(a, px, pz, 0.45) &&
+                          !punktInFahrzeug(a, affe.position.x, affe.position.z, 0.45));
     }
 
     // Was ist unter dem Affen? Gibt Höhe und Block zurück (oder -Unendlich = Abgrund)
@@ -697,6 +872,9 @@
       [-48, 51, 0], [-30, 49, 0], [-14, 51, 0], [14, 49, 0], [30, 51, 0], [48, 49, 0],
       [-1,-116, 6.0], [ 0,-135, 6.0], [ 0,-146, 10.5], [ 1,-159, 10.5], [ 0,-191, 10.5], [ 0,-198, 11.5],
     ];
+    // Noch mehr Münzen: alle 30 Meter auf der Mittellinie jeder Straße
+    for (const l of LAENGS) for (let z = Math.max(l.z1, 66) + 15; z < l.z2 - 10; z += 30) if (!aufKreuzung(l.x, z)) muenzOrte.push([l.x, z, 0]);
+    for (const q of QUER) for (let x = q.x1 + 15; x < q.x2 - 10; x += 30) if (!aufKreuzung(x, q.z) && Math.abs(x) > 60) muenzOrte.push([x, q.z, 0]);
     const muenzForm = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 24);
     const muenzFarbe = new THREE.MeshStandardMaterial({
       color: 0xffd700, emissive: 0x664400, metalness: 0.3, roughness: 0.3
@@ -746,6 +924,7 @@
     let kameraWinkel = 0;        // 0 = Kamera schaut von hinten
     let kameraNeigung = 0.5;     // wie schräg von oben die Kamera schaut
     let kameraAbstand = KAMERA_ABSTAND; // beim Fahren geht die Kamera etwas weiter weg
+    let kameraFrei = 1;                 // 1 = ganz weg, kleiner = näher, weil etwas im Weg ist
 
     // ================= GARAGE & FAHRZEUGE =================
     // Die Garage steht rechts neben der Kreuzung. Das große Tor zeigt zur Querstraße.
@@ -944,6 +1123,7 @@
           if (Math.abs(px - o.x) < o.b / 2 + halb && Math.abs(pz - o.z) < o.t / 2 + halb) return true;
         }
         for (const g of fahrzeuge) if (g !== f && punktInFahrzeug(g, px, pz, halb)) return true;
+        for (const a of verkehr) if (punktInFahrzeug(a, px, pz, halb)) return true; // Autos im Verkehr
       }
       return false;
     }
@@ -1058,6 +1238,256 @@
       blickRichtung = f.richtung;
     }
 
+    // ================= STRASSENVERKEHR =================
+    // Autos, Busse und Laster fahren von selbst auf der rechten Spur, biegen an Kreuzungen ab,
+    // halten an roten Ampeln und bremsen, wenn vor ihnen jemand ist.
+    const verkehr = [];
+    const AUTO_FARBEN = [0xe53935, 0x1e88e5, 0x43a047, 0xfdd835, 0xffffff, 0x212121, 0x8e24aa, 0xff7043, 0x90a4ae, 0x00897b];
+    const dunkelGlas = new THREE.MeshStandardMaterial({ color: 0x263238, roughness: 0.1, metalness: 0.5 });
+    const radForm = new THREE.CylinderGeometry(1, 1, 1, 14);
+    const ARTEN = {
+      limo:   { laenge: 4.2, breite: 1.9, hoehe: 1.5, tempo: [10, 14] },
+      van:    { laenge: 4.8, breite: 2.0, hoehe: 2.0, tempo: [9, 12] },
+      bus:    { laenge: 10,  breite: 2.5, hoehe: 3.0, tempo: [7, 9] },
+      laster: { laenge: 7.5, breite: 2.4, hoehe: 3.2, tempo: [7, 10] },
+    };
+
+    function teilVon(gruppe, material, b, h, l, x, y, z) {
+      const m = new THREE.Mesh(einheitsKiste, material);
+      m.scale.set(b, h, l);
+      m.position.set(x, y, z);
+      m.castShadow = true;
+      gruppe.add(m);
+      return m;
+    }
+    function verkehrsAutoBauen(art, farbe) {
+      const g = new THREE.Group();
+      const lack = new THREE.MeshStandardMaterial({ color: farbe, metalness: 0.3, roughness: 0.45 });
+      const a = ARTEN[art];
+      const raeder = [];
+      const rad = (x, z, r) => {
+        const halter = new THREE.Group();
+        halter.position.set(x, r, z);
+        const m = new THREE.Mesh(radForm, reifen);
+        m.scale.set(r, 0.3, r);
+        m.rotation.z = Math.PI / 2;
+        halter.add(m);
+        g.add(halter);
+        raeder.push({ halter, r });
+      };
+      if (art === 'limo') {
+        teilVon(g, lack, 1.9, 0.6, 4.2, 0, 0.62, 0);
+        teilVon(g, dunkelGlas, 1.7, 0.5, 2.1, 0, 1.17, -0.2);   // Fenster rundherum
+        teilVon(g, lack, 1.72, 0.08, 1.9, 0, 1.45, -0.25);     // Dach
+        for (const s of [-1, 1]) { rad(s * 0.85, 1.35, 0.38); rad(s * 0.85, -1.35, 0.38); }
+      } else if (art === 'van') {
+        teilVon(g, lack, 2.0, 1.5, 4.8, 0, 1.05, 0);
+        teilVon(g, dunkelGlas, 2.02, 0.5, 3.4, 0, 1.45, -0.4);
+        teilVon(g, dunkelGlas, 1.8, 0.55, 0.05, 0, 1.4, 2.41);  // Frontscheibe
+        for (const s of [-1, 1]) { rad(s * 0.9, 1.5, 0.4); rad(s * 0.9, -1.5, 0.4); }
+      } else if (art === 'bus') {
+        teilVon(g, lack, 2.5, 2.6, 10, 0, 1.65, 0);
+        teilVon(g, dunkelGlas, 2.52, 0.9, 8.6, 0, 2.15, -0.4);  // lange Fensterreihe
+        teilVon(g, dunkelGlas, 2.2, 1.2, 0.05, 0, 2.0, 5.01);   // Frontscheibe
+        teilVon(g, linie, 2.54, 0.15, 10.02, 0, 1.0, 0);        // weißer Streifen
+        for (const s of [-1, 1]) { rad(s * 1.1, 3.4, 0.5); rad(s * 1.1, -2.6, 0.5); rad(s * 1.1, -3.8, 0.5); }
+      } else if (art === 'laster') {
+        teilVon(g, lack, 2.4, 2.0, 2.0, 0, 1.45, 2.7);          // Fahrerhaus
+        teilVon(g, dunkelGlas, 2.1, 0.8, 0.05, 0, 1.9, 3.71);   // Frontscheibe
+        teilVon(g, linie, 2.4, 2.7, 5.2, 0, 1.85, -0.9);        // weißer Kasten
+        teilVon(g, lack, 2.42, 0.3, 5.22, 0, 1.0, -0.9);        // Farbstreifen
+        for (const s of [-1, 1]) { rad(s * 1.05, 2.7, 0.5); rad(s * 1.05, -1.6, 0.5); rad(s * 1.05, -2.8, 0.5); }
+      }
+      // Lichter vorne (weiß) und hinten (rot)
+      for (const s of [-1, 1]) {
+        teilVon(g, vorderLicht, 0.3, 0.15, 0.06, s * (a.breite / 2 - 0.3), 0.7, a.laenge / 2 + 0.01);
+        teilVon(g, ruecklicht, 0.3, 0.15, 0.06, s * (a.breite / 2 - 0.3), 0.7, -a.laenge / 2 - 0.01);
+      }
+      szene.add(g);
+      return { gruppe: g, raeder };
+    }
+
+    // --- Wege rechnen ---
+    const richtungVon = (a, b) => { const l = Math.hypot(b.x - a.x, b.z - a.z); return { x: (b.x - a.x) / l, z: (b.z - a.z) / l }; };
+    const rechtsVon = d => ({ x: -d.z, z: d.x });
+    // Der Weg auf der Strecke von A nach B: bis zur Haltelinie bei B, dann um die Kurve zum nächsten Knoten
+    function wegPlanen(auto, A, B) {
+      const d = richtungVon(A, B), r = rechtsVon(d);
+      const nachbarn = B.nachbarn.filter(n => n !== A);
+      const N = nachbarn.length ? nachbarn[Math.floor(Math.random() * nachbarn.length)] : A; // zufällig abbiegen
+      const d2 = richtungVon(B, N), r2 = rechtsVon(d2);
+      const halt = { x: B.x - d.x * (B.hw + 1) + r.x * SPUR, z: B.z - d.z * (B.hw + 1) + r.z * SPUR };
+      const raus = { x: B.x + d2.x * (B.hw + 1) + r2.x * SPUR, z: B.z + d2.z * (B.hw + 1) + r2.z * SPUR };
+      const gerade = d.x * d2.x + d.z * d2.z;
+      let mitte;
+      if (gerade > 0.9) mitte = { x: (halt.x + raus.x) / 2, z: (halt.z + raus.z) / 2 };        // geradeaus
+      else if (gerade < -0.9) mitte = { x: halt.x + d.x * 4.5 - r.x * SPUR, z: halt.z + d.z * 4.5 - r.z * SPUR }; // wenden
+      else {                                                                                     // abbiegen
+        const s = (raus.x - halt.x) * d.x + (raus.z - halt.z) * d.z;
+        mitte = { x: halt.x + d.x * s, z: halt.z + d.z * s };
+      }
+      const weg = [halt];
+      for (let i = 1; i <= 10; i++) { // Kurve als Bogen (Bézier-Kurve) aus 10 Punkten
+        const t = i / 10, u = 1 - t;
+        weg.push({ x: u * u * halt.x + 2 * u * t * mitte.x + t * t * raus.x, z: u * u * halt.z + 2 * u * t * mitte.z + t * t * raus.z });
+      }
+      Object.assign(auto, { weg, ziel: 0, von: A, nach: B, danach: N, achse: Math.abs(d.x) > 0.5 ? 'ew' : 'ns', biegtAb: gerade < 0.9 });
+    }
+
+    // --- Autos verteilen ---
+    const strecken = [];
+    for (const k of knotenListe.values()) for (const n of k.nachbarn) strecken.push([k, n]);
+    const artenMix = ['limo', 'limo', 'limo', 'limo', 'limo', 'limo', 'van', 'van', 'laster', 'bus'];
+    for (let versuch = 0; verkehr.length < 48 && versuch < 600; versuch++) {
+      const [A, B] = strecken[Math.floor(zufall() * strecken.length)];
+      const d = richtungVon(A, B), r = rechtsVon(d);
+      const laenge = Math.hypot(B.x - A.x, B.z - A.z) - A.hw - B.hw - 12;
+      if (laenge < 5) continue;
+      const s = A.hw + 6 + zufall() * laenge;
+      const x = A.x + d.x * s + r.x * SPUR, z = A.z + d.z * s + r.z * SPUR;
+      if (verkehr.some(o => Math.hypot(o.x - x, o.z - z) < 14) || Math.hypot(x, z) < 20) continue;
+      const art = artenMix[Math.floor(zufall() * artenMix.length)];
+      const a = ARTEN[art];
+      const farbe = art === 'bus' ? 0xffb300 : AUTO_FARBEN[Math.floor(zufall() * AUTO_FARBEN.length)];
+      const auto = { art, ...a, x, z, richtung: Math.atan2(d.x, d.z), tempo: 0,
+                     maxTempo: zwischen(a.tempo[0], a.tempo[1]), wartet: 0, draengelnBis: 0, hupteUm: 0,
+                     ...verkehrsAutoBauen(art, farbe) };
+      wegPlanen(auto, A, B);
+      verkehr.push(auto);
+    }
+
+    // Steht etwas vor dem Auto auf seiner Spur? Gibt die erlaubte Geschwindigkeit zurück.
+    // nurGleicheRichtung = true: Autos, die quer oder entgegen fahren, werden nicht beachtet
+    function freieFahrt(auto, hindernisse, nurGleicheRichtung) {
+      const s = Math.sin(auto.richtung), c = Math.cos(auto.richtung);
+      let erlaubt = Infinity, wegenSpieler = false, wegenAuto = false, querAuto = false;
+      for (const o of hindernisse) {
+        if (o === auto) continue;
+        const gleicheRichtung = o.istSpieler || Math.cos(o.richtung - auto.richtung) > 0.7;
+        if (nurGleicheRichtung && !gleicheRichtung) continue;
+        const dx = o.x - auto.x, dz = o.z - auto.z;
+        const vorne = dx * s + dz * c;
+        if (vorne <= 0 || vorne > 22) continue;
+        const seitlich = dx * c - dz * s;
+        if (Math.abs(seitlich) > (auto.breite + o.breite) / 2 + 0.3) continue;
+        const luecke = vorne - (auto.laenge + o.laenge) / 2;
+        const v = Math.sqrt(2 * 7 * Math.max(0, luecke - 2.5)); // so schnell, dass es noch rechtzeitig hält
+        if (v < erlaubt) { erlaubt = v; wegenSpieler = !!o.istSpieler; wegenAuto = !o.istSpieler; querAuto = !gleicheRichtung; }
+      }
+      return { erlaubt, wegenSpieler, wegenAuto, querAuto };
+    }
+
+    // Ein Bild lang den ganzen Verkehr bewegen
+    function verkehrBewegen(dt) {
+      // Alles, wovor Autos bremsen: andere Autos, die Fahrzeuge aus der Garage und der Affe
+      const spielerHindernisse = fahrzeuge.map(f => ({ x: f.x, z: f.z, laenge: f.laenge, breite: f.breite, istSpieler: true }));
+      if (!aktuellesFahrzeug) spielerHindernisse.push({ x: affe.position.x, z: affe.position.z, laenge: 1, breite: 1, istSpieler: true });
+      for (const auto of verkehr) {
+        let wunsch = auto.maxTempo;
+        const ziel = auto.weg[auto.ziel];
+        const bisZiel = Math.hypot(ziel.x - auto.x, ziel.z - auto.z);
+        // Vor dem Abbiegen langsamer werden, in der Kurve langsam fahren
+        if (auto.biegtAb) {
+          if (auto.ziel === 0) wunsch = Math.min(wunsch, Math.sqrt(36 + 2 * 4 * bisZiel));
+          else wunsch = Math.min(wunsch, 6);
+        }
+        // Ampel: bei Rot (oder Gelb, wenn noch weit weg) an der Haltelinie stehen bleiben
+        if (auto.ziel === 0 && auto.nach.ampel) {
+          const farbe = ampelFarbe(auto.nach, auto.achse, spielZeit);
+          // Bei Gelb nur halten, wenn man noch gut bremsen kann (wie echte Autofahrer)
+          const bremsWeg = auto.tempo * auto.tempo / (2 * 6) + 1;
+          if (farbe === 'rot' || (farbe === 'gelb' && bisZiel > bremsWeg)) {
+            wunsch = Math.min(wunsch, bisZiel < 0.4 ? 0 : Math.sqrt(2 * 6 * Math.max(0, bisZiel - 0.3)));
+          }
+        }
+        // Abstand halten
+        const frei = freieFahrt(auto, verkehr.concat(spielerHindernisse), spielZeit < auto.draengelnBis);
+        wunsch = Math.min(wunsch, frei.erlaubt);
+        // Wenn ein Auto von der Seite den Weg blockiert (und das andere auf dieses wartet):
+        // nach 4 Sekunden vorsichtig weiterfahren. Hinter einem Auto in gleicher Richtung wird brav gewartet.
+        if (auto.tempo < 0.3 && frei.querAuto && frei.erlaubt < 0.3) {
+          auto.wartet += dt;
+          if (auto.wartet > 4) { auto.draengelnBis = spielZeit + 2; auto.wartet = 0; }
+        } else auto.wartet = 0;
+        // Hupen, wenn der Affe (oder sein Fahrzeug) im Weg steht
+        if (frei.wegenSpieler && auto.tempo < 1 && spielZeit > auto.hupteUm &&
+            Math.hypot(auto.x - affe.position.x, auto.z - affe.position.z) < 30) {
+          hupen(auto.art === 'bus' || auto.art === 'laster' ? 180 : 330);
+          auto.hupteUm = spielZeit + 3;
+        }
+        // Gas geben oder bremsen
+        auto.tempo += THREE.MathUtils.clamp(wunsch - auto.tempo, -12 * dt, 4 * dt);
+        if (auto.tempo < 0) auto.tempo = 0;
+
+        // Am Weg entlang fahren
+        let strecke = auto.tempo * dt;
+        const altX = auto.x, altZ = auto.z;
+        while (strecke > 0) {
+          const p = auto.weg[auto.ziel];
+          const d = Math.hypot(p.x - auto.x, p.z - auto.z);
+          if (d <= strecke) {
+            auto.x = p.x; auto.z = p.z; strecke -= d;
+            auto.ziel++;
+            if (auto.ziel >= auto.weg.length) wegPlanen(auto, auto.nach, auto.danach), auto.ziel = 0;
+          } else {
+            auto.x += (p.x - auto.x) / d * strecke;
+            auto.z += (p.z - auto.z) / d * strecke;
+            strecke = 0;
+          }
+        }
+        if (Math.hypot(auto.x - altX, auto.z - altZ) > 0.001) {
+          const neu = Math.atan2(auto.x - altX, auto.z - altZ);
+          let u = neu - auto.richtung;
+          u = Math.atan2(Math.sin(u), Math.cos(u));
+          auto.richtung += u * Math.min(1, 15 * dt);
+        }
+        auto.gruppe.position.set(auto.x, 0, auto.z);
+        auto.gruppe.rotation.y = auto.richtung;
+        for (const r of auto.raeder) r.halter.rotation.x += (auto.tempo * dt) / r.r;
+      }
+    }
+
+    // ================= MINI-KARTE =================
+    const karte = document.getElementById('karte');
+    const kartenPinsel = karte.getContext('2d');
+    const KARTE_GROESSE = karte.width;
+    const massstab = KARTE_GROESSE / (WIESE.x2 - WIESE.x1);
+    const kx2 = x => (x - WIESE.x1) * massstab;
+    const kz2 = z => (WIESE.z2 - z) * massstab;
+    // Der Hintergrund (Wiese, Straßen, Häuser) wird nur einmal gemalt
+    const kartenHintergrund = document.createElement('canvas');
+    kartenHintergrund.width = kartenHintergrund.height = KARTE_GROESSE;
+    {
+      const p = kartenHintergrund.getContext('2d');
+      p.fillStyle = '#2e7d32'; p.fillRect(0, 0, KARTE_GROESSE, KARTE_GROESSE);
+      p.fillStyle = '#9ccc65'; p.fillRect(kx2(SPIELPLATZ.x1), kz2(SPIELPLATZ.z2), (SPIELPLATZ.x2 - SPIELPLATZ.x1) * massstab, (SPIELPLATZ.z2 - SPIELPLATZ.z1) * massstab);
+      p.fillStyle = '#555';
+      for (const s of STRASSEN) p.fillRect(kx2(s.x1), kz2(s.z2), Math.max(1.5, (s.x2 - s.x1) * massstab), Math.max(1.5, (s.z2 - s.z1) * massstab));
+      p.fillStyle = '#d7ccc8';
+      for (const h of haeuser) p.fillRect(kx2(h.x - h.b / 2), kz2(h.z + h.t / 2), h.b * massstab, h.t * massstab);
+      p.fillStyle = '#ffca28'; p.fillRect(kx2(GARAGE.x - 8), kz2(GARAGE.z + 5), 16 * massstab, 10 * massstab);
+      p.fillStyle = '#f48fb1'; p.fillRect(kx2(KABINE.x - 1.6), kz2(KABINE.z + 1.6), 3.2 * massstab + 1, 3.2 * massstab + 1);
+    }
+    function karteMalen(blick) {
+      kartenPinsel.drawImage(kartenHintergrund, 0, 0);
+      for (const a of verkehr) { // Autos als kleine Punkte
+        kartenPinsel.fillStyle = '#' + a.gruppe.children[0].material.color.getHexString();
+        kartenPinsel.fillRect(kx2(a.x) - 1.5, kz2(a.z) - 1.5, 3, 3);
+      }
+      // Der Affe (oder sein Fahrzeug) als Pfeil
+      const x = kx2(affe.position.x), y = kz2(affe.position.z);
+      kartenPinsel.save();
+      kartenPinsel.translate(x, y);
+      kartenPinsel.rotate(blick);
+      kartenPinsel.fillStyle = '#ff1744'; kartenPinsel.strokeStyle = '#fff'; kartenPinsel.lineWidth = 1.5;
+      kartenPinsel.beginPath(); kartenPinsel.moveTo(0, -7); kartenPinsel.lineTo(5, 5); kartenPinsel.lineTo(-5, 5); kartenPinsel.closePath();
+      kartenPinsel.fill(); kartenPinsel.stroke();
+      kartenPinsel.restore();
+    }
+
+    // Jetzt sind alle Bäume, Laternen und Straßenstriche gesammelt: alles auf einmal bauen
+    instanzenBauen();
+
     // --- Spiel-Schleife: läuft ca. 60 Mal pro Sekunde ---
     const uhr = new THREE.Clock();
     function spielSchleife() {
@@ -1073,6 +1503,8 @@
 
       const p = affe.position;
       plattformenBewegen(spielZeit); // fahrende Plattformen der Obby
+      verkehrBewegen(dt);            // alle Autos auf den Straßen
+      ampelnZeigen(spielZeit);       // Ampeln umschalten
 
       // E-Taste: einsteigen oder aussteigen
       if (eGedrueckt) {
@@ -1210,6 +1642,8 @@
       }
       if (spielZeit > meldungBis) meldung.style.opacity = 0;
 
+      karteMalen(aktuellesFahrzeug ? aktuellesFahrzeug.richtung : blickRichtung); // Mini-Karte
+
       // Die Sonne folgt dem Affen, damit es überall Schatten gibt
       sonne.position.set(p.x + 10, p.y + 20, p.z + 10);
       sonne.target.position.copy(p);
@@ -1240,11 +1674,22 @@
 
       // Kamera kreist um den Affen: Winkel = rundherum, Neigung = wie hoch von oben
       const flach = Math.cos(kameraNeigung) * kameraAbstand;
-      kamera.position.set(
-        p.x + Math.sin(kameraWinkel) * flach,
-        p.y + Math.sin(kameraNeigung) * kameraAbstand,
-        p.z + Math.cos(kameraWinkel) * flach
-      );
+      const wunschX = p.x + Math.sin(kameraWinkel) * flach;
+      const wunschY = p.y + Math.sin(kameraNeigung) * kameraAbstand;
+      const wunschZ = p.z + Math.cos(kameraWinkel) * flach;
+      // Ist ein Baum oder Haus zwischen Affe und Kamera? Dann rückt die Kamera näher heran.
+      const reichweite = kameraAbstand + 4;
+      const nahe = bloecke.filter(o => Math.abs(o.x - p.x) < reichweite + o.b / 2 && Math.abs(o.z - p.z) < reichweite + o.t / 2 && o.art !== 'lava');
+      let erlaubt = 1;
+      for (let t = 0.2; t <= 1.001; t += 0.05) {
+        const x = p.x + (wunschX - p.x) * t, y = p.y + (wunschY - p.y) * t, z = p.z + (wunschZ - p.z) * t;
+        const drin = nahe.some(o => o.krone
+          ? Math.hypot(x - o.x, z - o.z) < o.krone && y < o.oben + 0.5            // in einer Baumkrone
+          : Math.abs(x - o.x) < o.b / 2 + 0.3 && Math.abs(z - o.z) < o.t / 2 + 0.3 && y < o.oben + 0.3 && y > o.unten - 0.3);
+        if (drin) { erlaubt = Math.max(0.2, t - 0.08); break; }
+      }
+      kameraFrei += (erlaubt - kameraFrei) * Math.min(1, (erlaubt < kameraFrei ? 12 : 3) * dt); // schnell ran, langsam zurück
+      kamera.position.set(p.x + (wunschX - p.x) * kameraFrei, p.y + (wunschY - p.y) * kameraFrei, p.z + (wunschZ - p.z) * kameraFrei);
       kamera.lookAt(p);
 
       renderer.render(szene, kamera);
