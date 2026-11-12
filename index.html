@@ -70,7 +70,7 @@
     sonne.shadow.camera.left = -30; sonne.shadow.camera.right = 30;
     sonne.shadow.camera.top = 30;   sonne.shadow.camera.bottom = -30;
     szene.add(sonne);
-    szene.add(sonne.target); // damit die Sonne dem Würfel folgen kann
+    szene.add(sonne.target); // damit die Sonne dem Affen folgen kann
 
     // --- Grüner Boden: eine große flache Fläche ---
     const BODEN_GROESSE = 50;
@@ -82,14 +82,106 @@
     boden.receiveShadow = true;
     szene.add(boden);
 
-    // --- Der Würfel: unsere Spielfigur ---
-    const wuerfel = new THREE.Mesh(
-      new THREE.BoxGeometry(1, 1, 1),
-      new THREE.MeshStandardMaterial({ color: 0xff5722 })
-    );
-    wuerfel.position.y = 0.5; // halbe Höhe, damit er AUF dem Boden steht
-    wuerfel.castShadow = true;
-    szene.add(wuerfel);
+    // --- Der Affe: unsere Spielfigur, gebaut aus Kugeln und Röhren ---
+    // "affe" ist der unsichtbare Halter (1×1×1 groß, für Zusammenstöße),
+    // "figur" ist der sichtbare Affe darin, der wackeln und hüpfen darf.
+    const affe = new THREE.Group();
+    affe.position.y = 0.5; // halbe Höhe, damit er AUF dem Boden steht
+    szene.add(affe);
+    const figur = new THREE.Group();
+    affe.add(figur);
+
+    const fell  = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.9 }); // Fell (wechselt die Farbe)
+    const haut  = new THREE.MeshStandardMaterial({ color: 0xf2c79b, roughness: 0.8 }); // Gesicht, Hände, Füße
+    const weiss = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+    const schwarz = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3 });
+    const rosa  = new THREE.MeshStandardMaterial({ color: 0xff7aa8, roughness: 0.6 });
+
+    // Hilfsfunktion: eine Kugel bauen, verschieben und strecken
+    function kugel(r, material, x, y, z, sx = 1, sy = 1, sz = 1, eltern = figur) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), material);
+      m.position.set(x, y, z);
+      m.scale.set(sx, sy, sz);
+      m.castShadow = true;
+      eltern.add(m);
+      return m;
+    }
+
+    // Bauch und Körper
+    kugel(0.3,  fell, 0, -0.08, 0, 1, 1.1, 0.9);
+    kugel(0.21, haut, 0, -0.1, 0.14, 1, 1.1, 0.6);
+    // Kopf (etwas zu groß – das macht ihn lustig)
+    const kopf = new THREE.Group();
+    kopf.position.set(0, 0.32, 0);
+    figur.add(kopf);
+    kugel(0.3,  fell, 0, 0, 0, 1, 0.95, 1, kopf);
+    kugel(0.21, haut, 0, -0.05, 0.17, 1.15, 0.85, 0.65, kopf);  // Gesicht/Schnauze
+    // Glupschaugen (ein Auge größer als das andere)
+    kugel(0.1,  weiss,   -0.1, 0.09, 0.22, 1, 1, 0.8, kopf);
+    kugel(0.08, weiss,    0.1, 0.08, 0.23, 1, 1, 0.8, kopf);
+    kugel(0.045, schwarz, -0.09, 0.08, 0.3, 1, 1, 1, kopf);
+    kugel(0.04,  schwarz,  0.11, 0.06, 0.3, 1, 1, 1, kopf);
+    // Nasenlöcher
+    kugel(0.018, schwarz, -0.03, -0.03, 0.3, 1, 1, 1, kopf);
+    kugel(0.018, schwarz,  0.03, -0.03, 0.3, 1, 1, 1, kopf);
+    // Breites Grinsen mit Zunge
+    const mund = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.018, 8, 20, Math.PI), schwarz);
+    mund.rotation.z = Math.PI; // Bogen nach unten = Lächeln
+    mund.position.set(0, -0.08, 0.27);
+    kopf.add(mund);
+    kugel(0.035, rosa, 0.03, -0.15, 0.27, 1, 0.7, 0.6, kopf);
+    // Abstehende Ohren
+    kugel(0.1,  fell, -0.31, 0.03, 0, 1, 1, 0.5, kopf);
+    kugel(0.1,  fell,  0.31, 0.03, 0, 1, 1, 0.5, kopf);
+    kugel(0.06, haut, -0.33, 0.03, 0.03, 1, 1, 0.4, kopf);
+    kugel(0.06, haut,  0.33, 0.03, 0.03, 1, 1, 0.4, kopf);
+    // Ein kleines Haarbüschel oben drauf
+    kugel(0.05, fell, 0, 0.3, 0.02, 0.6, 1.6, 0.6, kopf);
+
+    // Arme: hängen an der Schulter, damit sie schwingen können
+    function arm(seite) {
+      const schulter = new THREE.Group();
+      schulter.position.set(0.27 * seite, 0.08, 0);
+      figur.add(schulter);
+      const roehre = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.05, 0.42, 10), fell);
+      roehre.position.y = -0.2;
+      roehre.castShadow = true;
+      schulter.add(roehre);
+      kugel(0.08, haut, 0, -0.43, 0, 1, 1, 1, schulter); // Hand
+      schulter.rotation.z = 0.35 * seite; // Arme leicht abstehen lassen
+      return schulter;
+    }
+    const armLinks = arm(-1), armRechts = arm(1);
+
+    // Beine mit großen Füßen
+    function bein(seite) {
+      const huefte = new THREE.Group();
+      huefte.position.set(0.12 * seite, -0.3, 0);
+      figur.add(huefte);
+      const roehre = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.15, 10), fell);
+      roehre.position.y = -0.07;
+      roehre.castShadow = true;
+      huefte.add(roehre);
+      kugel(0.08, haut, 0, -0.16, 0.05, 1, 0.55, 1.6, huefte); // Fuß
+      return huefte;
+    }
+    const beinLinks = bein(-1), beinRechts = bein(1);
+
+    // Ringelschwanz hinten
+    const schwanzKurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, -0.25, -0.22),
+      new THREE.Vector3(0, -0.2, -0.45),
+      new THREE.Vector3(0, 0.05, -0.55),
+      new THREE.Vector3(0.05, 0.22, -0.48),
+      new THREE.Vector3(0.12, 0.2, -0.38),
+      new THREE.Vector3(0.08, 0.1, -0.4),
+    ]);
+    const schwanz = new THREE.Mesh(new THREE.TubeGeometry(schwanzKurve, 30, 0.035, 8), fell);
+    schwanz.castShadow = true;
+    figur.add(schwanz);
+
+    let blickRichtung = 0; // in welche Richtung der Affe schaut
+    let laufZeit = 0;      // für das Wackeln beim Laufen
 
     // --- Alle Blöcke der Welt landen in dieser Liste ---
     // Jeder Block: x/z = Mitte, b = Breite, t = Tiefe, unten/oben = Höhe von Unterkante und Oberkante,
@@ -166,7 +258,7 @@
     ];
     for (const [x, z, b, t, h] of lavaListe) neuerBlock(x, z, b, t, h, h + 0.15, 'lava');
 
-    // Prüft, ob der Würfel (Mitte px/py/pz, Größe 1) einen Block berührt
+    // Prüft, ob der Affe (Mitte px/py/pz, Größe 1) einen Block berührt
     function ueberlappt(o, px, py, pz) {
       return Math.abs(px - o.x) < (o.b + 1) / 2 - 0.001 &&
              Math.abs(pz - o.z) < (o.t + 1) / 2 - 0.001 &&
@@ -178,7 +270,7 @@
       return bloecke.some(o => o.art !== 'lava' && ueberlappt(o, px, py, pz));
     }
 
-    // Was ist unter dem Würfel? Gibt Höhe und Block zurück (oder -Unendlich = Abgrund)
+    // Was ist unter dem Affen? Gibt Höhe und Block zurück (oder -Unendlich = Abgrund)
     const WIESE_RAND = BODEN_GROESSE / 2;
     function bodenUnter(px, py, pz) {
       let hoehe = -Infinity, block = null;
@@ -194,7 +286,7 @@
       return { hoehe, block };
     }
 
-    // Berührt der Würfel Lava?
+    // Berührt der Affe Lava?
     function inLava(px, py, pz) {
       return bloecke.some(o => o.art === 'lava' &&
         Math.abs(px - o.x) < (o.b + 1) / 2 - 0.001 &&
@@ -202,7 +294,7 @@
         py - 0.5 <= o.oben + 0.01 && py + 0.5 >= o.unten);
     }
 
-    // --- Startpunkt: hier taucht der Würfel nach dem Runterfallen wieder auf ---
+    // --- Startpunkt: hier taucht der Affe nach dem Runterfallen wieder auf ---
     const startPunkt = new THREE.Vector3(0, 0.5, 0);
     let letzterCheckpoint = null;
     let imZiel = false;
@@ -218,7 +310,7 @@
 
     // Zurück zum letzten Startpunkt (nach Lava oder Runterfallen)
     function neuStart(grund) {
-      wuerfel.position.copy(startPunkt);
+      affe.position.copy(startPunkt);
       fallTempo = 0;
       zeigeMeldung(grund, 1.5);
     }
@@ -254,7 +346,7 @@
     const PUNKTE_PRO_MUENZE = 10;
     const WIEDERKOMMEN_NACH = 7; // Sekunden, bis eine eingesammelte Münze wieder da ist
     let spielZeit = 0;           // Sekunden seit Spielstart
-    const FARB_TEMPO = 0.2;      // wie schnell der Würfel die Farbe wechselt (0.2 = 1 Runde in 5 Sekunden)
+    const FARB_TEMPO = 0.2;      // wie schnell der Affe die Farbe wechselt (0.2 = 1 Runde in 5 Sekunden)
     let punkte = 0;
     const punkteAnzeige = document.getElementById('punkte');
     function punkteZeigen() {
@@ -272,7 +364,7 @@
     addEventListener('keyup', (e) => { tasten[e.code] = false; });
 
     // --- Spielwerte ---
-    const TEMPO = 6;          // wie schnell der Würfel läuft
+    const TEMPO = 6;          // wie schnell der Affe läuft
     const SPRUNGKRAFT = 7;    // wie stark er springt
     const SCHWERKRAFT = 20;   // wie stark er nach unten fällt
     let fallTempo = 0;        // aktuelle Geschwindigkeit nach oben/unten
@@ -281,7 +373,7 @@
     let sprungGedrueckt = false;
 
     // --- Kamera-Werte ---
-    const KAMERA_ABSTAND = 10;   // wie weit die Kamera vom Würfel weg ist
+    const KAMERA_ABSTAND = 10;   // wie weit die Kamera vom Affe weg ist
     const DREH_TEMPO = 2;        // wie schnell sich die Kamera dreht
     let kameraWinkel = 0;        // 0 = Kamera schaut von hinten
     let kameraNeigung = 0.5;     // wie schräg von oben die Kamera schaut
@@ -299,7 +391,7 @@
       kameraNeigung = THREE.MathUtils.clamp(kameraNeigung, 0.1, 1.4); // nicht unter den Boden, nicht ganz senkrecht
 
       // Bewegen mit W A S D – immer so, wie die Kamera gerade schaut
-      const p = wuerfel.position;
+      const p = affe.position;
       const vor   = (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0); // W = nach vorne, S = nach hinten
       const seite = (tasten.KeyD ? 1 : 0) - (tasten.KeyA ? 1 : 0); // D = nach rechts, A = nach links
       const sin = Math.sin(kameraWinkel), cos = Math.cos(kameraWinkel);
@@ -310,7 +402,7 @@
       if (!stoesstAn(p.x + dx, p.y, p.z)) p.x += dx;
       if (!stoesstAn(p.x, p.y, p.z + dz)) p.z += dz;
 
-      // Wo ist unter dem Würfel fester Boden? (Gras, Block – oder Abgrund)
+      // Wo ist unter dem Affen fester Boden? (Gras, Block – oder Abgrund)
       const unter = bodenUnter(p.x, p.y, p.z);
       const standHoehe = unter.hoehe + 0.5;
 
@@ -350,14 +442,40 @@
       }
       if (spielZeit > meldungBis) meldung.style.opacity = 0;
 
-      // Die Sonne folgt dem Würfel, damit es überall Schatten gibt
+      // Die Sonne folgt dem Affen, damit es überall Schatten gibt
       sonne.position.set(p.x + 10, p.y + 20, p.z + 10);
       sonne.target.position.copy(p);
 
       // Münzen drehen sich, werden eingesammelt und kommen nach 7 Sekunden wieder
 
-      // Würfel wechselt ständig die Farbe: läuft einmal durch den Regenbogen (alle 5 Sekunden)
-      wuerfel.material.color.setHSL((spielZeit * FARB_TEMPO) % 1, 0.9, 0.55);
+      // Das Fell des Affen wechselt ständig die Farbe: einmal durch den Regenbogen (alle 5 Sekunden)
+      fell.color.setHSL((spielZeit * FARB_TEMPO) % 1, 0.8, 0.45);
+
+      // Affe dreht sich in die Laufrichtung (sanft, nicht ruckartig)
+      const laeuft = dx !== 0 || dz !== 0;
+      if (laeuft) {
+        const ziel = Math.atan2(dx, dz);
+        let unterschied = ziel - blickRichtung;
+        unterschied = Math.atan2(Math.sin(unterschied), Math.cos(unterschied)); // kürzester Weg herum
+        blickRichtung += unterschied * Math.min(1, 12 * dt);
+      }
+      affe.rotation.y = blickRichtung;
+
+      // Lustiges Wackeln: beim Laufen schwingen Arme und Beine, der Kopf wackelt
+      laufZeit += dt * (laeuft ? 14 : 3);
+      const schwung = laeuft ? 0.8 : 0.1;
+      armLinks.rotation.x  =  Math.sin(laufZeit) * schwung;
+      armRechts.rotation.x = -Math.sin(laufZeit) * schwung;
+      beinLinks.rotation.x  = -Math.sin(laufZeit) * schwung * 0.7;
+      beinRechts.rotation.x =  Math.sin(laufZeit) * schwung * 0.7;
+      kopf.rotation.z = Math.sin(laufZeit * 0.5) * (laeuft ? 0.15 : 0.08);
+      figur.position.y = amBoden && laeuft ? Math.abs(Math.sin(laufZeit)) * 0.06 : 0; // hüpft beim Laufen
+      // In der Luft: Arme hoch wie "Juhuu!"
+      if (!amBoden) {
+        armLinks.rotation.z = -2.4; armRechts.rotation.z = 2.4;
+      } else {
+        armLinks.rotation.z = -0.35; armRechts.rotation.z = 0.35;
+      }
       for (const muenze of muenzen) {
         if (!muenze.visible) {
           // Unsichtbare Münze: ist ihre Wartezeit vorbei?
@@ -373,7 +491,7 @@
         }
       }
 
-      // Kamera kreist um den Würfel: Winkel = rundherum, Neigung = wie hoch von oben
+      // Kamera kreist um den Affen: Winkel = rundherum, Neigung = wie hoch von oben
       const flach = Math.cos(kameraNeigung) * KAMERA_ABSTAND;
       kamera.position.set(
         p.x + Math.sin(kameraWinkel) * flach,
