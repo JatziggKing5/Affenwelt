@@ -334,8 +334,8 @@
     #auftrag.eilig .balken div { background: #ff1744; }
     #auftrag.rennen { background: rgba(33, 33, 33, 0.92); }
     #auftrag.rennen b { font-size: 20px; font-family: monospace; }
-    @media (max-width: 600px) { #auftrag { top: 64px; width: 46vw; min-width: 0; left: auto; right: 130px; transform: none; padding: 6px 8px; } #auftrag b { font-size: 12px; } #auftrag small { font-size: 11px; } }
-    body.handy #auftrag { top: 64px; width: 46vw; min-width: 0; left: auto; right: 130px; transform: none; padding: 6px 8px; }
+    @media (max-width: 600px) { #auftrag { top: 215px; width: min(300px, calc(100vw - 24px)); min-width: 0; padding: 6px 8px; } #auftrag b { font-size: 12px; } #auftrag small { font-size: 11px; } }
+    body.handy #auftrag { top: 215px; width: min(300px, calc(100vw - 24px)); min-width: 0; padding: 6px 8px; }
     body.handy #auftrag b { font-size: 12px; } body.handy #auftrag small { font-size: 11px; }
     #fahndung {
       position: fixed; bottom: 170px; left: 50%; transform: translateX(-50%);
@@ -471,13 +471,13 @@
       ['🎥 Kamera & Karte', [['Umschauen', 'rechts wischen'], ['Große Karte', 'Karte antippen'], ['Wegpunkt setzen', 'auf große Karte tippen']]],
       ['🚗 Fahren', [['Einsteigen / Aussteigen', '✋'], ['Gas, Bremse, Lenken', 'Stick'], ['Hupen', '📯']]],
       ['🍌 Waffen', [['Schießen', '🔫'], ['Zielen', '🎯'], ['Rauchbombe', '💨'], ['Waffe wählen', 'Leiste oben links']]],
-      ['👥 Mehrspieler', [['Raum öffnen / beitreten', '👥'], ['Chat schreiben', '💬'], ['Funkgerät', '🎙️ halten']]],
+      ['👥 Mehrspieler', [['Mini-Spiele: Fangen & Bananen-Duell', 'im 👥-Menü'], ['Raum öffnen / beitreten', '👥'], ['Chat schreiben', '💬'], ['Funkgerät', '🎙️ halten']]],
     ] : [
       ['🐒 Bewegen', [['Laufen', k('W','A','S','D')], ['Rennen', k('Shift')], ['Springen / Doppelsprung', k('Leertaste') + ' / 2×'], ['Jetpack fliegen', k('Leertaste') + ' halten'], ['Tanzen', k('B') + ' halten']]],
       ['🎥 Kamera & Karte', [['Kamera drehen', k('←','→','↑','↓')], ['Kamera mit der Maus', 'rechte Maustaste halten'], ['Große Karte', k('M')], ['Wegpunkt setzen', 'Klick auf die große Karte']]],
       ['🚗 Fahren', [['Einsteigen / Aussteigen', k('E')], ['Gas / Bremse / Lenken', k('W','S','A','D')], ['Hupen', k('Leertaste')], ['Garage', 'an der ersten Kreuzung']]],
       ['🍌 Waffen', [['Waffe wählen', k('1','2','3','4','5')], ['Schießen', 'Linksklick oder ' + k('F')], ['Zielen', 'rechte Maustaste oder ' + k('Z')], ['Rauchbombe', k('G')]]],
-      ['👥 Mehrspieler', [['Raum öffnen / beitreten', k('P')], ['Chat schreiben', k('T') + ' oder ' + k('Enter')], ['Funkgerät', k('V') + ' halten']]],
+      ['👥 Mehrspieler', [['Mini-Spiele: Fangen & Bananen-Duell', 'im 👥-Menü ' + k('P')], ['Raum öffnen / beitreten', k('P')], ['Chat schreiben', k('T') + ' oder ' + k('Enter')], ['Funkgerät', k('V') + ' halten']]],
     ];
     HILFE.push(['🗺️ Zum Entdecken', [
       ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🐾 Tierhandlung', 'rechts neben der Hauptstraße beim Start'], ['🏡 Affen-Siedlung', 'Häuser kaufen und einrichten (rechts vom Start)'], ['🏁 Straßenrennen', 'mit einem Fahrzeug unters Start-Tor fahren'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
@@ -2511,6 +2511,7 @@
     }
 
     function einsteigen(f) {
+      if (miniSpiel?.art === 'fangen') { zeigeMeldung('🏃 Beim Fangen wird gelaufen, nicht gefahren!', 2); return; }
       aktuellesFahrzeug = f;
       f.tempo = 0;
       fallTempo = 0;
@@ -4174,7 +4175,7 @@
       if (rennen && !f) { rennenEnde(false, 'Ausgestiegen – Rennen abgebrochen'); return; }
       if (!f) return;
       if (!rennen) {
-        if (auftrag?.m || !imStartTor(f) || Math.abs(f.tempo) > 1.5) { rennenStehZeit = 0; return; }
+        if (auftrag?.m || miniSpiel || !imStartTor(f) || Math.abs(f.tempo) > 1.5) { rennenStehZeit = 0; return; }
         rennenStehZeit += dt;
         if (rennenStehZeit > 1.2) { rennen = { phase: 'countdown', start: spielZeit + 3, ring: 0, gezaehlt: 4 }; rennenStehZeit = 0; }
         return;
@@ -4777,6 +4778,7 @@
     const amAuftraggeber = p => Math.hypot(p.x - AUFTRAGGEBER.x, p.z - AUFTRAGGEBER.z) < 2.6 && p.y < 3;
     function auftragAktion(p) {
       if (!amAuftraggeber(p)) return false;
+      if (miniSpiel) { zeigeMeldung('Erst das Mini-Spiel fertig spielen!', 2); return true; }
       if (auftrag) auftragBeenden(false, 'Auftrag abgebrochen');
       else { auftrag = { letzte: auftragLetzte }; auftragStarten(p); }
       return true;
@@ -5065,6 +5067,7 @@
       haustierBewegen(meinTier, aktuellesFahrzeug || p, blickRichtung, dt, !!tanz);
       tierladenMenue.classList.toggle('offen', !aktuellesFahrzeug && Math.hypot(p.x - TIERLADEN.x + 1.5, p.z - TIERLADEN.z) < 3.2);
       rennenAktualisieren(dt);
+      miniSpielAktualisieren(dt);
 
       // Umkleidekabine: Menü zeigen, solange der Affe (zu Fuß) drin steht
       kabinenMenue.classList.toggle('offen', !aktuellesFahrzeug && inKabine(p));
@@ -5220,7 +5223,11 @@
           <p class="mpStatus">${mpVerbunden() ? `🟢 Verbunden (${mpVerbunden()}/2 Server)` : '🟡 Verbinde …'} · ${mp.andere.size ? `${mp.andere.size} Freund${mp.andere.size > 1 ? 'e' : ''} da` : 'warte auf Freunde …'}</p>
           <p>Du heißt: <b>${mp.name}</b></p>
           <div class="mpListe">${liste}</div>
-          <button class="mpBreit" data-tun="verlassen">🚪 Raum verlassen</button>
+          <p><b>🎮 Mini-Spiele</b> <small>(für alle im Raum)</small></p>
+          ${miniSpiel ? `<p>Läuft gerade: ${miniSpiel.art === 'fangen' ? '🏃 Fangen' : '🍌 Bananen-Duell'}</p>` : mp.andere.size
+            ? '<button class="mpBreit" data-tun="fangen">🏃 Fangen spielen</button><button class="mpBreit" data-tun="duell">🍌 Bananen-Duell</button>'
+            : '<p><small>Sobald ein Freund da ist, könnt ihr Fangen oder ein Bananen-Duell spielen.</small></p>'}
+          <button class="mpBreit leise" data-tun="verlassen">🚪 Raum verlassen</button>
           <button class="mpBreit leise" data-tun="zu">Schließen</button>`;
       } else {
         const ziffern = [1, 2, 3, 4, 5, 6, 7, 8, 9, '⌫', 0, '✓'].map(z => `<button class="mpZiffer" data-ziffer="${z}">${z}</button>`).join('');
@@ -5254,6 +5261,7 @@
       if (tun === 'neu') raumBeitreten(String(Math.floor(1000 + Math.random() * 9000)));
       if (tun === 'name') { mp.name = AFFEN_NAMEN[(AFFEN_NAMEN.indexOf(mp.name) + 1) % AFFEN_NAMEN.length]; mpPanelZeigen(); }
       if (tun === 'verlassen') raumVerlassen();
+      if ((tun === 'fangen' || tun === 'duell') && !miniSpiel) { miniSpielStarten(tun); mpPanelUmschalten(false); }
       if (tun === 'zu') mpPanelUmschalten(false);
       if (spieler) zuSpielerBeamen(spieler);
     });
@@ -5303,7 +5311,10 @@
         if (!mp.andere.has(n.i)) { mp.sendeUm = 0; setTimeout(hausSenden, 500); }   // ein Neuer: sofort unsere Daten schicken
         mitspielerAktualisieren(n.i, n.d);
       }
-      if (n.t === 'banane' && typeof n.d?.x === 'number') fremdeBananeFliegt(n.d);
+      if (n.t === 'banane' && typeof n.d?.x === 'number') fremdeBananeFliegt(n.d, n.i);
+      if (n.t === 'spiel' && (n.d?.art === 'fangen' || n.d?.art === 'duell')) miniSpielEmpfangen(n.i, n.d);
+      if (n.t === 'fang' && miniSpiel && n.d?.spiel === miniSpiel.id && n.d.nr > miniSpiel.nr) { miniSpiel.nr = n.d.nr; faengerWechsel(n.d.zu); }
+      if (n.t === 'treffer' && miniSpiel && n.d?.spiel === miniSpiel.id) duellPunkt(n.d.von, n.i);
       if (n.t === 'weg') mitspielerEntfernen(n.i);
       if (n.t === 'haus' && typeof n.d?.nr === 'number') { if (n.d.nr < 0) fremdesHausWeg(n.i); else fremdesHaus(n.i, n.d); }
       if (n.t === 'chat' && typeof n.d?.m === 'string') chatEmpfangen(n.i, n.d.m);
@@ -5682,18 +5693,24 @@
     function eigeneBananeGeschossen(g) {     // wird beim eigenen Schuss aufgerufen
       mpSenden('banane', { s: g.mesh.scale.x, x: g.mesh.position.x, y: g.mesh.position.y, z: g.mesh.position.z, vx: g.vx, vy: g.vy, vz: g.vz });
     }
-    function fremdeBananeFliegt(b) {          // ein Mitspieler hat geschossen: Banane auch bei uns zeigen
+    function fremdeBananeFliegt(b, von) {     // ein Mitspieler hat geschossen: Banane auch bei uns zeigen
       const m = new THREE.Mesh(bananenForm, bananenMaterial);
       m.position.set(b.x, b.y, b.z);
       m.scale.setScalar(Math.min(3, b.s || 1));
       szene.add(m);
-      geschosse.push({ mesh: m, vx: b.vx, vy: b.vy, vz: b.vz, leben: 2, fremd: true });
+      geschosse.push({ mesh: m, vx: b.vx, vy: b.vy, vz: b.vz, leben: 2, fremd: true, von });
     }
     // Trifft eine fremde Banane MICH? Dann liege ich 5 Sekunden am Boden.
     function triffMich(g) {
       if (!g.fremd || aktuellesFahrzeug || spielZeit < selbstLiegtBis) return false;
       const q = g.mesh.position, p = affe.position;
       if (Math.hypot(q.x - p.x, q.z - p.z) < 0.7 && Math.abs(q.y - p.y) < 0.9) {
+        if (miniSpiel?.art === 'duell' && miniSpiel.laeuft) {          // Duell: Punkt für den Schützen, nur kurz liegen
+          selbstLiegtBis = spielZeit + 1.5;
+          mpSenden('treffer', { spiel: miniSpiel.id, von: g.von });
+          duellPunkt(g.von, meineId);
+          return true;
+        }
         selbstLiegtBis = spielZeit + LIEGEZEIT;
         zeigeMeldung('🍌 Getroffen! 5 Sekunden am Boden …', 2);
         return true;
@@ -5761,6 +5778,114 @@
     }
     addEventListener('pointerup', fingerWeg);
     addEventListener('pointercancel', fingerWeg);
+
+    // ================= MINI-SPIELE im Mehrspieler: Fangen und Bananen-Duell =================
+    let miniSpiel = null;   // { art, id, start, ende, laeuft, faenger, nr, punkte: Map }
+    const SPIEL_DAUER = { fangen: 90, duell: 90 };
+    const SPIEL_MITTE = { x: -30, z: 18 };            // hier treffen sich alle zum Spielen
+    const faengerKegel = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.6, 12).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: 0xff1744 }));
+    faengerKegel.visible = false; szene.add(faengerKegel);
+    const spielerName = id => id === meineId ? mp.name : mp.andere.get(id)?.daten?.n || 'Affe';
+    function miniSpielStarten(art) {
+      const d = { art, id: Math.random().toString(36).slice(2, 8), faenger: [meineId, ...mp.andere.keys()][Math.floor(Math.random() * (mp.andere.size + 1))] };
+      mpSenden('spiel', d);
+      miniSpielEmpfangen(meineId, d);
+    }
+    function miniSpielEmpfangen(von, d) {
+      if (miniSpiel && miniSpiel.id === d.id) return;
+      if (auftrag?.m) auftragBeenden(false, 'Mini-Spiel startet – Auftrag abgebrochen');
+      if (rennen) rennenEnde(false, 'Mini-Spiel startet – Rennen abgebrochen');
+      if (aktuellesFahrzeug) aussteigen();
+      if (tanz) tanzStoppen();
+      miniSpiel = { art: d.art, id: d.id, start: spielZeit + 4, ende: spielZeit + 4 + SPIEL_DAUER[d.art], laeuft: false, faenger: d.faenger, nr: 0, punkte: new Map(), gezaehlt: 5, faengerSeit: new Map() };
+      // Alle treffen sich auf der Wiese (jeder an einer anderen Stelle)
+      const w = Math.random() * Math.PI * 2;
+      affe.position.set(SPIEL_MITTE.x + Math.cos(w) * 7, 0.5, SPIEL_MITTE.z + Math.sin(w) * 7);
+      fallTempo = 0;
+      if (d.art === 'duell') {                           // alle bekommen die gleiche Duell-Pistole
+        miniSpiel.vorher = { pistole: inventar.pistole, munition: inventar.munition, auswahl };
+        inventar.pistole = true; inventar.munition = 999; inventarZeigen(); waehlen(1);
+      }
+      klang('start');
+      zeigeMeldung(d.art === 'fangen' ? `🏃 FANGEN! ${spielerName(d.faenger)} ist der Fänger!` : '🍌 BANANEN-DUELL! Triff die anderen so oft du kannst!', 3);
+    }
+    function faengerWechsel(id) {
+      if (!miniSpiel) return;
+      miniSpiel.faenger = id; miniSpiel.schutzBis = spielZeit + 3;     // 3 Sekunden darf man nicht zurückfangen
+      klang('tick');
+      zeigeMeldung(id === meineId ? '🔴 Du bist jetzt der Fänger! Fang jemanden!' : `🏃 ${spielerName(id)} ist jetzt der Fänger!`, 2);
+    }
+    function duellPunkt(schuetze, opfer) {
+      if (!miniSpiel || !schuetze) return;
+      miniSpiel.punkte.set(schuetze, (miniSpiel.punkte.get(schuetze) || 0) + 1);
+      if (schuetze === meineId) { klang('muenze'); zeigeMeldung(`🎯 Treffer! ${spielerName(opfer)}`, 1); }
+      else if (opfer === meineId) zeigeMeldung(`🍌 ${spielerName(schuetze)} hat dich getroffen!`, 1.2);
+    }
+    function miniSpielAktualisieren(dt) {
+      const s = miniSpiel;
+      faengerKegel.visible = false;
+      if (!s) return;
+      if (!mp.raum) { miniSpielEnde(true); return; }
+      const box = auftragBox;
+      box.classList.add('offen', 'rennen'); box.classList.remove('eilig');
+      if (!s.laeuft) {                                   // Countdown
+        const rest = Math.ceil(s.start - spielZeit);
+        if (rest !== s.gezaehlt && rest > 0) { s.gezaehlt = rest; klang('tick'); }
+        box.querySelector('b').textContent = rest > 0 ? `${s.art === 'fangen' ? '🏃' : '🍌'} ${rest}` : 'LOS!';
+        box.querySelector('small').textContent = s.art === 'fangen' ? `Fänger: ${spielerName(s.faenger)}` : 'Jeder Treffer = 1 Punkt';
+        box.querySelector('.balken div').style.width = '0%';
+        if (spielZeit >= s.start) { s.laeuft = true; s.schutzBis = spielZeit + 2; klang('start'); }
+        return;
+      }
+      const rest = s.ende - spielZeit;
+      if (rest <= 0) { miniSpielEnde(); return; }
+      if (s.art === 'fangen') {
+        s.faengerSeit.set(s.faenger, (s.faengerSeit.get(s.faenger) || 0) + dt);   // wie lange war wer Fänger?
+        // Roter Kegel über dem Fänger
+        const ziel = s.faenger === meineId ? affe.position : mp.andere.get(s.faenger)?.gruppe?.position;
+        if (ziel) { faengerKegel.visible = true; faengerKegel.position.set(ziel.x, ziel.y + 1.9 + Math.sin(spielZeit * 6) * 0.1, ziel.z); }
+        // Bin ich der Fänger und nah an jemandem? Dann ist er dran!
+        if (s.faenger === meineId && spielZeit > (s.schutzBis || 0)) {
+          for (const a of mp.andere.values()) {
+            if (a.gruppe && a.gruppe.position.distanceTo(affe.position) < 1.4) {
+              s.nr++; mpSenden('fang', { spiel: s.id, nr: s.nr, zu: a.id }); faengerWechsel(a.id); break;
+            }
+          }
+        }
+        box.querySelector('b').textContent = `🏃 Fangen · ${Math.ceil(rest)} s`;
+        box.querySelector('small').textContent = s.faenger === meineId ? '🔴 DU bist der Fänger – fang jemanden!' : `Lauf weg! Fänger: ${spielerName(s.faenger)}`;
+      } else {
+        const liste = [meineId, ...mp.andere.keys()].map(id => [spielerName(id), s.punkte.get(id) || 0]).sort((a, b) => b[1] - a[1]);
+        box.querySelector('b').textContent = `🍌 Duell · ${Math.ceil(rest)} s`;
+        box.querySelector('small').textContent = liste.slice(0, 4).map(([n, p]) => `${n}: ${p}`).join(' · ');
+      }
+      box.querySelector('.balken div').style.width = (rest / SPIEL_DAUER[s.art] * 100) + '%';
+    }
+    function miniSpielEnde(still) {
+      const s = miniSpiel;
+      if (!s) return;
+      miniSpiel = null;
+      faengerKegel.visible = false;
+      auftragBox.classList.remove('offen', 'rennen');
+      if (s.vorher) { inventar.pistole = s.vorher.pistole; inventar.munition = s.vorher.munition; inventarZeigen(); waehlen(s.vorher.auswahl || 0); }
+      if (still) return;
+      if (s.art === 'fangen') {
+        // Gewonnen hat, wer am kürzesten Fänger war
+        const ids = [meineId, ...mp.andere.keys()];
+        const zeiten = ids.map(id => [id, s.faengerSeit.get(id) || 0]).sort((a, b) => a[1] - b[1]);
+        const sieger = zeiten[0][0];
+        if (sieger === meineId) { punkte += 100; punkteZeigen(); klang('erfolg'); zeigeMeldung('🏆 Du warst am kürzesten Fänger – gewonnen! +100 Punkte', 4); }
+        else { klang('fehler'); zeigeMeldung(`🏁 Vorbei! ${spielerName(sieger)} hat gewonnen.`, 4); }
+      } else {
+        const ids = [meineId, ...mp.andere.keys()];
+        const liste = ids.map(id => [id, s.punkte.get(id) || 0]).sort((a, b) => b[1] - a[1]);
+        const [sieger, beste] = liste[0];
+        const gleich = liste.length > 1 && liste[1][1] === beste;
+        const tr = n => `${n} Treffer${n === 1 ? '' : 'n'}`;
+        if (!gleich && sieger === meineId && beste > 0) { punkte += 100; punkteZeigen(); klang('erfolg'); zeigeMeldung(`🏆 Duell gewonnen mit ${tr(beste)}! +100 Punkte`, 4); }
+        else zeigeMeldung(gleich ? `🤝 Unentschieden mit ${tr(beste)}!` : `🏁 ${spielerName(sieger)} gewinnt mit ${tr(beste)}!`, 4);
+      }
+    }
 
     // --- Knöpfe ---
     const handyKnoepfe = document.getElementById('handyknoepfe');
