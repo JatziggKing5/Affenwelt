@@ -64,7 +64,8 @@
   <script type="importmap">
     { "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.webgpu.js",
-        "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.webgpu.js"
+        "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.webgpu.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
     } }
   </script>
 </head>
@@ -83,6 +84,7 @@
 
   <script type="module">
     import * as THREE from 'three/webgpu';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
     // --- Szene, Kamera und Renderer: die "Bühne", das "Auge" und der "Maler" ---
     const szene = new THREE.Scene();
@@ -132,6 +134,41 @@
     // Nebel in der Ferne: die große Welt verschwindet sanft im Himmel
     szene.fog = new THREE.Fog(0x87ceeb, 60, 220);
 
+    // ================= MODELLE AUS BLENDER =================
+    // Blender speichert die Modelle in "modelle/spiel.glb". Gibt es dort ein Modell mit dem
+    // passenden Namen (z. B. "Affe", "Cabrio", "Tanne"), nimmt das Spiel dieses Modell.
+    // Sonst baut das Spiel das Teil selbst aus Kugeln und Kisten.
+    const MODELL_DATEI = 'modelle/spiel.glb';
+    const modelle = new Map();
+    const grundName = n => n.replace(/[.]?\d{3}$/, ''); // Blender hängt bei Doppelten ".001" an
+    try {
+      const gltf = await new GLTFLoader().loadAsync(MODELL_DATEI + '?v=' + Date.now());
+      for (const o of gltf.scene.children) modelle.set(grundName(o.name), o);
+      console.info('Modelle aus Blender:', [...modelle.keys()].join(', '));
+    } catch (e) {
+      console.info('Keine Blender-Modelle gefunden – das Spiel baut alles selbst.');
+    }
+    // Eine Kopie eines Modells holen (oder null, wenn es keins gibt)
+    function modell(name) {
+      const m = modelle.get(name);
+      if (!m) return null;
+      const kopie = m.clone(true);
+      kopie.position.set(0, 0, 0); // in Blender stehen die Modelle nebeneinander – im Spiel zählt nur die Form
+      kopie.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      return kopie;
+    }
+    // Ein Teil in einem Modell über seinen Namen finden
+    function finde(wurzel, name) {
+      let treffer = null;
+      wurzel.traverse(o => { if (!treffer && grundName(o.name) === name) treffer = o; });
+      return treffer;
+    }
+    // Wie groß ist ein Modell? (Breite, Höhe, Tiefe)
+    function modellGroesse(name) {
+      const m = modell(name);
+      return m ? new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3()) : null;
+    }
+
     // ================= INSTANZEN-BAUKASTEN =================
     // Wenn ganz viele gleiche Teile (Bäume, Laternen, Straßenstriche) gebraucht werden,
     // sammeln wir sie erst und zeichnen dann alle gleichen auf einmal ("Instanzen").
@@ -146,6 +183,29 @@
       _pos.set(x, y, z); _gross.set(sx, sy, sz); _dreh.setFromEuler(_euler.set(drehX, drehY, drehZ));
       g.matrizen.push(new THREE.Matrix4().compose(_pos, _dreh, _gross));
       g.farben.push(farbe);
+    }
+    // Ein ganzes Blender-Modell oft in die Welt stellen (z. B. 1000 Bäume). Gibt false zurück, wenn es das Modell nicht gibt.
+    // gross: eine Zahl oder [x, y, z]; helligkeit: kleine Farb-Unterschiede, damit nicht alles gleich aussieht
+    function modellAlsInstanz(name, x, y, z, drehY = 0, gross = 1, helligkeit = null) {
+      const m = modelle.get(name);
+      if (!m) return false;
+      if (!m.userData.teile) { // nur einmal: alle Teile mit ihrer Lage im Modell merken
+        const wurzel = m.clone(true);
+        wurzel.position.set(0, 0, 0);
+        wurzel.updateMatrixWorld(true);
+        m.userData.teile = [];
+        wurzel.traverse(o => { if (o.isMesh) m.userData.teile.push({ form: o.geometry, material: o.material, lage: o.matrixWorld.clone() }); });
+      }
+      const [sx, sy, sz] = Array.isArray(gross) ? gross : [gross, gross, gross];
+      const platz = new THREE.Matrix4().compose(_pos.set(x, y, z), _dreh.setFromEuler(_euler.set(0, drehY, 0)), _gross.set(sx, sy, sz));
+      for (const t of m.userData.teile) {
+        const schluessel = t.form.uuid + t.material.uuid + 'modell';
+        let g = instanzGruppen.get(schluessel);
+        if (!g) { g = { form: t.form, material: t.material, schatten: true, matrizen: [], farben: [] }; instanzGruppen.set(schluessel, g); }
+        g.matrizen.push(platz.clone().multiply(t.lage));
+        g.farben.push(helligkeit);
+      }
+      return true;
     }
     function instanzenBauen() {
       const farbe = new THREE.Color();
@@ -262,14 +322,15 @@
     const affe = new THREE.Group();
     affe.position.y = 0.5; // halbe Höhe, damit er AUF dem Boden steht
     szene.add(affe);
-    const figur = new THREE.Group();
+    let figur = new THREE.Group();
+    figur.name = 'Affe_Figur';
     affe.add(figur);
 
-    const fell  = new THREE.MeshStandardMaterial({ color: 0x3b2314, roughness: 0.9 }); // dunkelbraunes Fell
-    const haut  = new THREE.MeshStandardMaterial({ color: 0xf2c79b, roughness: 0.8 }); // Gesicht, Hände, Füße
-    const weiss = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
-    const schwarz = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3 });
-    const rosa  = new THREE.MeshStandardMaterial({ color: 0xff7aa8, roughness: 0.6 });
+    let fell    = new THREE.MeshStandardMaterial({ color: 0x3b2314, roughness: 0.9, name: 'Fell' }); // dunkelbraunes Fell
+    const haut  = new THREE.MeshStandardMaterial({ color: 0xf2c79b, roughness: 0.8, name: 'Haut' }); // Gesicht, Hände, Füße
+    const weiss = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, name: 'Augen_weiss' });
+    const schwarz = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3, name: 'Schwarz' });
+    const rosa  = new THREE.MeshStandardMaterial({ color: 0xff7aa8, roughness: 0.6, name: 'Zunge' });
 
     // Hilfsfunktion: eine Kugel bauen, verschieben und strecken
     function kugel(r, material, x, y, z, sx = 1, sy = 1, sz = 1, eltern = figur) {
@@ -285,7 +346,8 @@
     kugel(0.3,  fell, 0, -0.08, 0, 1, 1.1, 0.9);
     kugel(0.21, haut, 0, -0.1, 0.14, 1, 1.1, 0.6);
     // Kopf (etwas zu groß – das macht ihn lustig)
-    const kopf = new THREE.Group();
+    let kopf = new THREE.Group();
+    kopf.name = 'Affe_Kopf';
     kopf.position.set(0, 0.32, 0);
     figur.add(kopf);
     kugel(0.3,  fell, 0, 0, 0, 1, 0.95, 1, kopf);
@@ -315,6 +377,7 @@
     // Arme: hängen an der Schulter, damit sie schwingen können
     function arm(seite) {
       const schulter = new THREE.Group();
+      schulter.name = seite < 0 ? 'Affe_Arm_links' : 'Affe_Arm_rechts';
       schulter.position.set(0.27 * seite, 0.08, 0);
       figur.add(schulter);
       const roehre = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.05, 0.42, 10), fell);
@@ -325,11 +388,12 @@
       schulter.rotation.z = 0.35 * seite; // Arme leicht abstehen lassen
       return schulter;
     }
-    const armLinks = arm(-1), armRechts = arm(1);
+    let armLinks = arm(-1), armRechts = arm(1);
 
     // Beine mit großen Füßen
     function bein(seite) {
       const huefte = new THREE.Group();
+      huefte.name = seite < 0 ? 'Affe_Bein_links' : 'Affe_Bein_rechts';
       huefte.position.set(0.12 * seite, -0.3, 0);
       figur.add(huefte);
       const roehre = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.15, 10), fell);
@@ -339,7 +403,7 @@
       kugel(0.08, haut, 0, -0.16, 0.05, 1, 0.55, 1.6, huefte); // Fuß
       return huefte;
     }
-    const beinLinks = bein(-1), beinRechts = bein(1);
+    let beinLinks = bein(-1), beinRechts = bein(1);
 
     // Ringelschwanz hinten
     const schwanzKurve = new THREE.CatmullRomCurve3([
@@ -356,6 +420,27 @@
 
     let blickRichtung = 0; // in welche Richtung der Affe schaut
     let laufZeit = 0;      // für das Wackeln beim Laufen
+
+    // Gibt es einen Affen aus Blender? Dann den nehmen.
+    // Wichtig: Die Teile "Affe_Figur", "Affe_Kopf", "Affe_Arm_links" usw. müssen in Blender so heißen,
+    // damit der Affe beim Laufen weiter wackeln kann. Das Material "Fell" färbt die Umkleidekabine um.
+    {
+      const m = modell('Affe');
+      const neueFigur = m && finde(m, 'Affe_Figur');
+      if (neueFigur) {
+        affe.remove(figur);
+        affe.add(m);
+        m.position.set(0, 0, 0);
+        figur = neueFigur;
+        const leer = () => new THREE.Group(); // falls ein Teil fehlt: ein unsichtbarer Ersatz
+        kopf = finde(m, 'Affe_Kopf') || leer();
+        armLinks = finde(m, 'Affe_Arm_links') || leer();
+        armRechts = finde(m, 'Affe_Arm_rechts') || leer();
+        beinLinks = finde(m, 'Affe_Bein_links') || leer();
+        beinRechts = finde(m, 'Affe_Bein_rechts') || leer();
+        m.traverse(o => { if (o.isMesh && grundName(o.material.name || '') === 'Fell') fell = o.material; });
+      }
+    }
 
     // --- Alle Blöcke der Welt landen in dieser Liste ---
     // Jeder Block: x/z = Mitte, b = Breite, t = Tiefe, unten/oben = Höhe von Unterkante und Oberkante,
@@ -459,8 +544,12 @@
     const pilzPunkt = new THREE.MeshStandardMaterial({ color: 0xffffff });
 
     // Tannenbaum: Stamm + 3 Kegel übereinander
+    // Bäume aus Blender bekommen leicht unterschiedliche Helligkeit, damit der Wald lebendig aussieht
+    const helligkeit = (x, z) => new THREE.Color().setScalar(0.8 + 0.25 * ((Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1 + 1) % 1);
+    const TANNE_GROESSE = modellGroesse('Tanne'), LAUBBAUM_GROESSE = modellGroesse('Laubbaum');
     function tanne(x, z, groesse) {
       const blatt = BLATT_FARBEN[Math.floor(zufall() * BLATT_FARBEN.length)];
+      if (modellAlsInstanz('Tanne', x, 0, z, (x * 7.3 + z) % (Math.PI * 2), groesse, helligkeit(x, z))) return TANNE_GROESSE.y * groesse;
       instanz(stammForm, stammFarbe, x, 0.6 * groesse, z, groesse, 1.2 * groesse, groesse);
       for (let i = 0; i < 3; i++) {
         const breite = (1.4 - i * 0.35) * groesse;
@@ -471,6 +560,10 @@
     // Laubbaum: Stamm + mehrere dicke Blätter-Kugeln
     function laubbaum(x, z, groesse) {
       const blatt = BLATT_FARBEN[Math.floor(zufall() * BLATT_FARBEN.length)];
+      if (modellAlsInstanz('Laubbaum', x, 0, z, (x * 7.3 + z) % (Math.PI * 2), groesse, helligkeit(x, z))) {
+        for (let i = 0; i < 6; i++) zufall(); // gleich viele Zufallszahlen wie unten, damit der Wald gleich bleibt
+        return LAUBBAUM_GROESSE.y * groesse;
+      }
       instanz(stammForm, stammFarbe, x, 1.1 * groesse, z, groesse, 2.2 * groesse, groesse);
       instanz(kugelForm, blattMaterial, x, 2.9 * groesse, z, 1.3 * groesse, 1.1 * groesse, 1.3 * groesse, 0, blatt);
       for (let i = 0; i < 3; i++) {
@@ -496,11 +589,13 @@
     const lampenLicht = new THREE.MeshStandardMaterial({ color: 0xfff59d, emissive: 0xffeb3b, emissiveIntensity: 1.5 });
     const mastForm = new THREE.CylinderGeometry(0.09, 0.12, 1, 8);
     function laterne(x, z, armX, armZ) {
+      bloecke.push({ x, z, b: 0.3, t: 0.3, unten: 0, oben: 4, art: 'block' });         // Mast ist fest
+      // Laterne aus Blender? Ihr Arm zeigt dort nach rechts (+x) – hier drehen wir sie zur Straße.
+      if (modellAlsInstanz('Laterne', x, 0, z, Math.atan2(-armZ, armX))) return;
       instanz(mastForm, mastFarbe, x, 2, z, 1, 4, 1);                                   // Mast (4 hoch)
       instanz(mastForm, mastFarbe, x + armX * 0.5, 3.95, z + armZ * 0.5, 0.6, 1, 0.6, 0, null, true,
               armZ * Math.PI / 2, -armX * Math.PI / 2);                                 // Arm zur Straße
       instanz(kugelForm, lampenLicht, x + armX, 3.85, z + armZ, 0.22, 0.15, 0.22, 0, null, false); // Lampe
-      bloecke.push({ x, z, b: 0.3, t: 0.3, unten: 0, oben: 4, art: 'block' });         // Mast ist fest
     }
     const nahAnKnoten = (x, z, r) => [...knotenListe.values()].some(k => Math.hypot(k.x - x, k.z - z) < r);
     const RAND = HALB + 0.8; // Abstand der Laternen von der Straßenmitte
@@ -549,9 +644,24 @@
         const rx = -dz, rz = dx;                                       // rechts davon
         const x = k.x - dx * (k.hw + 0.9) + rx * (k.hw + 0.9);
         const z = k.z - dz * (k.hw + 0.9) + rz * (k.hw + 0.9);
-        instanz(mastForm, mastFarbe, x, 1.6, z, 1, 3.2, 1);
         bloecke.push({ x, z, b: 0.3, t: 0.3, unten: 0, oben: 3.2, art: 'block' });
+        const achse = dx !== 0 ? 'ew' : 'ns';
+        // Haltelinie auf der Fahrspur
+        const hx = k.x - dx * (k.hw + 0.6) + rx * SPUR, hz = k.z - dz * (k.hw + 0.6) + rz * SPUR;
+        flach(linie, hx, hz, dx !== 0 ? 0.35 : HALB - 0.4, dx !== 0 ? HALB - 0.4 : 0.35, 0.035);
+        // Ampel aus Blender? Die drei Lampen müssen dort "Ampel_Licht_rot", "_gelb" und "_gruen" heißen.
+        const m = modell('Ampel');
+        const blenderLampen = m && { rot: finde(m, 'Ampel_Licht_rot'), gelb: finde(m, 'Ampel_Licht_gelb'), gruen: finde(m, 'Ampel_Licht_gruen') };
+        if (blenderLampen && blenderLampen.rot && blenderLampen.gelb && blenderLampen.gruen) {
+          m.position.set(x, 0, z);
+          m.rotation.y = Math.atan2(-dx, -dz);
+          szene.add(m);
+          ampelKoepfe.push({ k, achse, lampen: blenderLampen });
+          continue;
+        }
+        instanz(mastForm, mastFarbe, x, 1.6, z, 1, 3.2, 1);
         const kopf = new THREE.Group();
+        kopf.name = 'Ampel_Kopf';
         kopf.position.set(x, 3.6, z);
         kopf.rotation.y = Math.atan2(-dx, -dz); // schaut den Autos entgegen
         const kasten = new THREE.Mesh(einheitsKiste, ampelKasten);
@@ -560,15 +670,13 @@
         const lampen = {};
         ['rot', 'gelb', 'gruen'].forEach((farbe, i) => {
           const l = new THREE.Mesh(lampenForm, ampelAus[farbe]);
+          l.name = 'Ampel_Licht_' + farbe;
           l.position.set(0, 0.38 - i * 0.38, 0.16);
           kopf.add(l);
           lampen[farbe] = l;
         });
         szene.add(kopf);
-        ampelKoepfe.push({ k, achse: dx !== 0 ? 'ew' : 'ns', lampen });
-        // Haltelinie auf der Fahrspur
-        const hx = k.x - dx * (k.hw + 0.6) + rx * SPUR, hz = k.z - dz * (k.hw + 0.6) + rz * SPUR;
-        flach(linie, hx, hz, dx !== 0 ? 0.35 : HALB - 0.4, dx !== 0 ? HALB - 0.4 : 0.35, 0.035);
+        ampelKoepfe.push({ k, achse, lampen });
       }
     }
     function ampelnZeigen(zeit) {
@@ -592,7 +700,12 @@
           if (nahAnStrasse(x, z, Math.max(b, t) / 2 + 1.5)) continue;
           const hoch = zufall() < 0.25; // manche sind Hochhäuser
           const h = hoch ? zwischen(12, 22) : zwischen(4, 7);
-          instanz(einheitsKiste, hausMaterial, x, h / 2, z, b, h, t, 0, HAUS_FARBEN[Math.floor(zufall() * HAUS_FARBEN.length)]);
+          const wandFarbe = HAUS_FARBEN[Math.floor(zufall() * HAUS_FARBEN.length)];
+          bloecke.push({ x, z, b, t, unten: 0, oben: h, art: 'block' });
+          haeuser.push({ x, z, b, t });
+          // Kleine Häuser aus Blender: das Modell "Haus" (8 breit, 6 hoch, 8 tief) wird passend gestreckt
+          if (!hoch && modellAlsInstanz('Haus', x, 0, z, 0, [b / 8, h / 6, t / 8])) { zufall(); continue; }
+          instanz(einheitsKiste, hausMaterial, x, h / 2, z, b, h, t, 0, wandFarbe);
           if (!hoch) {
             instanz(dachForm, dachMaterial, x, h + 1.5, z, b * 0.75, 3, t * 0.75, Math.PI / 4, zufall() < 0.5 ? 0xb71c1c : 0x5d4037);
           } else {
@@ -608,8 +721,6 @@
             }
           }
           instanz(einheitsKiste, tuerMaterial, x, 1, z - t / 2 - 0.03, 1.2, 2, 0.06, 0, null, false); // Tür
-          bloecke.push({ x, z, b, t, unten: 0, oben: h, art: 'block' });
-          haeuser.push({ x, z, b, t });
         }
       }
     }
@@ -642,9 +753,10 @@
       if (nahAnStrasse(x, z, 0.5)) continue;
       if (zufall() < 0.65) {
         const s = zwischen(0.4, 0.8);
-        instanz(kugelForm, busch, x, s * 0.5, z, s, s * 0.8, s);
+        if (!modellAlsInstanz('Busch', x, 0, z, x % 6, s)) instanz(kugelForm, busch, x, s * 0.5, z, s, s * 0.8, s);
       } else {
         const s = zwischen(0.6, 1.1);
+        if (modellAlsInstanz('Pilz', x, 0, z, x % 6, s)) continue;
         instanz(stammForm, pilzPunkt, x, 0.12 * s, z, 0.35 * s, 0.25 * s, 0.35 * s, 0, null, false); // Stiel
         instanz(kugelForm, pilzHut, x, 0.27 * s, z, 0.22 * s, 0.12 * s, 0.22 * s, 0, null, false);  // roter Hut
         instanz(kugelForm, pilzPunkt, x + 0.08 * s, 0.36 * s, z, 0.03 * s, 0.03 * s, 0.03 * s, 0, null, false);
@@ -666,10 +778,11 @@
     ];
     let regenbogen = false;
 
-    function fellFarbeSetzen(wert) {
+    // Die Farbe aus der Kabine geht vor die Farbe aus Blender – aber nur, wenn wirklich geklickt wurde
+    function fellFarbeSetzen(wert, merken = false) {
       regenbogen = wert === 'regenbogen';
       if (!regenbogen) fell.color.set(wert);
-      try { localStorage.setItem('affenFarbe', String(wert)); } catch (e) {} // Farbe merken
+      if (merken) try { localStorage.setItem('affenFarbeGewaehlt', String(wert)); } catch (e) {} // Farbe merken
       for (const knopf of farbKnoepfe) knopf.classList.toggle('gewaehlt', knopf.dataset.wert === String(wert));
     }
 
@@ -686,16 +799,16 @@
         : '#' + wert.toString(16).padStart(6, '0');
       knopf.innerHTML = `<span>${name}</span>`;
       knopf.addEventListener('mousedown', (e) => e.preventDefault()); // Knopf soll die Tastatur nicht "klauen"
-      knopf.addEventListener('click', () => fellFarbeSetzen(wert));
+      knopf.addEventListener('click', () => fellFarbeSetzen(wert, true));
       farbFeld.appendChild(knopf);
       return knopf;
     });
 
     // Gespeicherte Farbe vom letzten Mal laden
     let gespeichert = null;
-    try { gespeichert = localStorage.getItem('affenFarbe'); } catch (e) {}
+    try { gespeichert = localStorage.getItem('affenFarbeGewaehlt'); } catch (e) {}
     const gefunden = FELL_FARBEN.find(([, wert]) => String(wert) === gespeichert);
-    fellFarbeSetzen(gefunden ? gefunden[1] : 0x3b2314);
+    if (gefunden) fellFarbeSetzen(gefunden[1]); // sonst bleibt die Fellfarbe aus Blender (oder dunkelbraun)
 
     // ================= OBBY =================
     // Startet hinten am Ende der Wiese (z = -25) und geht über den Abgrund.
@@ -879,11 +992,22 @@
     const muenzFarbe = new THREE.MeshStandardMaterial({
       color: 0xffd700, emissive: 0x664400, metalness: 0.3, roughness: 0.3
     });
+    muenzFarbe.name = 'Gold';
+    // Jede Münze ist ein Halter am Boden; darin die Münze (aus Blender: "Muenze", sonst selbst gebaut)
     const muenzen = muenzOrte.map(([x, z, h]) => {
-      const muenze = new THREE.Mesh(muenzForm, muenzFarbe);
-      muenze.rotation.x = Math.PI / 2; // hochkant stellen
-      muenze.position.set(x, h + 0.8, z);
-      muenze.castShadow = true;
+      const muenze = new THREE.Group();
+      muenze.position.set(x, h, z);
+      muenze.userData.mitte = new THREE.Vector3(x, h + 0.8, z); // hier wird eingesammelt
+      const m = modell('Muenze');
+      if (m) muenze.add(m);
+      else {
+        const scheibe = new THREE.Mesh(muenzForm, muenzFarbe);
+        scheibe.name = 'Muenze_Scheibe';
+        scheibe.rotation.x = Math.PI / 2; // hochkant stellen
+        scheibe.position.y = 0.8;
+        scheibe.castShadow = true;
+        muenze.add(scheibe);
+      }
       szene.add(muenze);
       return muenze;
     });
@@ -978,6 +1102,10 @@
       f.karosserie.add(lenkHalter);
       const drehHalter = new THREE.Group();
       lenkHalter.add(drehHalter);
+      // Namen, damit das Spiel die Räder auch im Blender-Modell findet
+      const nummer = f.raeder.length + 1;
+      lenkHalter.name = `${f.name}_Achse_${vorne ? 'vorne' : 'hinten'}_${nummer}`;
+      drehHalter.name = `${f.name}_Rad_${vorne ? 'vorne' : 'hinten'}_${nummer}`;
       const reifenMesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, breite, 18), reifen);
       reifenMesh.rotation.z = Math.PI / 2;
       reifenMesh.castShadow = true;
@@ -1068,6 +1196,7 @@
       const f = { ...FAHRZEUG_TYPEN[typ], typ, x, z, richtung, tempo: 0, lenkung: 0, raeder: [] };
       f.gruppe = new THREE.Group();
       f.karosserie = new THREE.Group(); // darin ist alles, was sich (beim Motorrad) zur Seite neigt
+      f.karosserie.name = `${f.name}_Karosserie`;
       f.gruppe.add(f.karosserie);
       szene.add(f.gruppe);
       bauen(typ, f.karosserie);
@@ -1076,6 +1205,21 @@
       if (typ === 'monster')  { for (const s of [-1, 1]) { rad(f, 0.8, 0.65, s * 1.2, 0.8, 1.35, true); rad(f, 0.8, 0.65, s * 1.2, 0.8, -1.35, false); } lichter(f, 0.6, 1.5, 1.91, -1.91); }
       if (typ === 'motorrad') { rad(f, 0.36, 0.16, 0, 0.36, 0.8, true); rad(f, 0.36, 0.2, 0, 0.36, -0.8, false); }
       if (typ === 'kart')     { for (const s of [-1, 1]) { rad(f, 0.22, 0.22, s * 0.65, 0.22, 0.7, true); rad(f, 0.25, 0.28, s * 0.65, 0.25, -0.7, false); } }
+      // Gibt es das Fahrzeug in Blender? Dann dieses Modell nehmen (Räder heißen dort z. B. "Cabrio_Rad_vorne_1")
+      const m = modell(f.name);
+      const neueKarosserie = m && finde(m, `${f.name}_Karosserie`);
+      if (neueKarosserie) {
+        f.gruppe.remove(f.karosserie);
+        f.gruppe.add(m);
+        f.karosserie = neueKarosserie;
+        f.raeder = [];
+        m.traverse(o => {
+          const n = grundName(o.name);
+          if (!n.startsWith(`${f.name}_Rad_`)) return;
+          const r = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y / 2 || 0.3;
+          f.raeder.push({ lenkHalter: o.parent, drehHalter: o, r, vorne: n.includes('vorne') });
+        });
+      }
       f.gruppe.traverse(m => { if (m.isMesh) m.castShadow = true; });
       fahrzeugZeigen(f);
       fahrzeuge.push(f);
@@ -1260,13 +1404,35 @@
       gruppe.add(m);
       return m;
     }
+    const VERKEHR_NAMEN = { limo: 'Auto', van: 'Kleinbus', bus: 'Bus', laster: 'Laster' }; // so heißen sie in Blender
     function verkehrsAutoBauen(art, farbe) {
       const g = new THREE.Group();
-      const lack = new THREE.MeshStandardMaterial({ color: farbe, metalness: 0.3, roughness: 0.45 });
+      const name = VERKEHR_NAMEN[art];
+      const lack = new THREE.MeshStandardMaterial({ color: farbe, metalness: 0.3, roughness: 0.45, name: 'Lack' });
       const a = ARTEN[art];
       const raeder = [];
+      // Gibt es das Fahrzeug in Blender? Dann das Modell nehmen. Alles mit dem Material "Lack" bekommt
+      // eine zufällige Autofarbe, damit nicht alle Autos gleich aussehen. Räder heißen "Auto_Rad_1" usw.
+      const m = modell(name);
+      if (m) {
+        let eigenerLack = null;
+        m.traverse(o => {
+          if (o.isMesh && grundName(o.material.name || '').startsWith('Lack')) {
+            eigenerLack ??= o.material.clone();
+            eigenerLack.color.set(farbe);
+            o.material = eigenerLack;
+          }
+          if (grundName(o.name).startsWith(`${name}_Rad_`)) {
+            raeder.push({ halter: o, r: new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y / 2 || 0.4 });
+          }
+        });
+        g.add(m);
+        szene.add(g);
+        return { gruppe: g, raeder };
+      }
       const rad = (x, z, r) => {
         const halter = new THREE.Group();
+        halter.name = `${name}_Rad_${raeder.length + 1}`;
         halter.position.set(x, r, z);
         const m = new THREE.Mesh(radForm, reifen);
         m.scale.set(r, 0.3, r);
@@ -1351,7 +1517,7 @@
       const farbe = art === 'bus' ? 0xffb300 : AUTO_FARBEN[Math.floor(zufall() * AUTO_FARBEN.length)];
       const auto = { art, ...a, x, z, richtung: Math.atan2(d.x, d.z), tempo: 0,
                      maxTempo: zwischen(a.tempo[0], a.tempo[1]), wartet: 0, draengelnBis: 0, hupteUm: 0,
-                     ...verkehrsAutoBauen(art, farbe) };
+                     farbe, ...verkehrsAutoBauen(art, farbe) };
       wegPlanen(auto, A, B);
       verkehr.push(auto);
     }
@@ -1471,7 +1637,7 @@
     function karteMalen(blick) {
       kartenPinsel.drawImage(kartenHintergrund, 0, 0);
       for (const a of verkehr) { // Autos als kleine Punkte
-        kartenPinsel.fillStyle = '#' + a.gruppe.children[0].material.color.getHexString();
+        kartenPinsel.fillStyle = '#' + a.farbe.toString(16).padStart(6, '0');
         kartenPinsel.fillRect(kx2(a.x) - 1.5, kz2(a.z) - 1.5, 3, 3);
       }
       // Der Affe (oder sein Fahrzeug) als Pfeil
@@ -1660,10 +1826,10 @@
           if (spielZeit >= muenze.userData.kommtWiederUm) muenze.visible = true;
           continue;
         }
-        muenze.rotation.z += 3 * dt; // drehen
+        muenze.rotation.y += 3 * dt; // drehen
         const abstand = aktuellesFahrzeug
-          ? Math.hypot(muenze.position.x - aktuellesFahrzeug.x, muenze.position.z - aktuellesFahrzeug.z) + (muenze.position.y > 3 ? 99 : 0)
-          : muenze.position.distanceTo(p);
+          ? Math.hypot(muenze.position.x - aktuellesFahrzeug.x, muenze.position.z - aktuellesFahrzeug.z) + (muenze.userData.mitte.y > 3 ? 99 : 0)
+          : muenze.userData.mitte.distanceTo(p);
         if (abstand < sammelAbstand) {
           muenze.visible = false;  // Münze verschwindet (nur versteckt)
           muenze.userData.kommtWiederUm = spielZeit + WIEDERKOMMEN_NACH;
@@ -1694,6 +1860,41 @@
 
       renderer.render(szene, kamera);
     }
+    // ================= LIVE-VERBINDUNG ZU BLENDER =================
+    // Alle 2 Sekunden schaut das Spiel nach, ob Blender neue Modelle gespeichert hat.
+    // Wenn ja: Spielstand merken, Seite neu laden, Spielstand wiederherstellen.
+    let modellStempel = null;
+    async function modellStempelHolen() {
+      try {
+        const antwort = await fetch(MODELL_DATEI, { method: 'HEAD', cache: 'no-store' });
+        return antwort.ok ? (antwort.headers.get('etag') || antwort.headers.get('last-modified')) : 'keine';
+      } catch (e) { return null; } // z. B. wenn das Spiel ohne Server läuft
+    }
+    modellStempel = await modellStempelHolen();
+    setInterval(async () => {
+      const neu = await modellStempelHolen();
+      if (neu && modellStempel && neu !== modellStempel) {
+        try {
+          sessionStorage.setItem('spielstand', JSON.stringify({
+            x: affe.position.x, y: affe.position.y, z: affe.position.z,
+            punkte, kameraWinkel, kameraNeigung, blickRichtung,
+          }));
+        } catch (e) {}
+        location.reload();
+      }
+    }, 2000);
+    // Nach dem Neuladen: da weitermachen, wo man war
+    try {
+      const stand = JSON.parse(sessionStorage.getItem('spielstand') || 'null');
+      if (stand) {
+        sessionStorage.removeItem('spielstand');
+        affe.position.set(stand.x, stand.y, stand.z);
+        punkte = stand.punkte; punkteZeigen();
+        kameraWinkel = stand.kameraWinkel; kameraNeigung = stand.kameraNeigung; blickRichtung = stand.blickRichtung;
+        zeigeMeldung('🎨 Neue Modelle aus Blender!', 2.5);
+      }
+    } catch (e) {}
+
     renderer.setAnimationLoop(spielSchleife); // ruft spielSchleife bei jedem Bild auf
 
     // Wenn das Fenster größer/kleiner wird, Bild anpassen
