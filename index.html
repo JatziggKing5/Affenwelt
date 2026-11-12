@@ -20,7 +20,7 @@
   </script>
 </head>
 <body>
-  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera drehen · Leertaste: springen</div>
+  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera drehen · Leertaste: springen (2× = Doppelsprung)</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -124,6 +124,7 @@
     const tasten = {};
     addEventListener('keydown', (e) => {
       tasten[e.code] = true;
+      if (e.code === 'Space' && !e.repeat) sprungGedrueckt = true; // nur neues Drücken zählt, nicht Gedrückthalten
       if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault(); // Seite nicht scrollen
     });
     addEventListener('keyup', (e) => { tasten[e.code] = false; });
@@ -133,6 +134,9 @@
     const SPRUNGKRAFT = 7;    // wie stark er springt
     const SCHWERKRAFT = 20;   // wie stark er nach unten fällt
     let fallTempo = 0;        // aktuelle Geschwindigkeit nach oben/unten
+    const MAX_SPRUENGE = 2;   // 2 = Doppelsprung
+    let sprungZaehler = 0;    // wie oft er seit dem letzten Landen gesprungen ist
+    let sprungGedrueckt = false;
     const RAND = BODEN_GROESSE / 2 - 0.5;
 
     // --- Kamera-Werte ---
@@ -170,9 +174,17 @@
       // Wo ist unter dem Würfel fester Boden? (Gras oder Oberseite eines Blocks)
       const standHoehe = bodenHoehe(p.x, p.y, p.z) + 0.5;
 
-      // Springen: nur wenn der Würfel auf etwas steht
-      const amBoden = p.y <= standHoehe + 0.001;
-      if (tasten.Space && amBoden) fallTempo = SPRUNGKRAFT;
+      // Springen: am Boden immer, in der Luft noch einmal (Doppelsprung)
+      const amBoden = p.y <= standHoehe + 0.001 && fallTempo <= 0;
+      if (amBoden) sprungZaehler = 0; // gelandet: Sprünge wieder auffüllen
+      if (sprungGedrueckt) {
+        if (amBoden) {
+          fallTempo = SPRUNGKRAFT; sprungZaehler = 1;           // erster Sprung
+        } else if (sprungZaehler < MAX_SPRUENGE) {
+          fallTempo = SPRUNGKRAFT; sprungZaehler = MAX_SPRUENGE; // zweiter Sprung in der Luft
+        }
+        sprungGedrueckt = false;
+      }
 
       // Schwerkraft zieht ihn wieder herunter, bis er auf etwas landet
       fallTempo -= SCHWERKRAFT * dt;
