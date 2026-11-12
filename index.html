@@ -2014,11 +2014,12 @@
     tanzKnopf.addEventListener('click', e => { e.stopPropagation(); tanzRadOffen ? tanzRadZu() : tanzRadAuf(false); });
     function tanzLos(i) {
       tanz = TAENZE[i]; tanzStart = spielZeit; tanzNaechsterTakt = spielZeit;
+      musikLautstaerke();
       zeigeMeldung(`${tanz.emoji} ${tanz.name}!`, 1.5);
     }
     function tanzStoppen() {
       if (!tanz) return;
-      tanz = null;
+      tanz = null; musikLautstaerke();
       tanzEnde({ armL: armLinks, armR: armRechts, beinL: beinLinks, beinR: beinRechts, kopf, figur });
     }
     // Ein kleiner Beat zum Tanzen (Bumm – tss – Bumm – tss)
@@ -2324,6 +2325,106 @@
       if (!tonHaupt) { tonHaupt = tonMaschine.createGain(); tonHaupt.gain.value = EINST.laut; tonHaupt.connect(tonMaschine.destination); }
       return tonHaupt;
     }
+    // --- Geräusche: kleine Töne, alle im Browser gebaut (keine Sound-Dateien nötig) ---
+    let letzterKlang = {};
+    function ton(frequenz, bis, dauer, art = 'sine', lautstaerke = 0.15, start = 0) {
+      const t = tonMaschine.currentTime + start;
+      const o = tonMaschine.createOscillator(), g = tonMaschine.createGain();
+      o.type = art; o.frequency.setValueAtTime(frequenz, t);
+      if (bis) o.frequency.exponentialRampToValueAtTime(bis, t + dauer);
+      g.gain.setValueAtTime(lautstaerke, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dauer);
+      o.connect(g).connect(tonAusgang()); o.start(t); o.stop(t + dauer + 0.02);
+    }
+    function rauschen(dauer, filter, lautstaerke, start = 0) {
+      const t = tonMaschine.currentTime + start;
+      const puffer = tonMaschine.createBuffer(1, Math.ceil(44100 * dauer), 44100), d = puffer.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+      const q = tonMaschine.createBufferSource(), fi = tonMaschine.createBiquadFilter(), g = tonMaschine.createGain();
+      fi.type = filter[0]; fi.frequency.value = filter[1]; g.gain.value = lautstaerke;
+      q.buffer = puffer; q.connect(fi).connect(g).connect(tonAusgang()); q.start(t);
+    }
+    function klang(art) {
+      try {
+        tonAusgang();
+        const jetzt = performance.now();
+        if (jetzt - (letzterKlang[art] || 0) < 45) return;   // nicht zu oft hintereinander (Minigun!)
+        letzterKlang[art] = jetzt;
+        switch (art) {
+          case 'muenze':  ton(988, 0, 0.09, 'square', 0.06); ton(1319, 0, 0.25, 'square', 0.06, 0.08); break;
+          case 'sprung':  ton(280, 620, 0.16, 'sine', 0.12); break;
+          case 'sprung2': ton(450, 950, 0.18, 'sine', 0.12); break;
+          case 'schuss':  ton(750, 180, 0.09, 'triangle', 0.12); rauschen(0.05, ['highpass', 2000], 0.05); break;
+          case 'kasse':   ton(1568, 0, 0.08, 'square', 0.05); ton(2093, 0, 0.3, 'square', 0.05, 0.07); rauschen(0.15, ['highpass', 5000], 0.06, 0.07); break;
+          case 'schritt': rauschen(0.06, ['lowpass', 500], 0.12); break;
+          case 'erfolg':  [523, 659, 784, 1047].forEach((f, i) => ton(f, 0, i === 3 ? 0.5 : 0.15, 'square', 0.06, i * 0.1)); break;
+          case 'fehler':  ton(220, 110, 0.35, 'sawtooth', 0.07); break;
+          case 'tick':    ton(1200, 0, 0.05, 'square', 0.05); break;
+          case 'start':   ton(1568, 0, 0.4, 'square', 0.07); break;
+          case 'plopp':   ton(500, 900, 0.08, 'sine', 0.12); break;
+        }
+      } catch (e) {}
+    }
+    // Motor-Brummen: wird höher, je schneller man fährt
+    let motor = null;
+    function motorGeraeusch(f) {
+      try {
+        if (!f) { if (motor) motor.g.gain.setTargetAtTime(0, tonMaschine.currentTime, 0.1); return; }
+        tonAusgang();
+        if (!motor) {
+          const o = tonMaschine.createOscillator(), fi = tonMaschine.createBiquadFilter(), g = tonMaschine.createGain();
+          o.type = 'sawtooth'; fi.type = 'lowpass'; fi.frequency.value = 600; g.gain.value = 0;
+          o.connect(fi).connect(g).connect(tonAusgang()); o.start();
+          motor = { o, g };
+        }
+        const anteil = Math.min(1, Math.abs(f.tempo) / f.maxTempo);
+        const t = tonMaschine.currentTime;
+        motor.o.frequency.setTargetAtTime((f.typ === 'rakete' ? 70 : 45) + anteil * (f.typ === 'motorrad' ? 160 : 110), t, 0.08);
+        motor.g.gain.setTargetAtTime(0.035 + anteil * 0.03, t, 0.1);
+      } catch (e) {}
+    }
+    // --- Hintergrundmusik: eine kleine fröhliche Melodie, die sich wiederholt ---
+    let musik = null;                     // { g, naechste, schritt }
+    const MUSIK_TAG = [[60, 64, 67], [57, 60, 64], [53, 57, 60], [55, 59, 62]];     // C – Am – F – G
+    const MUSIK_NACHT = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [52, 55, 59]];   // ruhiger, etwas geheimnisvoll
+    let musikNacht = false;
+    const midi = n => 440 * Math.pow(2, (n - 69) / 12);
+    function musikLautstaerke() {
+      if (!musik) return;
+      const leise = tanz ? 0 : 1;                       // beim Tanzen läuft der Tanz-Beat statt der Musik
+      musik.g.gain.setTargetAtTime(EINST.musik * 0.5 * leise, tonMaschine.currentTime, 0.3);
+    }
+    function musikStarten() {
+      if (musik) return;
+      try {
+        tonAusgang();
+        if (tonMaschine.state === 'suspended') tonMaschine.resume();
+        const g = tonMaschine.createGain(); g.gain.value = 0; g.connect(tonAusgang());
+        musik = { g, naechste: tonMaschine.currentTime + 0.1, schritt: 0 };
+        musikLautstaerke();
+        setInterval(musikPlanen, 100);
+      } catch (e) {}
+    }
+    function musikPlanen() {                            // plant die Töne der nächsten 0,3 Sekunden
+      if (!musik || EINST.musik <= 0) { if (musik) musik.naechste = tonMaschine.currentTime + 0.1; return; }
+      const achtel = 60 / (musikNacht ? 84 : 104) / 2;
+      while (musik.naechste < tonMaschine.currentTime + 0.3) {
+        const t = musik.naechste, nr = musik.schritt;
+        const akkord = (musikNacht ? MUSIK_NACHT : MUSIK_TAG)[Math.floor(nr / 8) % 4];
+        const spiele = (frequenz, dauer, art, laut) => {
+          const o = tonMaschine.createOscillator(), g = tonMaschine.createGain();
+          o.type = art; o.frequency.value = frequenz;
+          g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(laut, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dauer);
+          o.connect(g).connect(musik.g); o.start(t); o.stop(t + dauer + 0.05);
+        };
+        // Arpeggio: die Töne des Akkords nacheinander
+        spiele(midi(akkord[[0, 1, 2, 1, 0, 2, 1, 2][nr % 8]] + 12), achtel * 1.6, 'triangle', 0.08);
+        if (nr % 4 === 0) spiele(midi(akkord[0] - 12), achtel * 3.5, 'sine', 0.16);   // Bass
+        if (!musikNacht && nr % 16 === 14) spiele(midi(akkord[2] + 24), achtel * 2, 'sine', 0.04); // kleines Glitzern
+        musik.naechste += achtel; musik.schritt++;
+      }
+    }
+    // Musik startet beim ersten Tastendruck oder Tippen (vorher erlaubt der Browser keinen Ton)
+    for (const ev of ['keydown', 'pointerdown']) addEventListener(ev, musikStarten, { once: true });
     function hupen(hoehe) {
       try {
         tonMaschine ??= new AudioContext();
@@ -3279,7 +3380,7 @@
       if (ware === 'pistole' && inventar.pistole) ware = 'munition';
       if (ware === 'zielfernrohr' && inventar.zielfernrohr) return;
       if (punkte < PREISE[ware]) { zeigeMeldung(`Zu wenig Punkte! (${PREISE[ware]} nötig)`, 1.5); return; }
-      punkte -= PREISE[ware];
+      punkte -= PREISE[ware]; klang('kasse');
       punkteZeigen();
       if (ware === 'pistole') { inventar.pistole = true; inventar.munition += 10; auswahl = 1; zeigeMeldung('🍌🔫 Bananen-Pistole gekauft! Taste 1', 2); }
       if (ware === 'munition') { inventar.munition += 10; zeigeMeldung('🍌 +10 Schuss', 1.5); }
@@ -3356,6 +3457,7 @@
       const g = { mesh: m, vx: r.x * tempo, vy: r.y * tempo, vz: r.z * tempo, leben, art };
       geschosse.push(g);
       eigeneBananeGeschossen(g); // auch die Mitspieler sehen die Banane
+      klang('schuss');
     }
     // Wohin wird gezielt? Beim Zielen: Fadenkreuz. Sonst: dahin, wo der Affe schaut. "streuung" = etwas ungenau
     function schussRichtung(streuung = 0) {
@@ -3787,7 +3889,7 @@
       if (kleider.an[stueck.kat] === stueck.id) { ausziehen(stueck.kat); }
       else if (kleider.besitz.has(stueck.id)) { anziehen(stueck.id); }
       else if (punkte >= stueck.preis) {
-        punkte -= stueck.preis; punkteZeigen();
+        punkte -= stueck.preis; punkteZeigen(); klang('kasse');
         kleider.besitz.add(stueck.id);
         anziehen(stueck.id);
         hupen(1300);
@@ -4025,6 +4127,7 @@
         if (sprungGedrueckt) { hupen(f.hupe); sprungGedrueckt = false; } // Leertaste = hupen
         if (f.vorherX === undefined) { f.vorherX = f.x; f.vorherZ = f.z; }
         fahren(f, dt);
+        motorGeraeusch(f);
         ausfahrtPruefen(f);                       // aus dem Geheimversteck hinausfahren
         // --- Verbotenes beim Fahren? ---
         // Über eine rote Ampel in die Kreuzung gefahren?
@@ -4074,6 +4177,7 @@
         let vor   = (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0); // W = nach vorne, S = nach hinten
         let seite = (tasten.KeyD ? 1 : 0) - (tasten.KeyA ? 1 : 0); // D = nach rechts, A = nach links
         if (stick.aktiv) { vor = stick.y; seite = stick.x; }        // Handy: Joystick (auch halb gedrückt = langsamer)
+        if (motor) motorGeraeusch(null);
         const liegt = spielZeit < selbstLiegtBis;                   // von einer Banane getroffen: nicht bewegen
         if (liegt) { vor = 0; seite = 0; sprungGedrueckt = false; sprungGedruecktUm = -1; }
         const sin = Math.sin(kameraWinkel), cos = Math.cos(kameraWinkel);
@@ -4105,9 +4209,9 @@
         const darfAbspringen = amBoden || (sprungZaehler === 0 && spielZeit - zuletztAufBodenUm < 0.12);
         if (sprungGewuenscht) {
           if (darfAbspringen) {
-            fallTempo = SPRUNGKRAFT; sprungZaehler = 1; sprungGedruecktUm = -1; // erster Sprung
+            fallTempo = SPRUNGKRAFT; sprungZaehler = 1; sprungGedruecktUm = -1; klang('sprung'); // erster Sprung
           } else if (sprungZaehler < MAX_SPRUENGE && sprungGedrueckt) {
-            fallTempo = SPRUNGKRAFT; sprungZaehler = MAX_SPRUENGE; sprungGedruecktUm = -1; // zweiter Sprung in der Luft
+            fallTempo = SPRUNGKRAFT; sprungZaehler = MAX_SPRUENGE; sprungGedruecktUm = -1; klang('sprung2'); // zweiter Sprung in der Luft
           }
         }
         sprungGedrueckt = false;
@@ -4134,7 +4238,9 @@
         affe.rotation.y = blickRichtung;
 
         // Lustiges Wackeln: beim Laufen schwingen Arme und Beine, der Kopf wackelt
+        const schrittVorher = Math.floor(laufZeit / Math.PI);
         laufZeit += dt * (laeuft ? 4 + tempo * 1.7 : 3);         // schneller laufen = schneller schwingen
+        if (laeuft && amBoden && Math.floor(laufZeit / Math.PI) !== schrittVorher) klang('schritt'); // tapp, tapp
         const schwung = laeuft ? Math.min(1.1, 0.2 + tempo * 0.1) : 0.1;
         armLinks.rotation.x  =  Math.sin(laufZeit) * schwung;
         armRechts.rotation.x = -Math.sin(laufZeit) * schwung;
@@ -4241,7 +4347,7 @@
           muenze.visible = false;  // Münze verschwindet (nur versteckt)
           muenze.userData.kommtWiederUm = spielZeit + WIEDERKOMMEN_NACH;
           punkte += PUNKTE_PRO_MUENZE;
-          punkteZeigen();
+          punkteZeigen(); klang('muenze');
         }
       }
 
