@@ -9,13 +9,46 @@
     canvas { touch-action: none; }
     button { touch-action: manipulation; }
     #hilfe {
-      position: fixed; top: 12px; left: 12px; padding: 8px 12px;
-      background: rgba(0,0,0,0.5); color: #fff; border-radius: 8px; font-size: 14px;
-      max-width: calc(100vw - 310px); /* Platz lassen für Mehrspieler-Knopf und Punkte oben rechts */
+      position: fixed; top: 12px; left: 12px; padding: 8px 12px; z-index: 6; cursor: pointer;
+      background: rgba(0,0,0,0.55); color: #fff; border-radius: 10px; font-size: 15px; font-weight: bold;
+      border: 2px solid rgba(255,255,255,0.5);
     }
-    #hilfe.zu { max-width: none; cursor: pointer; }
-    #hilfe.zu .text { display: none; }
-    #hilfe:not(.zu) .knopf { display: none; }
+    #hilfe.neu { animation: wackeln 1.2s ease-in-out infinite; background: #ffd600; color: #000; }
+    @keyframes wackeln { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+    /* --- Menü: Hilfe + Einstellungen --- */
+    #menue {
+      position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.45);
+    }
+    #menue.offen { display: flex; }
+    #menue .fenster {
+      width: min(640px, calc(100vw - 24px)); max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden; box-sizing: border-box;
+      background: rgba(20, 30, 50, 0.97); color: #fff; border-radius: 18px; padding: 14px 18px 18px; position: relative;
+    }
+    #menue .reiter { display: flex; gap: 8px; margin: 0 40px 12px 0; }
+    #menue .reiter button {
+      flex: 1; padding: 10px; font-size: 16px; font-weight: bold; border: none; border-radius: 10px; cursor: pointer;
+      background: rgba(255,255,255,0.12); color: #fff;
+    }
+    #menue .reiter button.an { background: #ffd600; color: #000; }
+    #menue .zu { position: absolute; top: 12px; right: 12px; width: 38px; height: 38px; border-radius: 50%; border: none; font-size: 20px; cursor: pointer; background: rgba(255,255,255,0.2); color: #fff; }
+    #menue .seite { display: none; }
+    #menue .seite.an { display: block; }
+    #menue .gruppe { background: rgba(255,255,255,0.07); border-radius: 12px; padding: 8px 12px; margin: 0 0 10px; }
+    #menue .gruppe h3 { margin: 2px 0 6px; font-size: 17px; }
+    #menue .zeile { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; font-size: 14px; border-top: 1px solid rgba(255,255,255,0.07); }
+    #menue .zeile:first-of-type { border-top: none; }
+    #menue kbd {
+      display: inline-block; min-width: 18px; padding: 1px 6px; margin: 0 1px; border-radius: 5px; text-align: center;
+      background: #fff; color: #000; font-family: inherit; font-weight: bold; font-size: 12px; box-shadow: 0 2px 0 #999;
+    }
+    #menue .wert { white-space: nowrap; text-align: right; }
+    #menue .einst { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; font-size: 15px; border-top: 1px solid rgba(255,255,255,0.08); }
+    #menue .einst:first-of-type { border-top: none; }
+    #menue .einst input[type=range] { width: 45%; accent-color: #ffd600; }
+    #menue .einst select { font-size: 15px; padding: 4px 8px; border-radius: 8px; }
+    #menue .einst input[type=checkbox] { width: 22px; height: 22px; accent-color: #ffd600; }
+    #menue .fuss { font-size: 12px; opacity: 0.6; text-align: center; margin-top: 8px; }
     #punkte {
       position: fixed; top: 12px; right: 12px;
       padding: 8px 16px; background: rgba(0,0,0,0.6); color: #ffd700;
@@ -348,7 +381,13 @@
     <div id="farben"></div>
     <p class="klein">Zum Verlassen einfach rauslaufen.</p>
   </div>
-  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1–5: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · Shift: rennen · Jetpack: Leertaste halten · M: Karte (Klick = Wegpunkt) · P: 👥 Mehrspieler · B halten: Tanzen 🕺 · T: Chat · V halten: Funk 🎙️ · 🚔 Nicht über Rot fahren!</div>
+  <button id="hilfe">❓ Hilfe</button>
+  <div id="menue"><div class="fenster">
+    <button class="zu" title="Schließen (Esc)">✕</button>
+    <div class="reiter"><button data-seite="hilfe" class="an">❓ Hilfe</button><button data-seite="einst">⚙️ Einstellungen</button></div>
+    <div class="seite an" data-seite="hilfe"></div>
+    <div class="seite" data-seite="einst"></div>
+  </div></div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -367,22 +406,96 @@
     const IST_HANDY = new URLSearchParams(location.search).has('handy') || matchMedia('(pointer: coarse)').matches;
     if (IST_HANDY) document.body.classList.add('handy');
     const E_TASTE = IST_HANDY ? '✋' : 'E'; // so heißt die Aktions-Taste in den Hinweisen
-    renderer.setPixelRatio(Math.min(devicePixelRatio, IST_HANDY ? 1.5 : 2)); // auf dem Handy etwas sparsamer
+    // Einstellungen (Lautstärke, Grafik, Maus) – die merkt sich der Browser. Der Spielstand wird NICHT gespeichert.
+    const EINST = { laut: 0.8, musik: 0.4, schatten: true, aufloesung: 1, sicht: 'weit', maus: 1, umkehren: false };
+    try { Object.assign(EINST, JSON.parse(localStorage.getItem('affenEinstellungen') || '{}')); } catch (e) {}
+    const einstMerken = () => { try { localStorage.setItem('affenEinstellungen', JSON.stringify(EINST)); } catch (e) {} };
+    const aufloesungSetzen = () => renderer.setPixelRatio(Math.min(devicePixelRatio, IST_HANDY ? 1.5 : 2) * EINST.aufloesung); // auf dem Handy etwas sparsamer
+    aufloesungSetzen();
     renderer.shadowMap.enabled = true;
     document.body.appendChild(renderer.domElement);
     await renderer.init(); // WebGPU starten (dauert einen Moment)
 
-    // Anzeigen, ob wirklich WebGPU läuft
+    // --- Menü: Hilfe-Übersicht und Einstellungen (H oder ❓) ---
     const hilfe = document.getElementById('hilfe');
-    hilfe.textContent += renderer.backend.isWebGPUBackend
-      ? ' · WebGPU ✓'
-      : ' · Achtung: kein WebGPU, nur WebGL';
-    // Hilfe: nach 15 Sekunden klein zusammenklappen, mit H (oder Klick) auf- und zuklappen
-    hilfe.innerHTML = `<span class="text">${hilfe.textContent} · H: Hilfe zu</span><span class="knopf">❓ H = Hilfe</span>`;
-    const hilfeUmschalten = (zu = !hilfe.classList.contains('zu')) => hilfe.classList.toggle('zu', zu);
-    setTimeout(() => hilfeUmschalten(true), 15000);
-    hilfe.addEventListener('click', () => hilfeUmschalten());
-    addEventListener('keydown', e => { if (e.code === 'KeyH' && !e.repeat) hilfeUmschalten(); });
+    const menue = document.getElementById('menue');
+    const IST_WEBGPU = renderer.backend.isWebGPUBackend;
+    const k = (...t) => t.map(x => `<kbd>${x}</kbd>`).join(' ');   // Taste hübsch anzeigen
+    // Jede Gruppe: [Überschrift, [[was, Taste], ...]] – weitere Zeilen können später dazukommen
+    const HILFE = IST_HANDY ? [
+      ['🐒 Bewegen', [['Laufen', 'Stick links'], ['Rennen', 'Stick ganz nach außen'], ['Springen / Doppelsprung', '⬆️ / 2× ⬆️'], ['Jetpack fliegen', '⬆️ halten'], ['Tanzen', '🕺 links']]],
+      ['🎥 Kamera & Karte', [['Umschauen', 'rechts wischen'], ['Große Karte', 'Karte antippen'], ['Wegpunkt setzen', 'auf große Karte tippen']]],
+      ['🚗 Fahren', [['Einsteigen / Aussteigen', '✋'], ['Gas, Bremse, Lenken', 'Stick'], ['Hupen', '📯']]],
+      ['🍌 Waffen', [['Schießen', '🔫'], ['Zielen', '🎯'], ['Rauchbombe', '💨'], ['Waffe wählen', 'Leiste oben links']]],
+      ['👥 Mehrspieler', [['Raum öffnen / beitreten', '👥'], ['Chat schreiben', '💬'], ['Funkgerät', '🎙️ halten']]],
+    ] : [
+      ['🐒 Bewegen', [['Laufen', k('W','A','S','D')], ['Rennen', k('Shift')], ['Springen / Doppelsprung', k('Leertaste') + ' / 2×'], ['Jetpack fliegen', k('Leertaste') + ' halten'], ['Tanzen', k('B') + ' halten']]],
+      ['🎥 Kamera & Karte', [['Kamera drehen', k('←','→','↑','↓')], ['Kamera mit der Maus', 'rechte Maustaste halten'], ['Große Karte', k('M')], ['Wegpunkt setzen', 'Klick auf die große Karte']]],
+      ['🚗 Fahren', [['Einsteigen / Aussteigen', k('E')], ['Gas / Bremse / Lenken', k('W','S','A','D')], ['Hupen', k('Leertaste')], ['Garage', 'an der ersten Kreuzung']]],
+      ['🍌 Waffen', [['Waffe wählen', k('1','2','3','4','5')], ['Schießen', 'Linksklick oder ' + k('F')], ['Zielen', 'rechte Maustaste oder ' + k('Z')], ['Rauchbombe', k('G')]]],
+      ['👥 Mehrspieler', [['Raum öffnen / beitreten', k('P')], ['Chat schreiben', k('T') + ' oder ' + k('Enter')], ['Funkgerät', k('V') + ' halten']]],
+    ];
+    HILFE.push(['🗺️ Zum Entdecken', [
+      ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
+      ['🔫 Waffenhändler', 'Bananen-Pistole & Zielfernrohr'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
+      ['🚔 Polizei', 'nicht über Rot fahren, nichts Verbotenes tun'], ['🔒 Gefängnis', 'man kann ausbrechen …'],
+      ['🤫 Geheimversteck', 'irgendwo gibt es eins – nicht auf der Karte!'],
+    ]]);
+    function hilfeBauen() {
+      menue.querySelector('[data-seite="hilfe"].seite').innerHTML = HILFE.map(([titel, zeilen]) =>
+        `<div class="gruppe"><h3>${titel}</h3>${zeilen.map(([was, wie]) => `<div class="zeile"><span>${was}</span><span class="wert">${wie}</span></div>`).join('')}</div>`).join('');
+    }
+    function einstellungenBauen() {
+      const seite = menue.querySelector('[data-seite="einst"].seite');
+      seite.innerHTML = `
+        <div class="gruppe"><h3>🔊 Ton</h3>
+          <div class="einst"><span>Lautstärke</span><input type="range" min="0" max="1" step="0.05" data-e="laut"></div>
+          <div class="einst"><span>Musik</span><input type="range" min="0" max="1" step="0.05" data-e="musik"></div>
+        </div>
+        <div class="gruppe"><h3>🖥️ Grafik <small>(langsames Gerät? Hier sparen!)</small></h3>
+          <div class="einst"><span>Schatten</span><input type="checkbox" data-e="schatten"></div>
+          <div class="einst"><span>Bildschärfe</span><select data-e="aufloesung"><option value="0.5">Niedrig (schnell)</option><option value="0.75">Mittel</option><option value="1">Hoch (schön)</option></select></div>
+          <div class="einst"><span>Sichtweite</span><select data-e="sicht"><option value="nah">Nah (schnell)</option><option value="weit">Weit (schön)</option></select></div>
+        </div>
+        <div class="gruppe"><h3>🖱️ Steuerung</h3>
+          <div class="einst"><span>${IST_HANDY ? 'Wisch' : 'Maus'}-Empfindlichkeit</span><input type="range" min="0.3" max="2.5" step="0.1" data-e="maus"></div>
+          <div class="einst"><span>Kamera hoch/runter umkehren</span><input type="checkbox" data-e="umkehren"></div>
+        </div>
+        <div class="fuss">${IST_WEBGPU ? 'Grafik: WebGPU ✓' : 'Achtung: kein WebGPU, nur WebGL'} · Einstellungen werden gemerkt, der Spielstand nicht.</div>`;
+      for (const el of seite.querySelectorAll('[data-e]')) {
+        const name = el.dataset.e;
+        if (el.type === 'checkbox') el.checked = EINST[name]; else el.value = EINST[name];
+        el.addEventListener('input', () => {
+          EINST[name] = el.type === 'checkbox' ? el.checked : el.type === 'range' || name === 'aufloesung' ? +el.value : el.value;
+          einstMerken(); einstellungenAnwenden();
+        });
+      }
+    }
+    function einstellungenAnwenden() {
+      sonne.castShadow = EINST.schatten;
+      aufloesungSetzen(); renderer.setSize(innerWidth, innerHeight);
+      const nah = EINST.sicht === 'nah';
+      szene.fog.near = nah ? 35 : 60; szene.fog.far = nah ? 120 : 220;
+      kamera.far = nah ? 160 : 300; kamera.updateProjectionMatrix();
+      if (typeof tonHaupt !== 'undefined' && tonHaupt) tonHaupt.gain.value = EINST.laut;
+      if (typeof musikLautstaerke === 'function') musikLautstaerke();
+    }
+    function menueAuf(seite = 'hilfe') {
+      menue.classList.add('offen');
+      for (const el of menue.querySelectorAll('[data-seite]')) el.classList.toggle('an', el.dataset.seite === seite);
+    }
+    const menueZu = () => menue.classList.remove('offen');
+    hilfeBauen(); einstellungenBauen();
+    hilfe.addEventListener('click', e => { e.stopPropagation(); menueAuf(); });
+    menue.querySelector('.zu').addEventListener('click', menueZu);
+    menue.addEventListener('click', e => { if (e.target === menue) menueZu(); });
+    for (const ev of ['pointerdown', 'mousedown', 'touchstart']) menue.addEventListener(ev, e => e.stopPropagation());
+    for (const b of menue.querySelectorAll('.reiter button')) b.addEventListener('click', () => menueAuf(b.dataset.seite));
+    menue.addEventListener('keydown', e => e.stopPropagation());   // Pfeiltasten im Menü bewegen nicht die Kamera
+    addEventListener('keydown', e => {
+      if (e.code === 'KeyH' && !e.repeat) menue.classList.contains('offen') ? menueZu() : menueAuf();
+      if (e.code === 'Escape' && menue.classList.contains('offen')) menueZu();
+    });
 
     // --- Licht: eine weiche Grundhelligkeit plus eine "Sonne", die Schatten wirft ---
     szene.add(new THREE.HemisphereLight(0xffffff, 0x446644, 1.0));
@@ -1918,7 +2031,7 @@
       try {
         tonMaschine ??= new AudioContext();
         const jetzt = tonMaschine.currentTime, laut = tonMaschine.createGain();
-        laut.connect(tonMaschine.destination);
+        laut.connect(tonAusgang());
         if (nr % 2 === 0) {                        // Bumm (Bass-Trommel)
           const o = tonMaschine.createOscillator();
           o.frequency.setValueAtTime(130, jetzt); o.frequency.exponentialRampToValueAtTime(40, jetzt + 0.15);
@@ -2204,7 +2317,13 @@
     }
 
     // --- Hupe: ein kurzer Ton, gebaut mit der Web-Audio-Technik des Browsers ---
-    let tonMaschine = null;
+    let tonMaschine = null, tonHaupt = null;
+    // Alle Töne laufen durch einen Haupt-Lautstärkeregler (Einstellungen → Lautstärke)
+    function tonAusgang() {
+      tonMaschine ??= new AudioContext();
+      if (!tonHaupt) { tonHaupt = tonMaschine.createGain(); tonHaupt.gain.value = EINST.laut; tonHaupt.connect(tonMaschine.destination); }
+      return tonHaupt;
+    }
     function hupen(hoehe) {
       try {
         tonMaschine ??= new AudioContext();
@@ -2213,7 +2332,7 @@
         lautstaerke.gain.setValueAtTime(0.0001, jetzt);
         lautstaerke.gain.exponentialRampToValueAtTime(0.15, jetzt + 0.02);
         lautstaerke.gain.exponentialRampToValueAtTime(0.0001, jetzt + 0.4);
-        lautstaerke.connect(tonMaschine.destination);
+        lautstaerke.connect(tonAusgang());
         for (const faktor of [1, 1.26]) { // zwei Töne zusammen klingen wie eine Hupe
           const ton = tonMaschine.createOscillator();
           ton.type = 'square';
@@ -2734,7 +2853,7 @@
         osz.type = 'triangle';
         const laut = tonMaschine.createGain();
         laut.gain.value = 0;
-        osz.connect(laut).connect(tonMaschine.destination);
+        osz.connect(laut).connect(tonAusgang());
         osz.start();
         sirene = { osz, laut };
       } catch (e) {}
@@ -3210,11 +3329,11 @@
     addEventListener('blur', () => { rechteMausGedrueckt = false; });   // Fenster verlassen: Maus gilt als losgelassen
     addEventListener('mousemove', e => {
       if (zielModus) {                       // beim Zielen: Fadenkreuz bewegen
-        kameraWinkel -= e.movementX * 0.0025;
-        zielNeigung = THREE.MathUtils.clamp(zielNeigung - e.movementY * 0.0025, -0.6, 0.8);
+        kameraWinkel -= e.movementX * 0.0025 * EINST.maus;
+        zielNeigung = THREE.MathUtils.clamp(zielNeigung - e.movementY * 0.0025 * EINST.maus * (EINST.umkehren ? -1 : 1), -0.6, 0.8);
       } else if (rechteMausGedrueckt) {      // sonst: rechte Maustaste halten = Kamera drehen
-        kameraWinkel -= e.movementX * 0.006;
-        kameraNeigung = THREE.MathUtils.clamp(kameraNeigung + e.movementY * 0.006, 0.1, 1.4);
+        kameraWinkel -= e.movementX * 0.006 * EINST.maus;
+        kameraNeigung = THREE.MathUtils.clamp(kameraNeigung + e.movementY * 0.006 * EINST.maus * (EINST.umkehren ? -1 : 1), 0.1, 1.4);
       }
     });
 
@@ -4626,7 +4745,7 @@
         if (tonMaschine.state === 'suspended') await tonMaschine.resume();
         const puffer = await tonMaschine.decodeAudioData(bytes.buffer.slice(0));
         const quelle = tonMaschine.createBufferSource();
-        quelle.buffer = puffer; quelle.connect(tonMaschine.destination);
+        quelle.buffer = puffer; quelle.connect(tonAusgang());
         quelle.onended = fertig; quelle.start();
       } catch (e) {   // sonst ganz normal als Audio-Datei
         const url = URL.createObjectURL(new Blob([bytes], { type: d.typ || 'audio/webm' }));
@@ -4771,11 +4890,11 @@
         const dx = e.clientX - schauX, dy = e.clientY - schauY;
         schauX = e.clientX; schauY = e.clientY;
         if (zielModus) {                                             // beim Zielen: Fadenkreuz bewegen
-          kameraWinkel -= dx * 0.004;
-          zielNeigung = THREE.MathUtils.clamp(zielNeigung - dy * 0.004, -0.6, 0.8);
+          kameraWinkel -= dx * 0.004 * EINST.maus;
+          zielNeigung = THREE.MathUtils.clamp(zielNeigung - dy * 0.004 * EINST.maus * (EINST.umkehren ? -1 : 1), -0.6, 0.8);
         } else {
-          kameraWinkel -= dx * 0.008;
-          kameraNeigung = THREE.MathUtils.clamp(kameraNeigung + dy * 0.006, 0.1, 1.4);
+          kameraWinkel -= dx * 0.008 * EINST.maus;
+          kameraNeigung = THREE.MathUtils.clamp(kameraNeigung + dy * 0.006 * EINST.maus * (EINST.umkehren ? -1 : 1), 0.1, 1.4);
         }
       }
     });
@@ -4811,10 +4930,6 @@
       handyKnoepfe.querySelector('[data-taste="zielen"]').hidden = !hatWaffe() || !!aktuellesFahrzeug;
       handyKnoepfe.querySelector('[data-taste="rauch"]').hidden = inventar.rauch <= 0;
       handyKnoepfe.querySelector('[data-taste="sprung"]').textContent = aktuellesFahrzeug ? '📯' : '⬆️';
-    }
-    if (IST_HANDY) {
-      document.querySelector('#hilfe .text').textContent =
-        'Links: Stick = laufen (ganz außen = rennen) · Rechts wischen = umschauen · ⬆️ springen (halten = Jetpack) · ✋ einsteigen/graben/Tresor · Karte antippen = groß · H/❓ = Hilfe';
     }
 
     // ================= LIVE-VERBINDUNG ZU BLENDER =================
@@ -4852,6 +4967,8 @@
       }
     } catch (e) {}
 
+    einstellungenAnwenden();                  // gemerkte Einstellungen (Grafik, Ton) benutzen
+    hilfe.classList.add('neu'); setTimeout(() => hilfe.classList.remove('neu'), 12000);
     renderer.setAnimationLoop(spielSchleife); // ruft spielSchleife bei jedem Bild auf
 
     // Wenn das Fenster größer/kleiner wird, Bild anpassen
