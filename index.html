@@ -91,7 +91,7 @@
     const figur = new THREE.Group();
     affe.add(figur);
 
-    const fell  = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.9 }); // Fell (wechselt die Farbe)
+    const fell  = new THREE.MeshStandardMaterial({ color: 0x3b2314, roughness: 0.9 }); // dunkelbraunes Fell
     const haut  = new THREE.MeshStandardMaterial({ color: 0xf2c79b, roughness: 0.8 }); // Gesicht, Hände, Füße
     const weiss = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
     const schwarz = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3 });
@@ -346,7 +346,6 @@
     const PUNKTE_PRO_MUENZE = 10;
     const WIEDERKOMMEN_NACH = 7; // Sekunden, bis eine eingesammelte Münze wieder da ist
     let spielZeit = 0;           // Sekunden seit Spielstart
-    const FARB_TEMPO = 0.2;      // wie schnell der Affe die Farbe wechselt (0.2 = 1 Runde in 5 Sekunden)
     let punkte = 0;
     const punkteAnzeige = document.getElementById('punkte');
     function punkteZeigen() {
@@ -447,9 +446,6 @@
       sonne.target.position.copy(p);
 
       // Münzen drehen sich, werden eingesammelt und kommen nach 7 Sekunden wieder
-
-      // Das Fell des Affen wechselt ständig die Farbe: einmal durch den Regenbogen (alle 5 Sekunden)
-      fell.color.setHSL((spielZeit * FARB_TEMPO) % 1, 0.8, 0.45);
 
       // Affe dreht sich in die Laufrichtung (sanft, nicht ruckartig)
       const laeuft = dx !== 0 || dz !== 0;
