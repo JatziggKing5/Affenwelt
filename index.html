@@ -20,7 +20,7 @@
   </script>
 </head>
 <body>
-  <div id="hilfe">Pfeiltasten oder W A S D: bewegen · Leertaste: springen</div>
+  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera drehen · Leertaste: springen</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -135,18 +135,31 @@
     let fallTempo = 0;        // aktuelle Geschwindigkeit nach oben/unten
     const RAND = BODEN_GROESSE / 2 - 0.5;
 
+    // --- Kamera-Werte ---
+    const KAMERA_ABSTAND = 10;   // wie weit die Kamera vom Würfel weg ist
+    const DREH_TEMPO = 2;        // wie schnell sich die Kamera dreht
+    let kameraWinkel = 0;        // 0 = Kamera schaut von hinten
+    let kameraNeigung = 0.5;     // wie schräg von oben die Kamera schaut
+
     // --- Spiel-Schleife: läuft ca. 60 Mal pro Sekunde ---
     const uhr = new THREE.Clock();
     function spielSchleife() {
       const dt = Math.min(uhr.getDelta(), 0.05); // Zeit seit dem letzten Bild
 
-      // Bewegen mit den Pfeiltasten (erst links/rechts, dann vor/zurück)
+      // Kamera drehen mit den Pfeiltasten
+      if (tasten.ArrowLeft)  kameraWinkel -= DREH_TEMPO * dt; // Kamera nach links drehen
+      if (tasten.ArrowRight) kameraWinkel += DREH_TEMPO * dt; // Kamera nach rechts drehen
+      if (tasten.ArrowUp)    kameraNeigung += DREH_TEMPO * dt; // mehr von oben schauen
+      if (tasten.ArrowDown)  kameraNeigung -= DREH_TEMPO * dt; // flacher schauen
+      kameraNeigung = THREE.MathUtils.clamp(kameraNeigung, 0.1, 1.4); // nicht unter den Boden, nicht ganz senkrecht
+
+      // Bewegen mit W A S D – immer so, wie die Kamera gerade schaut
       const p = wuerfel.position;
-      let dx = 0, dz = 0;
-      if (tasten.ArrowLeft  || tasten.KeyA) dx -= TEMPO * dt; // Pfeil links oder A = nach links
-      if (tasten.ArrowRight || tasten.KeyD) dx += TEMPO * dt; // Pfeil rechts oder D = nach rechts
-      if (tasten.ArrowUp || tasten.KeyW) dz -= TEMPO * dt; // Pfeil hoch oder W = nach vorne
-      if (tasten.ArrowDown || tasten.KeyS) dz += TEMPO * dt; // Pfeil runter oder S = nach hinten
+      const vor   = (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0); // W = nach vorne, S = nach hinten
+      const seite = (tasten.KeyD ? 1 : 0) - (tasten.KeyA ? 1 : 0); // D = nach rechts, A = nach links
+      const sin = Math.sin(kameraWinkel), cos = Math.cos(kameraWinkel);
+      const dx = (-sin * vor + cos * seite) * TEMPO * dt;
+      const dz = (-cos * vor - sin * seite) * TEMPO * dt;
 
       // Nur bewegen, wenn dort kein Hindernis im Weg ist
       const neuX = THREE.MathUtils.clamp(p.x + dx, -RAND, RAND);
@@ -166,9 +179,14 @@
       p.y += fallTempo * dt;
       if (p.y < standHoehe) { p.y = standHoehe; fallTempo = 0; }
 
-      // Kamera folgt dem Würfel von schräg hinten
-      kamera.position.set(wuerfel.position.x, wuerfel.position.y + 5, wuerfel.position.z + 9);
-      kamera.lookAt(wuerfel.position);
+      // Kamera kreist um den Würfel: Winkel = rundherum, Neigung = wie hoch von oben
+      const flach = Math.cos(kameraNeigung) * KAMERA_ABSTAND;
+      kamera.position.set(
+        p.x + Math.sin(kameraWinkel) * flach,
+        p.y + Math.sin(kameraNeigung) * KAMERA_ABSTAND,
+        p.z + Math.cos(kameraWinkel) * flach
+      );
+      kamera.lookAt(p);
 
       renderer.render(szene, kamera);
     }
