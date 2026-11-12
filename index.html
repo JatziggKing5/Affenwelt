@@ -471,13 +471,13 @@
       ['🎥 Kamera & Karte', [['Umschauen', 'rechts wischen'], ['Große Karte', 'Karte antippen'], ['Wegpunkt setzen', 'auf große Karte tippen']]],
       ['🚗 Fahren', [['Einsteigen / Aussteigen', '✋'], ['Gas, Bremse, Lenken', 'Stick'], ['Hupen', '📯']]],
       ['🍌 Waffen', [['Schießen', '🔫'], ['Zielen', '🎯'], ['Rauchbombe', '💨'], ['Waffe wählen', 'Leiste oben links']]],
-      ['👥 Mehrspieler', [['Mini-Spiele: Fangen & Bananen-Duell', 'im 👥-Menü'], ['Raum öffnen / beitreten', '👥'], ['Chat schreiben', '💬'], ['Funkgerät', '🎙️ halten']]],
+      ['👥 Mehrspieler', [['Bei einem Freund mitfahren', 'neben sein Auto, ✋'], ['Mini-Spiele: Fangen & Bananen-Duell', 'im 👥-Menü'], ['Raum öffnen / beitreten', '👥'], ['Chat schreiben', '💬'], ['Funkgerät', '🎙️ halten']]],
     ] : [
       ['🐒 Bewegen', [['Laufen', k('W','A','S','D')], ['Rennen', k('Shift')], ['Springen / Doppelsprung', k('Leertaste') + ' / 2×'], ['Jetpack fliegen', k('Leertaste') + ' halten'], ['Tanzen', k('B') + ' halten']]],
       ['🎥 Kamera & Karte', [['Kamera drehen', k('←','→','↑','↓')], ['Kamera mit der Maus', 'rechte Maustaste halten'], ['Große Karte', k('M')], ['Wegpunkt setzen', 'Klick auf die große Karte']]],
       ['🚗 Fahren', [['Einsteigen / Aussteigen', k('E')], ['Gas / Bremse / Lenken', k('W','S','A','D')], ['Hupen', k('Leertaste')], ['Garage', 'an der ersten Kreuzung']]],
       ['🍌 Waffen', [['Waffe wählen', k('1','2','3','4','5')], ['Schießen', 'Linksklick oder ' + k('F')], ['Zielen', 'rechte Maustaste oder ' + k('Z')], ['Rauchbombe', k('G')]]],
-      ['👥 Mehrspieler', [['Mini-Spiele: Fangen & Bananen-Duell', 'im 👥-Menü ' + k('P')], ['Raum öffnen / beitreten', k('P')], ['Chat schreiben', k('T') + ' oder ' + k('Enter')], ['Funkgerät', k('V') + ' halten']]],
+      ['👥 Mehrspieler', [['Bei einem Freund mitfahren', 'neben sein Auto stellen, ' + k('E')], ['Mini-Spiele: Fangen & Bananen-Duell', 'im 👥-Menü ' + k('P')], ['Raum öffnen / beitreten', k('P')], ['Chat schreiben', k('T') + ' oder ' + k('Enter')], ['Funkgerät', k('V') + ' halten']]],
     ];
     HILFE.push(['🗺️ Zum Entdecken', [
       ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🐾 Tierhandlung', 'rechts neben der Hauptstraße beim Start'], ['🏡 Affen-Siedlung', 'Häuser kaufen und einrichten (rechts vom Start)'], ['🏁 Straßenrennen', 'mit einem Fahrzeug unters Start-Tor fahren'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
@@ -4847,9 +4847,10 @@
       // E-Taste: einsteigen oder aussteigen
       if (eGedrueckt) {
         eGedrueckt = false;
-        if (!aktuellesFahrzeug && (auftragAktion(p) || hausAktion(p) || graben(p) || tresorKnacken(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
+        if (mitfahrt) mitfahrtEnde();                                   // beim Freund aussteigen
+        else if (!aktuellesFahrzeug && (auftragAktion(p) || hausAktion(p) || graben(p) || tresorKnacken(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
         else if (aktuellesFahrzeug) aussteigen();
-        else if (!imGefaengnis) { const f = naechstesFahrzeug(p); if (f) einsteigen(f); }
+        else if (!imGefaengnis) { const mf = mitfahrKandidat(p); if (mf) mitfahrtStarten(mf); else { const f = naechstesFahrzeug(p); if (f) einsteigen(f); } }
       }
 
       let dx = 0, dz = 0, amBoden = true, unter = { block: null };
@@ -5005,6 +5006,9 @@
             : amStein ? `<b>⛏️ ${E_TASTE} drücken zum Graben (${grabZaehler}/${GRAB_NOETIG})</b>`
             : '<b>🔒 Du bist im Gefängnis!</b><small>Tipp: Ein Stück der Rückwand sieht locker aus …</small>';
           fahrInfo.classList.add('offen');
+        } else if (mitfahrHinweis(p)) {
+          fahrInfo.innerHTML = mitfahrHinweis(p);
+          fahrInfo.classList.add('offen');
         } else if (hausHinweis(p)) {
           fahrInfo.innerHTML = hausHinweis(p);
           fahrInfo.classList.add('offen');
@@ -5061,6 +5065,7 @@
       wegpunktPruefen(aktuellesFahrzeug || p);
 
       // Die Sonne (oder nachts der Mond) folgt dem Affen, damit es überall Schatten gibt
+      mitfahrtAktualisieren();
       tagNacht(dt, p);
       auftragAktualisieren(dt, aktuellesFahrzeug || p);
       haeuserAktualisieren(p);
@@ -5650,7 +5655,7 @@
           n: mp.name, x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), r: +blickRichtung.toFixed(2),
           t: +Math.hypot(laufV.x, laufV.z).toFixed(1), l: zuletztAmBoden ? 0 : 1, g: spielZeit < selbstLiegtBis ? 1 : 0,
           f: regenbogen ? 0xff00ff : fell.color.getHex(), k: Object.values(kleider.an), w: WAFFEN_NR.includes(auswahl) ? 1 : 0,
-          tz: tanz ? TAENZE.indexOf(tanz) + 1 : 0, h: meinTier ? meinTier.art : null,
+          tz: tanz ? TAENZE.indexOf(tanz) + 1 : 0, h: meinTier ? meinTier.art : null, mf: mitfahrt ? 1 : 0,
           v: f ? f.typ : null, vx: f ? +f.x.toFixed(2) : 0, vz: f ? +f.z.toFixed(2) : 0, vr: f ? +f.richtung.toFixed(2) : 0,
         });
       }
@@ -5672,6 +5677,9 @@
           let w = a.ziel.vr - a.auto.richtung; w = Math.atan2(Math.sin(w), Math.cos(w));
           a.auto.richtung += w * weich;
           fahrzeugZeigen(a.auto);
+          sitzen(a.teile);
+        } else if (d.mf) {                      // fährt bei jemandem mit
+          a.figur.rotation.x = 0; a.figur.position.y = 0;
           sitzen(a.teile);
         } else if (d.g) {                       // liegt am Boden (von Banane getroffen)
           a.figur.rotation.x = -Math.PI / 2; a.figur.position.y = -0.25;
@@ -5778,6 +5786,51 @@
     }
     addEventListener('pointerup', fingerWeg);
     addEventListener('pointercancel', fingerWeg);
+
+    // ================= MITFAHREN: zusammen in einem Auto =================
+    // Fährt ein Freund ein Auto, kannst du neben ihm (oder hinter ihm) einsteigen.
+    let mitfahrt = null;   // { id }
+    function mitfahrKandidat(p) {
+      if (!mp.raum || miniSpiel?.art === 'fangen') return null;
+      for (const a of mp.andere.values()) if (a.auto && Math.hypot(a.auto.x - p.x, a.auto.z - p.z) < 3.5) return a;
+      return null;
+    }
+    function mitfahrtStarten(a) {
+      mitfahrt = { id: a.id };
+      if (tanz) tanzStoppen();
+      klang('plopp');
+      zeigeMeldung(`🚗 Du fährst bei ${a.daten.n} mit!`, 2);
+    }
+    function mitfahrtEnde(grund) {
+      const a = mitfahrt && mp.andere.get(mitfahrt.id);
+      mitfahrt = null;
+      affe.rotation.z = 0;
+      if (a?.auto) {                                       // neben dem Auto aussteigen
+        const s = Math.sin(a.auto.richtung), c = Math.cos(a.auto.richtung);
+        affe.position.set(a.auto.x + c * 2.2, 0.5, a.auto.z - s * 2.2);
+      } else affe.position.y = Math.max(affe.position.y, 0.5);
+      fallTempo = 0;
+      if (grund) zeigeMeldung(grund, 2);
+    }
+    function mitfahrHinweis(p) {
+      if (mitfahrt) { const a = mp.andere.get(mitfahrt.id); return `<b>🚗 Du fährst bei ${a?.daten?.n || '…'} mit</b><small>${E_TASTE}: aussteigen</small>`; }
+      if (aktuellesFahrzeug) return null;
+      const a = mitfahrKandidat(p);
+      return a ? `<b>👥 ${E_TASTE}: bei ${a.daten.n} mitfahren</b><small>${a.auto.emoji || '🚗'} ${a.auto.name || ''}</small>` : null;
+    }
+    function mitfahrtAktualisieren() {
+      if (!mitfahrt) return;
+      const a = mp.andere.get(mitfahrt.id);
+      if (!a || !a.auto) { mitfahrtEnde(a ? `🚗 ${a.daten.n} ist ausgestiegen.` : '🚗 Dein Fahrer ist weg.'); return; }
+      const f = a.auto, [sx, sy, sz] = f.sitz;
+      const lx = sx !== 0 ? -sx : 0, lz = sx !== 0 ? sz : sz - 0.75;   // Beifahrersitz – oder hinten drauf
+      const s = Math.sin(f.richtung), c = Math.cos(f.richtung);
+      affe.position.set(f.x + s * lz + c * lx, sy + (sx !== 0 ? 0 : 0.12), f.z + c * lz - s * lx);
+      affe.rotation.y = f.richtung; blickRichtung = f.richtung;
+      fallTempo = 0; laufV.x = laufV.z = 0;
+      sitzen({ armL: armLinks, armR: armRechts, beinL: beinLinks, beinR: beinRechts });
+      figur.rotation.x = 0; figur.position.y = 0;
+    }
 
     // ================= MINI-SPIELE im Mehrspieler: Fangen und Bananen-Duell =================
     let miniSpiel = null;   // { art, id, start, ende, laeuft, faenger, nr, punkte: Map }
