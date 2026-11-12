@@ -47,7 +47,14 @@
     #karte.gross {
       top: 50%; left: 50%; right: auto; transform: translate(-50%, -50%);
       width: min(92vw, 92vh); height: min(92vw, 92vh); z-index: 20; border-width: 4px;
+      pointer-events: auto; cursor: crosshair;
     }
+    #wegpunkt {
+      position: fixed; top: 252px; right: 12px; padding: 3px 10px; border-radius: 8px;
+      background: #ff4081; color: #fff; font-weight: bold; font-size: 14px; display: none; pointer-events: none;
+    }
+    #wegpunkt.offen { display: block; }
+    @media (max-width: 500px) { #wegpunkt { top: 182px; } }
     #kleider {
       position: fixed; top: 12px; left: 12px; z-index: 10; width: min(380px, calc(100vw - 24px)); max-height: calc(100vh - 130px);
       box-sizing: border-box; overflow-y: auto; padding: 12px 14px; border-radius: 14px;
@@ -172,13 +179,14 @@
     <p class="klein">1 = Pistole · 2 = Rauchbombe · linke Maus = schießen · rechte Maus = zielen · Zum Verlassen rauslaufen</p>
   </div>
   <canvas id="karte" width="180" height="180" title="Mini-Karte"></canvas>
+  <div id="wegpunkt"></div>
   <div id="kabine">
     <h2>👕 Umkleidekabine</h2>
     <p>Klick auf eine Farbe für das Fell deines Affen:</p>
     <div id="farben"></div>
     <p class="klein">Zum Verlassen einfach rauslaufen.</p>
   </div>
-  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1/2: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · Jetpack: Leertaste halten · M: Karte · 🚔 Nicht über Rot fahren!</div>
+  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1/2: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · Shift: rennen · Jetpack: Leertaste halten · M: Karte (Klick = Wegpunkt) · 🚔 Nicht über Rot fahren!</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -1436,7 +1444,7 @@
     const tasten = {};
     addEventListener('keydown', (e) => {
       tasten[e.code] = true;
-      if (e.code === 'Space' && !e.repeat) sprungGedrueckt = true; // nur neues Drücken zählt, nicht Gedrückthalten
+      if (e.code === 'Space' && !e.repeat) { sprungGedrueckt = true; sprungGedruecktUm = spielZeit; } // nur neues Drücken zählt
       if (e.code === 'KeyE' && !e.repeat) eGedrueckt = true;       // E = ein- oder aussteigen
       if (e.code === 'KeyF' && !e.repeat) fGedrueckt = true;       // F = schießen / benutzen
       if (e.code === 'KeyG' && !e.repeat) gGedrueckt = true;       // G = Rauchbombe
@@ -1459,6 +1467,9 @@
     let sprungGedrueckt = false;
     let fGedrueckt = false, gGedrueckt = false;
     let zuletztAmBoden = true; // stand der Affe im letzten Bild auf dem Boden?
+    const RENN_TEMPO = 10;      // mit Shift
+    const laufV = { x: 0, z: 0 }; // aktuelle Laufgeschwindigkeit
+    let sprungGedruecktUm = -1, zuletztAufBodenUm = 0;
 
     // --- Kamera-Werte ---
     const KAMERA_ABSTAND = 10;   // wie weit die Kamera vom Affe weg ist
@@ -1466,6 +1477,7 @@
     let kameraWinkel = 0;        // 0 = Kamera schaut von hinten
     let kameraNeigung = 0.5;     // wie schräg von oben die Kamera schaut
     let kameraAbstand = KAMERA_ABSTAND; // beim Fahren geht die Kamera etwas weiter weg
+    const kameraZiel = new THREE.Vector3(0, 0.5, 0); // dahin schaut die Kamera (folgt dem Affen weich)
     let kameraFrei = 1;                 // 1 = ganz weg, kleiner = näher, weil etwas im Weg ist
 
     // ================= GARAGE & FAHRZEUGE =================
@@ -3048,87 +3060,154 @@
       });
     }
 
-    // ================= KARTE (klein oben rechts, mit M ganz groß) =================
+    // ================= KARTE (klein oben rechts = Umgebung, mit M = ganze Welt) =================
     const karte = document.getElementById('karte');
     const kartenPinsel = karte.getContext('2d');
     let karteGross = false;
-    let KARTE_GROESSE = karte.width, massstab = 1;
-    const kx2 = x => (x - WIESE.x1) * massstab;
-    const kz2 = z => (z - WIESE.z1) * massstab; // oben auf der Karte = die Richtung, in die du am Start schaust (−z)
-    // Der Hintergrund (Wiese, Straßen, Häuser) wird nur gemalt, wenn sich die Größe ändert
+    const MINI_AUSSCHNITT = 140;   // so viele Meter zeigt die kleine Karte rund um dich
+    // Der Hintergrund der ganzen Welt wird einmal in hoher Auflösung gemalt (4 Pixel pro Meter)
+    const HG_MASSSTAB = 4;
     const kartenHintergrund = document.createElement('canvas');
-    const ORTE = () => [ // Beschriftungen auf der großen Karte
+    kartenHintergrund.width = (WIESE.x2 - WIESE.x1) * HG_MASSSTAB;
+    kartenHintergrund.height = (WIESE.z2 - WIESE.z1) * HG_MASSSTAB;
+    {
+      const p = kartenHintergrund.getContext('2d');
+      const rechteck = (farbe, x, z, b, t) => { p.fillStyle = farbe; p.fillRect((x - b / 2 - WIESE.x1) * HG_MASSSTAB, (z - t / 2 - WIESE.z1) * HG_MASSSTAB, b * HG_MASSSTAB, t * HG_MASSSTAB); };
+      p.fillStyle = '#2e7d32'; p.fillRect(0, 0, kartenHintergrund.width, kartenHintergrund.height);
+      rechteck('#9ccc65', (SPIELPLATZ.x1 + SPIELPLATZ.x2) / 2, (SPIELPLATZ.z1 + SPIELPLATZ.z2) / 2, SPIELPLATZ.x2 - SPIELPLATZ.x1, SPIELPLATZ.z2 - SPIELPLATZ.z1);
+      for (const s of STRASSEN) rechteck('#555', (s.x1 + s.x2) / 2, (s.z1 + s.z2) / 2, s.x2 - s.x1, s.z2 - s.z1);
+      for (const s of STRASSEN) { // gelbe Mittellinie
+        p.strokeStyle = '#fdd835'; p.lineWidth = 1; p.setLineDash([6, 6]); p.beginPath();
+        if (s.richtung === 'z') { p.moveTo((s.mitte - WIESE.x1) * HG_MASSSTAB, (s.z1 - WIESE.z1) * HG_MASSSTAB); p.lineTo((s.mitte - WIESE.x1) * HG_MASSSTAB, (s.z2 - WIESE.z1) * HG_MASSSTAB); }
+        else { p.moveTo((s.x1 - WIESE.x1) * HG_MASSSTAB, (s.mitte - WIESE.z1) * HG_MASSSTAB); p.lineTo((s.x2 - WIESE.x1) * HG_MASSSTAB, (s.mitte - WIESE.z1) * HG_MASSSTAB); }
+        p.stroke(); p.setLineDash([]);
+      }
+      for (const h of haeuser) rechteck('#d7ccc8', h.x, h.z, h.b, h.t);
+      rechteck('#ffca28', GARAGE.x, GARAGE.z, 16, 10);
+      rechteck('#f48fb1', KABINE.x, KABINE.z, 3.6, 3.6);
+      for (const l of LAEDEN) rechteck('#ff9800', l.x, l.z, l.b, l.t);
+      rechteck('#ffd54f', BANK.x, BANK.z, BANK.b, BANK.t);
+      rechteck('#d32f2f', HAENDLER.x, HAENDLER.z, 8, 6);
+      rechteck('#ec407a', KLEIDERLADEN.x, KLEIDERLADEN.z, 16, 12);
+      rechteck('#37474f', GEF.x, GEF.z, 26, 26);
+      p.strokeStyle = '#ffffff'; p.lineWidth = 3;
+      p.strokeRect((GEF.x - 13 - WIESE.x1) * HG_MASSSTAB, (GEF.z - 13 - WIESE.z1) * HG_MASSSTAB, 26 * HG_MASSSTAB, 26 * HG_MASSSTAB);
+    }
+    const ORTE = [ // Beschriftungen auf der großen Karte
       { name: '🏁 Start', x: 0, z: 2 }, { name: '🧗 Obby ↑', x: 18, z: -12 }, { name: '🏎 Garage', x: GARAGE.x, z: GARAGE.z },
       { name: '👕 Umkleide', x: KABINE.x, z: KABINE.z }, { name: '🏦 Bank', x: BANK.x, z: BANK.z }, { name: '🍌 Waffen', x: HAENDLER.x, z: HAENDLER.z },
       { name: '👗 Affen-Mode', x: KLEIDERLADEN.x, z: KLEIDERLADEN.z }, { name: '🔒 Gefängnis', x: GEF.x, z: GEF.z },
       ...LAEDEN.map(l => ({ name: '🛒 Supermarkt', x: l.x, z: l.z })),
     ];
-    function karteVorbereiten(groesse) {
-      KARTE_GROESSE = groesse;
-      karte.width = karte.height = groesse;
-      massstab = groesse / (WIESE.x2 - WIESE.x1);
-      kartenHintergrund.width = kartenHintergrund.height = groesse;
-      const p = kartenHintergrund.getContext('2d');
-      const rechteck = (farbe, x, z, b, t) => { p.fillStyle = farbe; p.fillRect(kx2(x - b / 2), kz2(z - t / 2), Math.max(1, b * massstab), Math.max(1, t * massstab)); };
-      p.fillStyle = '#2e7d32'; p.fillRect(0, 0, groesse, groesse);
-      rechteck('#9ccc65', (SPIELPLATZ.x1 + SPIELPLATZ.x2) / 2, (SPIELPLATZ.z1 + SPIELPLATZ.z2) / 2, SPIELPLATZ.x2 - SPIELPLATZ.x1, SPIELPLATZ.z2 - SPIELPLATZ.z1);
-      for (const s of STRASSEN) rechteck('#555', (s.x1 + s.x2) / 2, (s.z1 + s.z2) / 2, Math.max(1.5 / massstab, s.x2 - s.x1), Math.max(1.5 / massstab, s.z2 - s.z1));
-      for (const h of haeuser) rechteck('#d7ccc8', h.x, h.z, h.b, h.t);
-      rechteck('#ffca28', GARAGE.x, GARAGE.z, 16, 10);
-      rechteck('#f48fb1', KABINE.x, KABINE.z, 3.2 + 1 / massstab, 3.2 + 1 / massstab);
-      for (const l of LAEDEN) rechteck('#ff9800', l.x, l.z, l.b, l.t);
-      rechteck('#ffd54f', BANK.x, BANK.z, BANK.b, BANK.t);
-      rechteck('#d32f2f', HAENDLER.x, HAENDLER.z, 8 + 1 / massstab, 6 + 1 / massstab);
-      rechteck('#ec407a', KLEIDERLADEN.x, KLEIDERLADEN.z, 16, 12);
-      rechteck('#37474f', GEF.x, GEF.z, 26, 26);
-      p.strokeStyle = '#ffffff'; p.lineWidth = 1;
-      p.strokeRect(kx2(GEF.x - 13), kz2(GEF.z - 13), 26 * massstab, 26 * massstab);
-      if (groesse > 300) { // große Karte: Namen dazuschreiben
-        p.font = `bold ${Math.round(groesse / 55)}px sans-serif`;
-        p.textAlign = 'center'; p.textBaseline = 'middle';
-        for (const o of ORTE()) {
-          const x = kx2(o.x), y = kz2(o.z) - groesse / 45;
-          p.lineWidth = 4; p.strokeStyle = 'rgba(0,0,0,0.75)'; p.strokeText(o.name, x, y);
-          p.fillStyle = '#ffffff'; p.fillText(o.name, x, y);
-        }
-      }
-    }
-    karteVorbereiten(karte.width);
-    // M = Karte groß/klein (Esc macht sie auch wieder klein)
+    // M = große Karte an/aus (Esc schließt sie auch)
     function karteUmschalten(gross = !karteGross) {
       karteGross = gross;
       karte.classList.toggle('gross', karteGross);
-      karteVorbereiten(karteGross ? 900 : 180);
+      karte.width = karte.height = karteGross ? 900 : 180;
     }
+    karteUmschalten(false);
+
+    // --- Wegpunkt: Klick auf die große Karte setzt ein Ziel ---
+    let wegpunkt = null; // { x, z }
+    const wegpunktStrahl = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.6, 0.6, 80, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xff4081, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide })
+    );
+    wegpunktStrahl.position.y = 40;
+    wegpunktStrahl.visible = false;
+    szene.add(wegpunktStrahl);
+    const wegpunktAnzeige = document.getElementById('wegpunkt');
+    karte.addEventListener('mousedown', e => {
+      if (!karteGross) return;
+      e.preventDefault();
+      const r = karte.getBoundingClientRect();
+      const x = WIESE.x1 + (e.clientX - r.left) / r.width * (WIESE.x2 - WIESE.x1);
+      const z = WIESE.z1 + (e.clientY - r.top) / r.height * (WIESE.z2 - WIESE.z1);
+      if (wegpunkt && Math.hypot(wegpunkt.x - x, wegpunkt.z - z) < 8) { wegpunkt = null; } // nochmal draufklicken = weg
+      else { wegpunkt = { x, z }; zeigeMeldung('📍 Wegpunkt gesetzt!', 1.2); }
+    });
+    function wegpunktPruefen(p) {
+      wegpunktStrahl.visible = !!wegpunkt;
+      if (!wegpunkt) { wegpunktAnzeige.classList.remove('offen'); return; }
+      wegpunktStrahl.position.x = wegpunkt.x; wegpunktStrahl.position.z = wegpunkt.z;
+      wegpunktStrahl.material.opacity = 0.35 + Math.sin(spielZeit * 4) * 0.12; // pulsiert
+      const abstand = Math.hypot(wegpunkt.x - p.x, wegpunkt.z - p.z);
+      wegpunktAnzeige.textContent = `📍 ${Math.round(abstand)} m`;
+      wegpunktAnzeige.classList.add('offen');
+      if (abstand < 5) { wegpunkt = null; zeigeMeldung('📍 Ziel erreicht!', 2); hupen(1000); }
+    }
+
     function karteMalen(blick) {
-      const punkt = karteGross ? 3 : 1.5; // auf der großen Karte sind die Punkte größer
-      kartenPinsel.drawImage(kartenHintergrund, 0, 0);
-      if (karteGross) { // Münzen als kleine gelbe Punkte
-        kartenPinsel.fillStyle = '#ffeb3b';
-        for (const m of muenzen) if (m.visible) kartenPinsel.fillRect(kx2(m.position.x) - 1.5, kz2(m.position.z) - 1.5, 3, 3);
-        kartenPinsel.fillStyle = '#ffffff';
-        for (const f of fussgaenger) kartenPinsel.fillRect(kx2(f.x) - 1, kz2(f.z) - 1, 2, 2);
+      const groesse = karte.width;
+      const p = aktuellesFahrzeug || affe.position;
+      // Welcher Ausschnitt der Welt wird gezeigt? Groß: alles. Klein: 140 m rund um dich.
+      const breite = karteGross ? WIESE.x2 - WIESE.x1 : MINI_AUSSCHNITT;
+      const x0 = karteGross ? WIESE.x1 : p.x - breite / 2;
+      const z0 = karteGross ? WIESE.z1 : p.z - breite / 2;
+      const m = groesse / breite;
+      const kx = x => (x - x0) * m, kz = z => (z - z0) * m;
+      const pin = kartenPinsel;
+      pin.fillStyle = '#87ceeb'; pin.fillRect(0, 0, groesse, groesse);   // außerhalb der Welt: Himmel
+      // passenden Teil des Hintergrunds hineinkopieren (nur den Teil, der in der Welt liegt)
+      const sx1 = Math.max(x0, WIESE.x1), sz1 = Math.max(z0, WIESE.z1);
+      const sx2 = Math.min(x0 + breite, WIESE.x2), sz2 = Math.min(z0 + breite, WIESE.z2);
+      if (sx2 > sx1 && sz2 > sz1) {
+        pin.drawImage(kartenHintergrund, (sx1 - WIESE.x1) * HG_MASSSTAB, (sz1 - WIESE.z1) * HG_MASSSTAB, (sx2 - sx1) * HG_MASSSTAB, (sz2 - sz1) * HG_MASSSTAB,
+                      kx(sx1), kz(sz1), (sx2 - sx1) * m, (sz2 - sz1) * m);
       }
-      for (const a of verkehr) { // Autos als kleine Punkte
-        kartenPinsel.fillStyle = '#' + a.farbe.toString(16).padStart(6, '0');
-        kartenPinsel.fillRect(kx2(a.x) - punkt, kz2(a.z) - punkt, punkt * 2, punkt * 2);
+      const punkt = karteGross ? 3 : 2.2;
+      // Münzen (gelb) und Fußgänger (weiß)
+      pin.fillStyle = '#ffeb3b';
+      for (const mu of muenzen) if (mu.visible) pin.fillRect(kx(mu.position.x) - 1.5, kz(mu.position.z) - 1.5, 3, 3);
+      pin.fillStyle = '#ffffff';
+      for (const f of fussgaenger) pin.fillRect(kx(f.x) - 1, kz(f.z) - 1, 2, 2);
+      // Autos
+      for (const a of verkehr) {
+        pin.fillStyle = '#' + a.farbe.toString(16).padStart(6, '0');
+        pin.fillRect(kx(a.x) - punkt, kz(a.z) - punkt, punkt * 2, punkt * 2);
+      }
+      // Beschriftungen (nur auf der großen Karte)
+      if (karteGross) {
+        pin.font = `bold ${Math.round(groesse / 55)}px sans-serif`;
+        pin.textAlign = 'center'; pin.textBaseline = 'middle';
+        for (const o of ORTE) {
+          const x = kx(o.x), y = kz(o.z) - groesse / 45;
+          pin.lineWidth = 4; pin.strokeStyle = 'rgba(0,0,0,0.75)'; pin.strokeText(o.name, x, y);
+          pin.fillStyle = '#ffffff'; pin.fillText(o.name, x, y);
+        }
+        pin.font = `${Math.round(groesse / 70)}px sans-serif`;
+        pin.fillStyle = 'rgba(255,255,255,0.9)';
+        pin.fillText('Klick = Wegpunkt setzen · M oder Esc = schließen', groesse / 2, groesse - groesse / 40);
       }
       // Polizei: blinkender Punkt
       if (polizei.aktiv) {
         const px = polizei.gruppe.visible ? polizei.x : polizei.laeufer.x, pz = polizei.gruppe.visible ? polizei.z : polizei.laeufer.z;
-        kartenPinsel.fillStyle = Math.floor(spielZeit * 4) % 2 ? '#2979ff' : '#ff1744';
-        kartenPinsel.beginPath(); kartenPinsel.arc(kx2(px), kz2(pz), punkt * 3, 0, Math.PI * 2); kartenPinsel.fill();
+        pin.fillStyle = Math.floor(spielZeit * 4) % 2 ? '#2979ff' : '#ff1744';
+        pin.beginPath(); pin.arc(kx(px), kz(pz), punkt * 2.5, 0, Math.PI * 2); pin.fill();
+      }
+      // Wegpunkt: rosa Stecknadel – auf der kleinen Karte am Rand, wenn er weiter weg ist
+      if (wegpunkt) {
+        let wx = kx(wegpunkt.x), wz = kz(wegpunkt.z);
+        const rand = 10, aussen = wx < rand || wx > groesse - rand || wz < rand || wz > groesse - rand;
+        if (aussen) { // an den Rand schieben, in Richtung des Ziels
+          const mx = groesse / 2, mz = groesse / 2, dx = wx - mx, dz = wz - mz;
+          const f = (groesse / 2 - rand) / Math.max(Math.abs(dx), Math.abs(dz));
+          wx = mx + dx * f; wz = mz + dz * f;
+        }
+        pin.fillStyle = '#ff4081'; pin.strokeStyle = '#ffffff'; pin.lineWidth = 2;
+        pin.beginPath(); pin.arc(wx, wz, karteGross ? 9 : 6, 0, Math.PI * 2); pin.fill(); pin.stroke();
+        pin.fillStyle = '#ffffff'; pin.beginPath(); pin.arc(wx, wz, karteGross ? 3 : 2, 0, Math.PI * 2); pin.fill();
       }
       // Der Affe (oder sein Fahrzeug) als Pfeil
-      const x = kx2(affe.position.x), y = kz2(affe.position.z), g = karteGross ? 2.2 : 1;
-      kartenPinsel.save();
-      kartenPinsel.translate(x, y);
-      kartenPinsel.rotate(Math.PI - blick); // Pfeil zeigt in Blickrichtung
-      kartenPinsel.scale(g, g);
-      kartenPinsel.fillStyle = '#ff1744'; kartenPinsel.strokeStyle = '#fff'; kartenPinsel.lineWidth = 1.5;
-      kartenPinsel.beginPath(); kartenPinsel.moveTo(0, -7); kartenPinsel.lineTo(5, 5); kartenPinsel.lineTo(-5, 5); kartenPinsel.closePath();
-      kartenPinsel.fill(); kartenPinsel.stroke();
-      kartenPinsel.restore();
+      const x = kx(affe.position.x), y = kz(affe.position.z), g = karteGross ? 2.2 : 1.1;
+      pin.save();
+      pin.translate(x, y);
+      pin.rotate(Math.PI - blick); // Pfeil zeigt in Blickrichtung
+      pin.scale(g, g);
+      pin.fillStyle = '#ff1744'; pin.strokeStyle = '#fff'; pin.lineWidth = 1.5;
+      pin.beginPath(); pin.moveTo(0, -7); pin.lineTo(5, 5); pin.lineTo(-5, 5); pin.closePath();
+      pin.fill(); pin.stroke();
+      pin.restore();
     }
 
     // Jetzt sind alle Bäume, Laternen und Straßenstriche gesammelt: alles auf einmal bauen
@@ -3208,7 +3287,7 @@
         armLinks.rotation.set(-1.2, 0, -0.2); armRechts.rotation.set(-1.2, 0, 0.2);
         beinLinks.rotation.x = -1.4; beinRechts.rotation.x = -1.4;
         kopf.rotation.z = Math.sin(spielZeit * 3) * 0.05;
-        figur.position.y = 0;
+        figur.position.y = 0; figur.rotation.x = 0;
         const kmh = Math.round(Math.abs(f.tempo) * 3.6);
         fahrInfo.innerHTML = `<b>${f.emoji} ${f.name} · ${kmh} km/h</b>` +
           `<small>W Gas · S Bremse/Rückwärts · A/D lenken · Leertaste hupen · E aussteigen</small>`;
@@ -3228,13 +3307,20 @@
         const vor   = (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0); // W = nach vorne, S = nach hinten
         const seite = (tasten.KeyD ? 1 : 0) - (tasten.KeyA ? 1 : 0); // D = nach rechts, A = nach links
         const sin = Math.sin(kameraWinkel), cos = Math.cos(kameraWinkel);
-        const laufTempo = hatJetpack() && !zuletztAmBoden ? TEMPO * 1.7 : TEMPO; // fliegen ist schneller
-        dx = (-sin * vor + cos * seite) * laufTempo * dt;
-        dz = (-cos * vor - sin * seite) * laufTempo * dt;
+        let wx = -sin * vor + cos * seite, wz = -cos * vor - sin * seite;
+        const laenge = Math.hypot(wx, wz);
+        if (laenge > 0) { wx /= laenge; wz /= laenge; }                // schräg ist nicht schneller als geradeaus
+        const rennt = (tasten.ShiftLeft || tasten.ShiftRight) && laenge > 0;
+        const laufTempo = (hatJetpack() && !zuletztAmBoden ? TEMPO * 1.7 : rennt ? RENN_TEMPO : TEMPO) * (zielModus ? 0.5 : 1);
+        // Sanft schneller und langsamer werden (in der Luft lenkt man etwas weniger)
+        const griff = Math.min(1, (zuletztAmBoden ? 12 : 5) * dt);
+        laufV.x += (wx * laufTempo - laufV.x) * griff;
+        laufV.z += (wz * laufTempo - laufV.z) * griff;
+        dx = laufV.x * dt; dz = laufV.z * dt;
 
-        // Nur bewegen, wenn dort kein Hindernis im Weg ist
-        if (!stoesstAn(p.x + dx, p.y, p.z)) p.x += dx;
-        if (!stoesstAn(p.x, p.y, p.z + dz)) p.z += dz;
+        // Nur bewegen, wenn dort kein Hindernis im Weg ist (sonst in diese Richtung anhalten)
+        if (!stoesstAn(p.x + dx, p.y, p.z)) p.x += dx; else laufV.x = 0;
+        if (!stoesstAn(p.x, p.y, p.z + dz)) p.z += dz; else laufV.z = 0;
 
         // Wo ist unter dem Affen fester Boden? (Gras, Block, Fahrzeug – oder Abgrund)
         unter = bodenUnter(p.x, p.y, p.z);
@@ -3243,15 +3329,18 @@
         // Springen: am Boden immer, in der Luft noch einmal (Doppelsprung)
         amBoden = p.y <= standHoehe + 0.001 && fallTempo <= 0;
         zuletztAmBoden = amBoden;
-        if (amBoden) sprungZaehler = 0; // gelandet: Sprünge wieder auffüllen
-        if (sprungGedrueckt) {
-          if (amBoden) {
-            fallTempo = SPRUNGKRAFT; sprungZaehler = 1;           // erster Sprung
-          } else if (sprungZaehler < MAX_SPRUENGE) {
-            fallTempo = SPRUNGKRAFT; sprungZaehler = MAX_SPRUENGE; // zweiter Sprung in der Luft
+        if (amBoden) { sprungZaehler = 0; zuletztAufBodenUm = spielZeit; } // gelandet: Sprünge wieder auffüllen
+        // Faire Sprünge: Leertaste gilt noch 0,15 s ("zu früh gedrückt"), und kurz nach der Kante darf man noch abspringen
+        const sprungGewuenscht = spielZeit - sprungGedruecktUm < 0.15;
+        const darfAbspringen = amBoden || (sprungZaehler === 0 && spielZeit - zuletztAufBodenUm < 0.12);
+        if (sprungGewuenscht) {
+          if (darfAbspringen) {
+            fallTempo = SPRUNGKRAFT; sprungZaehler = 1; sprungGedruecktUm = -1; // erster Sprung
+          } else if (sprungZaehler < MAX_SPRUENGE && sprungGedrueckt) {
+            fallTempo = SPRUNGKRAFT; sprungZaehler = MAX_SPRUENGE; sprungGedruecktUm = -1; // zweiter Sprung in der Luft
           }
-          sprungGedrueckt = false;
         }
+        sprungGedrueckt = false;
 
         // Jetpack: Leertaste halten = nach oben fliegen (bis 60 m hoch)
         const fliegt = hatJetpack() && tasten.Space && p.y < JETPACK_MAX_HOEHE;
@@ -3264,9 +3353,10 @@
         if (p.y < standHoehe) { p.y = standHoehe; fallTempo = 0; }
 
         // Affe dreht sich in die Laufrichtung (sanft, nicht ruckartig)
-        const laeuft = dx !== 0 || dz !== 0;
-        if (laeuft) {
-          const ziel = Math.atan2(dx, dz);
+        const tempo = Math.hypot(laufV.x, laufV.z);
+        const laeuft = tempo > 0.4;
+        if (laeuft && !zielModus) {
+          const ziel = Math.atan2(laufV.x, laufV.z);
           let unterschied = ziel - blickRichtung;
           unterschied = Math.atan2(Math.sin(unterschied), Math.cos(unterschied)); // kürzester Weg herum
           blickRichtung += unterschied * Math.min(1, 12 * dt);
@@ -3274,15 +3364,16 @@
         affe.rotation.y = blickRichtung;
 
         // Lustiges Wackeln: beim Laufen schwingen Arme und Beine, der Kopf wackelt
-        laufZeit += dt * (laeuft ? 14 : 3);
-        const schwung = laeuft ? 0.8 : 0.1;
+        laufZeit += dt * (laeuft ? 4 + tempo * 1.7 : 3);         // schneller laufen = schneller schwingen
+        const schwung = laeuft ? Math.min(1.1, 0.2 + tempo * 0.1) : 0.1;
         armLinks.rotation.x  =  Math.sin(laufZeit) * schwung;
         armRechts.rotation.x = -Math.sin(laufZeit) * schwung;
         armLinks.rotation.y = 0; armRechts.rotation.y = 0;
         beinLinks.rotation.x  = -Math.sin(laufZeit) * schwung * 0.7;
         beinRechts.rotation.x =  Math.sin(laufZeit) * schwung * 0.7;
         kopf.rotation.z = Math.sin(laufZeit * 0.5) * (laeuft ? 0.15 : 0.08);
-        figur.position.y = amBoden && laeuft ? Math.abs(Math.sin(laufZeit)) * 0.06 : 0; // hüpft beim Laufen
+        figur.position.y = amBoden && laeuft ? Math.abs(Math.sin(laufZeit)) * (rennt ? 0.1 : 0.06) : 0; // hüpft beim Laufen
+        figur.rotation.x = amBoden ? Math.min(0.25, tempo * 0.02) : 0;                              // beim Rennen leicht nach vorne gebeugt
         // In der Luft: Arme hoch wie "Juhuu!"
         if (!amBoden) {
           armLinks.rotation.z = -2.4; armRechts.rotation.z = 2.4;
@@ -3343,6 +3434,7 @@
       if (spielZeit > meldungBis) meldung.style.opacity = 0;
 
       karteMalen(aktuellesFahrzeug ? aktuellesFahrzeug.richtung : blickRichtung); // Mini-Karte
+      wegpunktPruefen(aktuellesFahrzeug || p);
 
       // Die Sonne folgt dem Affen, damit es überall Schatten gibt
       sonne.position.set(p.x + 10, p.y + 20, p.z + 10);
@@ -3390,25 +3482,32 @@
         renderer.render(szene, kamera);
         return;
       }
+      // Kamera folgt weich: Der Punkt, auf den sie schaut, gleitet hinter dem Affen her (nach oben/unten noch sanfter,
+      // damit die Kamera beim Springen nicht wackelt)
+      if (kameraZiel.distanceTo(p) > 25) kameraZiel.copy(p);              // nach einem Teleport sofort da sein
+      kameraZiel.x += (p.x - kameraZiel.x) * (1 - Math.exp(-14 * dt));
+      kameraZiel.z += (p.z - kameraZiel.z) * (1 - Math.exp(-14 * dt));
+      kameraZiel.y += (p.y - kameraZiel.y) * (1 - Math.exp(-5 * dt));
+      const kz = kameraZiel;
       // Kamera kreist um den Affen: Winkel = rundherum, Neigung = wie hoch von oben
       const flach = Math.cos(kameraNeigung) * kameraAbstand;
-      const wunschX = p.x + Math.sin(kameraWinkel) * flach;
-      const wunschY = p.y + Math.sin(kameraNeigung) * kameraAbstand;
-      const wunschZ = p.z + Math.cos(kameraWinkel) * flach;
+      const wunschX = kz.x + Math.sin(kameraWinkel) * flach;
+      const wunschY = kz.y + Math.sin(kameraNeigung) * kameraAbstand;
+      const wunschZ = kz.z + Math.cos(kameraWinkel) * flach;
       // Ist ein Baum oder Haus zwischen Affe und Kamera? Dann rückt die Kamera näher heran.
       const reichweite = kameraAbstand + 4;
-      const nahe = bloecke.filter(o => Math.abs(o.x - p.x) < reichweite + o.b / 2 && Math.abs(o.z - p.z) < reichweite + o.t / 2 && o.art !== 'lava');
+      const nahe = bloecke.filter(o => Math.abs(o.x - kz.x) < reichweite + o.b / 2 && Math.abs(o.z - kz.z) < reichweite + o.t / 2 && o.art !== 'lava');
       let erlaubt = 1;
       for (let t = 0.2; t <= 1.001; t += 0.05) {
-        const x = p.x + (wunschX - p.x) * t, y = p.y + (wunschY - p.y) * t, z = p.z + (wunschZ - p.z) * t;
+        const x = kz.x + (wunschX - kz.x) * t, y = kz.y + (wunschY - kz.y) * t, z = kz.z + (wunschZ - kz.z) * t;
         const drin = nahe.some(o => o.krone
           ? Math.hypot(x - o.x, z - o.z) < o.krone && y < o.oben + 0.5            // in einer Baumkrone
           : Math.abs(x - o.x) < o.b / 2 + 0.3 && Math.abs(z - o.z) < o.t / 2 + 0.3 && y < o.oben + 0.3 && y > o.unten - 0.3);
         if (drin) { erlaubt = Math.max(0.2, t - 0.08); break; }
       }
       kameraFrei += (erlaubt - kameraFrei) * Math.min(1, (erlaubt < kameraFrei ? 12 : 3) * dt); // schnell ran, langsam zurück
-      kamera.position.set(p.x + (wunschX - p.x) * kameraFrei, p.y + (wunschY - p.y) * kameraFrei, p.z + (wunschZ - p.z) * kameraFrei);
-      kamera.lookAt(p);
+      kamera.position.set(kz.x + (wunschX - kz.x) * kameraFrei, kz.y + (wunschY - kz.y) * kameraFrei, kz.z + (wunschZ - kz.z) * kameraFrei);
+      kamera.lookAt(kz.x, kz.y + 0.3, kz.z);
 
       renderer.render(szene, kamera);
     }
