@@ -153,11 +153,12 @@
 
     // Punkte-Anzeige oben rechts
     const PUNKTE_PRO_MUENZE = 10;
+    const WIEDERKOMMEN_NACH = 7; // Sekunden, bis eine eingesammelte Münze wieder da ist
+    let spielZeit = 0;           // Sekunden seit Spielstart
     let punkte = 0;
     const punkteAnzeige = document.getElementById('punkte');
     function punkteZeigen() {
       punkteAnzeige.textContent = `🪙 ${punkte} Punkte`;
-      if (muenzen.length === 0) punkteAnzeige.textContent += ' · Alle gesammelt! 🎉';
     }
     punkteZeigen();
 
@@ -232,13 +233,18 @@
       p.y += fallTempo * dt;
       if (p.y < standHoehe) { p.y = standHoehe; fallTempo = 0; }
 
-      // Münzen drehen sich und werden eingesammelt, wenn der Würfel sie berührt
-      for (let i = muenzen.length - 1; i >= 0; i--) {
-        const muenze = muenzen[i];
+      // Münzen drehen sich, werden eingesammelt und kommen nach 7 Sekunden wieder
+      spielZeit += dt;
+      for (const muenze of muenzen) {
+        if (!muenze.visible) {
+          // Unsichtbare Münze: ist ihre Wartezeit vorbei?
+          if (spielZeit >= muenze.userData.kommtWiederUm) muenze.visible = true;
+          continue;
+        }
         muenze.rotation.z += 3 * dt; // drehen
         if (muenze.position.distanceTo(p) < 1.1) {
-          szene.remove(muenze);   // Münze verschwindet
-          muenzen.splice(i, 1);   // aus der Liste streichen
+          muenze.visible = false;  // Münze verschwindet (nur versteckt)
+          muenze.userData.kommtWiederUm = spielZeit + WIEDERKOMMEN_NACH;
           punkte += PUNKTE_PRO_MUENZE;
           punkteZeigen();
         }
