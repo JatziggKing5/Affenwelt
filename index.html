@@ -242,12 +242,55 @@
       [ 0, -87,   2,   2,   5.0],
       [-3, -91,   2,   2,   5.0],
       [ 0, -95,   2,   2,   5.0],
-      // Teil 6: großer Doppelsprung zum Ziel
+      // Teil 6: großer Doppelsprung
       [ 0,-102,   2,   2,   6.0],
-      [ 0,-108,   5,   5,   6.0, 'ziel'],         // ZIEL
+      [ 0,-108,   5,   5,   6.0, 'checkpoint'],   // Checkpoint 3
+      // Teil 7: Zickzack über kleine Plattformen
+      [ 2.5,-112.5, 1.2, 1.2, 6.0],
+      [-1, -116,  1.2, 1.2, 6.0],
+      [ 2, -119.5,1.2, 1.2, 6.0],
+      [-1.5,-123, 1.2, 1.2, 6.0],
+      // Teil 8: Plattform, die hin und her fährt (links-rechts)
+      [ 0, -129,  2.5, 2.5, 6.0, 'block', { achse: 'x', weite: 3, tempo: 1.2 }],
+      [ 0, -135,  2,   2,   6.0],
+      // Teil 9: Riesentreppe – jede Stufe braucht einen Doppelsprung
+      [ 0, -139,  2,   2,   7.5],
+      [ 2.5,-142.5,2,  2,   9.0],
+      [ 0, -146,  2,   2,  10.5],
+      [ 0, -151,  4,   4,  10.5, 'checkpoint'],   // Checkpoint 4
+      // Teil 10: Lava-Gang – weiche den Lava-Streifen aus
+      [ 0, -161,  4,  14,  10.5],
+      // Teil 11: Plattform, die vor und zurück fährt
+      [ 0, -175,  2,   2,  10.5, 'block', { achse: 'z', weite: 3, tempo: 1.0 }],
+      [ 0, -183,  3,   3,  10.5, 'checkpoint'],   // Checkpoint 5
+      // Teil 12: sehr schmaler, langer Balken
+      [ 0, -191,  0.5, 8,  10.5],
+      // Teil 13: letzter großer Doppelsprung zum Ziel
+      [ 0, -198,  1.5, 1.5, 11.5],
+      [ 0, -205,  6,   6,  12.0, 'ziel'],         // ZIEL
     ];
-    for (const [x, z, b, t, oben, art] of obby) {
-      neuerBlock(x, z, b, t, oben - D, oben, art ?? 'block', 0xb0bec5);
+    const fahrendeBloecke = [];
+    for (const [x, z, b, t, oben, art, bewegung] of obby) {
+      const block = neuerBlock(x, z, b, t, oben - D, oben, art ?? 'block', 0xb0bec5);
+      if (bewegung) {
+        block.bewegung = bewegung;
+        block.startX = x; block.startZ = z;
+        block.mesh.material.color.set(0xab47bc); // fahrende Plattformen sind lila
+        fahrendeBloecke.push(block);
+      }
+    }
+
+    // Fahrende Plattformen bewegen. Gibt zurück, wie weit sich jede bewegt hat.
+    function plattformenBewegen(zeit) {
+      for (const o of fahrendeBloecke) {
+        const altX = o.x, altZ = o.z;
+        const versatz = Math.sin(zeit * o.bewegung.tempo) * o.bewegung.weite;
+        if (o.bewegung.achse === 'x') o.x = o.startX + versatz;
+        else o.z = o.startZ + versatz;
+        o.mesh.position.x = o.x;
+        o.mesh.position.z = o.z;
+        o.dx = o.x - altX; o.dz = o.z - altZ; // so weit ist sie in diesem Bild gefahren
+      }
     }
     // Lava: [x, z, breite, tiefe, höhe des Bodens darunter]
     const lavaListe = [
@@ -255,6 +298,11 @@
       [ 0, -54,   3,   1,   2.0],
       [ 0, -87.5, 2,   0.5, 5.0],  // Lava-Kante auf der ersten Insel
       [-3, -91,   0.5, 2,   5.0],  // Lava in der Mitte der zweiten Insel
+      // Lava-Gang (Teil 10): Streifen, mal ganz breit, mal nur auf einer Seite
+      [ 0,  -156, 4,   1,  10.5],
+      [-1,  -159, 2,   1,  10.5],  // nur links – rechts vorbei!
+      [ 1,  -162, 2,   1,  10.5],  // nur rechts – links vorbei!
+      [ 0,  -165, 4,   1,  10.5],
     ];
     for (const [x, z, b, t, h] of lavaListe) neuerBlock(x, z, b, t, h, h + 0.15, 'lava');
 
@@ -298,6 +346,7 @@
     const startPunkt = new THREE.Vector3(0, 0.5, 0);
     let letzterCheckpoint = null;
     let imZiel = false;
+    let stehtAufLetztes = null; // auf welchem Block der Affe im letzten Bild stand
 
     // Große Meldung in der Mitte (z. B. "Checkpoint!")
     const meldung = document.getElementById('meldung');
@@ -328,6 +377,7 @@
       // Münzen in der Obby
       [ 0,-32, 1.0], [ 0,-40, 2.0], [ 0,-52, 2.0], [ 0,-62, 2.0],
       [ 3,-72, 4.5], [ 0,-95, 5.0], [ 0,-102, 6.0],
+      [-1,-116, 6.0], [ 0,-135, 6.0], [ 0,-146, 10.5], [ 1,-159, 10.5], [ 0,-191, 10.5], [ 0,-198, 11.5],
     ];
     const muenzForm = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 24);
     const muenzFarbe = new THREE.MeshStandardMaterial({
@@ -391,7 +441,15 @@
 
       // Bewegen mit W A S D – immer so, wie die Kamera gerade schaut
       const p = affe.position;
-      const vor   = (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0); // W = nach vorne, S = nach hinten
+
+      // Fahrende Plattformen bewegen – und den Affen mitnehmen, wenn er darauf steht
+      plattformenBewegen(spielZeit);
+      if (stehtAufLetztes?.bewegung) {
+        if (!stoesstAn(p.x + stehtAufLetztes.dx, p.y, p.z)) p.x += stehtAufLetztes.dx;
+        if (!stoesstAn(p.x, p.y, p.z + stehtAufLetztes.dz)) p.z += stehtAufLetztes.dz;
+      }
+
+      const vor  = (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0); // W = nach vorne, S = nach hinten
       const seite = (tasten.KeyD ? 1 : 0) - (tasten.KeyA ? 1 : 0); // D = nach rechts, A = nach links
       const sin = Math.sin(kameraWinkel), cos = Math.cos(kameraWinkel);
       const dx = (-sin * vor + cos * seite) * TEMPO * dt;
@@ -428,6 +486,7 @@
       if (p.y < -15) neuStart('Runtergefallen! 😵');   // in den Abgrund gefallen
       if (inLava(p.x, p.y, p.z)) neuStart('Lava! 🔥');  // Lava berührt
       const stehtAuf = amBoden ? unter.block : null;
+      stehtAufLetztes = stehtAuf; // fürs nächste Bild merken (fahrende Plattformen)
       if (stehtAuf?.art === 'checkpoint' && stehtAuf !== letzterCheckpoint) {
         letzterCheckpoint = stehtAuf;
         startPunkt.set(stehtAuf.x, stehtAuf.oben + 0.5, stehtAuf.z); // ab jetzt startest du hier
