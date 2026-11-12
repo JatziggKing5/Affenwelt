@@ -82,6 +82,10 @@
       box-shadow: 0 2px 10px rgba(0,0,0,0.4); pointer-events: none;
     }
     @media (max-width: 500px) { #karte { width: 110px; height: 110px; } }
+    #uhr {
+      position: fixed; top: 69px; right: 17px; z-index: 3; pointer-events: none; padding: 2px 7px; border-radius: 0 9px 0 8px;
+      background: rgba(0,0,0,0.6); color: #fff; font-size: 12px; font-weight: bold;
+    }
     #karte.gross {
       top: 50%; left: 50%; right: auto; transform: translate(-50%, -50%);
       width: min(92vw, 92vh); height: min(92vw, 92vh); z-index: 20; border-width: 4px;
@@ -382,6 +386,7 @@
     <p class="klein">Zum Verlassen einfach rauslaufen.</p>
   </div>
   <button id="hilfe">❓ Hilfe</button>
+  <div id="uhr"></div>
   <div id="menue"><div class="fenster">
     <button class="zu" title="Schließen (Esc)">✕</button>
     <div class="reiter"><button data-seite="hilfe" class="an">❓ Hilfe</button><button data-seite="einst">⚙️ Einstellungen</button></div>
@@ -407,7 +412,7 @@
     if (IST_HANDY) document.body.classList.add('handy');
     const E_TASTE = IST_HANDY ? '✋' : 'E'; // so heißt die Aktions-Taste in den Hinweisen
     // Einstellungen (Lautstärke, Grafik, Maus) – die merkt sich der Browser. Der Spielstand wird NICHT gespeichert.
-    const EINST = { laut: 0.8, musik: 0.4, schatten: true, aufloesung: 1, sicht: 'weit', maus: 1, umkehren: false };
+    const EINST = { laut: 0.8, musik: 0.4, schatten: true, aufloesung: 1, sicht: 'weit', maus: 1, umkehren: false, tageszeit: 'auto' };
     try { Object.assign(EINST, JSON.parse(localStorage.getItem('affenEinstellungen') || '{}')); } catch (e) {}
     const einstMerken = () => { try { localStorage.setItem('affenEinstellungen', JSON.stringify(EINST)); } catch (e) {} };
     const aufloesungSetzen = () => renderer.setPixelRatio(Math.min(devicePixelRatio, IST_HANDY ? 1.5 : 2) * EINST.aufloesung); // auf dem Handy etwas sparsamer
@@ -455,6 +460,7 @@
         <div class="gruppe"><h3>🖥️ Grafik <small>(langsames Gerät? Hier sparen!)</small></h3>
           <div class="einst"><span>Schatten</span><input type="checkbox" data-e="schatten"></div>
           <div class="einst"><span>Bildschärfe</span><select data-e="aufloesung"><option value="0.5">Niedrig (schnell)</option><option value="0.75">Mittel</option><option value="1">Hoch (schön)</option></select></div>
+          <div class="einst"><span>Tageszeit</span><select data-e="tageszeit"><option value="auto">Tag und Nacht wechseln</option><option value="tag">Immer Tag</option><option value="nacht">Immer Nacht</option></select></div>
           <div class="einst"><span>Sichtweite</span><select data-e="sicht"><option value="nah">Nah (schnell)</option><option value="weit">Weit (schön)</option></select></div>
         </div>
         <div class="gruppe"><h3>🖱️ Steuerung</h3>
@@ -498,7 +504,8 @@
     });
 
     // --- Licht: eine weiche Grundhelligkeit plus eine "Sonne", die Schatten wirft ---
-    szene.add(new THREE.HemisphereLight(0xffffff, 0x446644, 1.0));
+    const himmelLicht = new THREE.HemisphereLight(0xffffff, 0x446644, 1.0);
+    szene.add(himmelLicht);
     const sonne = new THREE.DirectionalLight(0xffffff, 2);
     sonne.position.set(10, 20, 10);
     sonne.castShadow = true;
@@ -1178,7 +1185,9 @@
     const mastFarbe = new THREE.MeshStandardMaterial({ color: 0x546e7a, roughness: 0.5, metalness: 0.4 });
     const lampenLicht = new THREE.MeshStandardMaterial({ color: 0xfff59d, emissive: 0xffeb3b, emissiveIntensity: 1.5 });
     const mastForm = new THREE.CylinderGeometry(0.09, 0.12, 1, 8);
+    const LAMPEN_ORTE = [];   // hier leuchtet nachts ein Lichtkreis am Boden
     function laterne(x, z, armX, armZ) {
+      LAMPEN_ORTE.push([x + armX * 1.2, z + armZ * 1.2]);
       bloecke.push({ x, z, b: 0.3, t: 0.3, unten: 0, oben: 4, art: 'block' });         // Mast ist fest
       // Laterne aus Blender? Ihr Arm zeigt dort nach rechts (+x) – hier drehen wir sie zur Straße.
       if (modellAlsInstanz('Laterne', x, 0, z, Math.atan2(-armZ, armX))) return;
@@ -4076,6 +4085,99 @@
     // Jetzt sind alle Bäume, Laternen und Straßenstriche gesammelt: alles auf einmal bauen
     instanzenBauen();
 
+    // --- Tag und Nacht: ein ganzer Tag dauert etwa 7 Minuten (die Nacht geht schneller vorbei) ---
+    let stunde = 9;                                   // Uhrzeit im Spiel (0–24)
+    const HIMMEL_TAG = new THREE.Color(0x87ceeb), HIMMEL_ABEND = new THREE.Color(0xff9a62), HIMMEL_NACHT = new THREE.Color(0x0a1235);
+    const _himmel = new THREE.Color();
+    // Sterne: viele kleine Punkte auf einer großen Kugel um die Kamera
+    const sterne = (() => {
+      const pos = [];
+      for (let i = 0; i < 700; i++) {
+        const u = Math.random() * 2 - 1, w = Math.random() * Math.PI * 2, r = 130;
+        const y = Math.abs(u) * r, q = Math.sqrt(r * r - y * y);
+        pos.push(Math.cos(w) * q, y, Math.sin(w) * q);
+      }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      const m = new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false });
+      const p = new THREE.Points(g, m); p.frustumCulled = false; p.renderOrder = -1;
+      szene.add(p);
+      return p;
+    })();
+    const mond = new THREE.Mesh(new THREE.SphereGeometry(5, 20, 12), new THREE.MeshBasicMaterial({ color: 0xfff8dc, fog: false, transparent: true }));
+    szene.add(mond);
+    // Lichtkreise unter den Laternen (nachts sichtbar)
+    const lichtKreise = (() => {
+      const m = new THREE.MeshBasicMaterial({ color: 0xffc860, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+      const im = new THREE.InstancedMesh(new THREE.CircleGeometry(3.2, 20).rotateX(-Math.PI / 2), m, Math.max(2, LAMPEN_ORTE.length));
+      const o = new THREE.Object3D();
+      LAMPEN_ORTE.forEach(([x, z], i) => { o.position.set(x, 0.04, z); o.updateMatrix(); im.setMatrixAt(i, o.matrix); });
+      im.count = LAMPEN_ORTE.length;
+      im.frustumCulled = false; im.visible = false;
+      szene.add(im);
+      return im;
+    })();
+    // Leuchtende Materialien sammeln: Fenster und Lampen (aus Blender und aus dem Code)
+    const NACHT_FENSTER = new Set([fensterMaterial]), NACHT_LAMPEN = new Set([lampenLicht]);
+    function leuchtSachenSammeln() {
+      szene.traverse(o => {
+        if (!o.isMesh) return;
+        for (const m of [].concat(o.material)) {
+          if (m.name === 'Fenster') NACHT_FENSTER.add(m);
+          if (m.name === 'Lampenlicht') NACHT_LAMPEN.add(m);
+        }
+      });
+      for (const m of NACHT_FENSTER) { m.userData.tagFarbe ??= m.emissive.clone(); }
+      for (const m of NACHT_LAMPEN) { m.userData.tagStaerke ??= m.emissiveIntensity; }
+    }
+    let letzteNacht = -1;
+    function tagNacht(dt, p) {
+      if (EINST.tageszeit === 'tag') stunde = 13;
+      else if (EINST.tageszeit === 'nacht') stunde = 23;
+      else stunde = (stunde + dt * (stunde >= 20 || stunde < 6 ? 10 / 100 : 14 / 320)) % 24;
+      // Sonnenhöhe: um 6 Uhr geht sie auf, um 12 Uhr steht sie oben, um 18 Uhr geht sie unter
+      const winkel = (stunde - 6) / 12 * Math.PI;
+      const hoehe = Math.sin(winkel);
+      const hell = THREE.MathUtils.clamp((hoehe + 0.12) / 0.4, 0, 1);    // 0 = Nacht, 1 = Tag
+      const abend = THREE.MathUtils.clamp(1 - Math.abs(hoehe) / 0.3, 0, 1) * (hoehe > -0.2 ? 1 : 0);  // Sonnenauf- und -untergang
+      _himmel.copy(HIMMEL_NACHT).lerp(HIMMEL_TAG, hell).lerp(HIMMEL_ABEND, abend * 0.6);
+      szene.background.copy(_himmel); szene.fog.color.copy(_himmel);
+      himmelLicht.intensity = 0.4 + hell * 0.6;
+      himmelLicht.color.setRGB(0.6 + hell * 0.4, 0.65 + hell * 0.35, 0.9 + hell * 0.1);
+      if (hell > 0.05) {          // Sonne
+        sonne.intensity = 2 * hell;
+        sonne.color.setRGB(1, 0.85 + 0.15 * (1 - abend), 0.7 + 0.3 * (1 - abend));
+        sonne.position.set(p.x + Math.cos(winkel) * 22, p.y + Math.max(0.25, hoehe) * 22, p.z + 10);
+      } else {                    // Mondlicht
+        sonne.intensity = 0.35;
+        sonne.color.setRGB(0.6, 0.7, 1);
+        sonne.position.set(p.x - 10, p.y + 20, p.z - 6);
+      }
+      sonne.target.position.copy(p);
+      const nacht = 1 - hell;
+      sterne.position.copy(kamera.position);
+      sterne.material.opacity = Math.max(0, nacht - 0.2);
+      sterne.visible = nacht > 0.2;
+      mond.visible = nacht > 0.3;
+      mond.material.opacity = nacht;
+      mond.position.set(kamera.position.x - 60, kamera.position.y + 70, kamera.position.z - 80);
+      lichtKreise.visible = nacht > 0.3;
+      lichtKreise.material.opacity = nacht * 0.4;
+      // Fenster und Lampen nur ändern, wenn sich die Helligkeit merklich ändert (spart Arbeit)
+      const stufe = Math.round(nacht * 20);
+      if (stufe !== letzteNacht) {
+        letzteNacht = stufe;
+        for (const m of NACHT_FENSTER) m.emissive.copy(m.userData.tagFarbe).lerp(_fensterLicht, nacht * 0.85);
+        for (const m of NACHT_LAMPEN) m.emissiveIntensity = (m.userData.tagStaerke ?? 1) * (0.4 + nacht * 1.6);
+        const warNacht = musikNacht;
+        musikNacht = nacht > 0.6;
+        if (musikNacht !== warNacht && EINST.tageszeit === 'auto') zeigeMeldung(musikNacht ? '🌙 Es wird Nacht …' : '☀️ Guten Morgen!', 2);
+      }
+      const h = Math.floor(stunde), min = Math.floor((stunde - h) * 60 / 10) * 10;
+      uhrAnzeige.textContent = `${hell > 0.5 ? '☀️' : hell > 0.05 ? '🌅' : '🌙'} ${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+    }
+    const _fensterLicht = new THREE.Color(0xffb84d);
+    const uhrAnzeige = document.getElementById('uhr');
+
     // --- Spiel-Schleife: läuft ca. 60 Mal pro Sekunde ---
     const uhr = new THREE.Clock();
     function spielSchleife() {
@@ -4319,9 +4421,8 @@
       karteMalen(aktuellesFahrzeug ? aktuellesFahrzeug.richtung : blickRichtung); // Mini-Karte
       wegpunktPruefen(aktuellesFahrzeug || p);
 
-      // Die Sonne folgt dem Affen, damit es überall Schatten gibt
-      sonne.position.set(p.x + 10, p.y + 20, p.z + 10);
-      sonne.target.position.copy(p);
+      // Die Sonne (oder nachts der Mond) folgt dem Affen, damit es überall Schatten gibt
+      tagNacht(dt, p);
 
       // Umkleidekabine: Menü zeigen, solange der Affe (zu Fuß) drin steht
       kabinenMenue.classList.toggle('offen', !aktuellesFahrzeug && inKabine(p));
@@ -5074,6 +5175,7 @@
     } catch (e) {}
 
     einstellungenAnwenden();                  // gemerkte Einstellungen (Grafik, Ton) benutzen
+    leuchtSachenSammeln();
     hilfe.classList.add('neu'); setTimeout(() => hilfe.classList.remove('neu'), 12000);
     renderer.setAnimationLoop(spielSchleife); // ruft spielSchleife bei jedem Bild auf
 
