@@ -483,6 +483,7 @@
       ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🐾 Tierhandlung', 'rechts neben der Hauptstraße beim Start'], ['🏡 Affen-Siedlung', 'Häuser kaufen und einrichten (rechts vom Start)'], ['🏁 Straßenrennen', 'mit einem Fahrzeug unters Start-Tor fahren'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
       ['🔫 Waffenhändler', 'Bananen-Pistole & Zielfernrohr'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
       ['🚔 Polizei', 'nicht über Rot fahren, nichts Verbotenes tun'], ['🔒 Gefängnis', 'man kann ausbrechen …'],
+      ['🐆 Nachts: Leopard!', 'renn weg, steig in ein Auto oder flüchte in ein Haus'],
       ['🤫 Geheimversteck', 'irgendwo gibt es eins – nicht auf der Karte!'],
     ]]);
     function hilfeBauen() {
@@ -2412,6 +2413,7 @@
           case 'tick':    ton(1200, 0, 0.05, 'square', 0.05); break;
           case 'start':   ton(1568, 0, 0.4, 'square', 0.07); break;
           case 'plopp':   ton(500, 900, 0.08, 'sine', 0.12); break;
+          case 'knurren': ton(95, 50, 0.8, 'sawtooth', 0.14); rauschen(0.6, ['lowpass', 350], 0.25); break;
         }
       } catch (e) {}
     }
@@ -3586,6 +3588,7 @@
       const q = g.mesh.position;
       const nah = (x, z, r) => Math.hypot(q.x - x, q.z - z) < r && q.y < 1.6 && q.y > -0.1;
       if (zielscheibeGetroffen(q)) return true;
+      if (leopardGetroffen(q)) return true;
       if (polizei.aktiv && polizei.laeufer.gruppe.visible && nah(polizei.laeufer.x, polizei.laeufer.z, 0.7)) {
         polizei.betaeubtBis = spielZeit + LIEGEZEIT; zeigeMeldung('🍌 Polizist getroffen!', 1.5); return true;
       }
@@ -4283,7 +4286,7 @@
     function tagNacht(dt, p) {
       if (EINST.tageszeit === 'tag') stunde = 13;
       else if (EINST.tageszeit === 'nacht') stunde = 23;
-      else stunde = (stunde + dt * (stunde >= 20 || stunde < 6 ? 10 / 100 : 14 / 320)) % 24;
+      else stunde = (stunde + dt * (stunde >= 20 || stunde < 6 ? 10 / 160 : 14 / 320)) % 24;   // Nacht = halb so lang wie der Tag
       // Sonnenhöhe: um 6 Uhr geht sie auf, um 12 Uhr steht sie oben, um 18 Uhr geht sie unter
       const winkel = (stunde - 6) / 12 * Math.PI;
       const hoehe = Math.sin(winkel);
@@ -4320,8 +4323,9 @@
         for (const m of NACHT_LAMPEN) m.emissiveIntensity = (m.userData.tagStaerke ?? 1) * (0.4 + nacht * 1.6);
         const warNacht = musikNacht;
         musikNacht = nacht > 0.6;
-        if (musikNacht !== warNacht && EINST.tageszeit === 'auto') zeigeMeldung(musikNacht ? '🌙 Es wird Nacht …' : '☀️ Guten Morgen!', 2);
       }
+      const istNacht = stunde >= 20 || stunde < 6;
+      if (istNacht !== nachtAktiv) nachtWechsel(istNacht);
       const h = Math.floor(stunde), min = Math.floor((stunde - h) * 60 / 10) * 10;
       uhrAnzeige.textContent = `${hell > 0.5 ? '☀️' : hell > 0.05 ? '🌅' : '🌙'} ${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
     }
@@ -4658,6 +4662,154 @@
       for (const g of GRUNDSTUECKE) if (g.besitzer === id) { while (g.moebel.length) moebelWeg(g, g.moebel[0]); hausBesitzerSetzen(g, null); g.moebelText = ''; }
     }
 
+    // ================= NACHT: alle Affen gehen nach Hause, denn ein LEOPARD ist unterwegs =================
+    let nachtAktiv = false;
+    const nachtsZuHause = { verkehr: [], fussgaenger: [] };
+    function nachtWechsel(nacht) {
+      nachtAktiv = nacht;
+      if (nacht) {
+        // Fußgänger und Autofahrer verschwinden in ihren Häusern (Straßen werden leer)
+        nachtsZuHause.fussgaenger = fussgaenger.splice(0);
+        nachtsZuHause.verkehr = verkehr.splice(0);
+        for (const f of nachtsZuHause.fussgaenger) f.gruppe.visible = false;
+        for (const a of nachtsZuHause.verkehr) a.gruppe.visible = false;
+        auftraggeber.gruppe.visible = false;
+        zeigeMeldung('🌙 Nacht! Alle Affen gehen nach Hause – ein 🐆 Leopard ist unterwegs!', 4);
+        klang('knurren');
+      } else {
+        fussgaenger.push(...nachtsZuHause.fussgaenger);
+        verkehr.push(...nachtsZuHause.verkehr);
+        for (const f of fussgaenger) f.gruppe.visible = true;
+        for (const a of verkehr) a.gruppe.visible = true;
+        nachtsZuHause.fussgaenger = []; nachtsZuHause.verkehr = [];
+        auftraggeber.gruppe.visible = true;
+        zeigeMeldung('☀️ Guten Morgen! Der Leopard schläft – alle Affen kommen raus.', 3);
+      }
+    }
+    // --- Der Leopard ---
+    const leopard = (() => {
+      const g = new THREE.Group(), k = new THREE.Group(); g.add(k);
+      const fell = tierMat(0xd9a441), punkt = tierMat(0x2b1a0e), bauch = tierMat(0xf3dfb3);
+      const augen = new THREE.MeshStandardMaterial({ color: 0xc6ff00, emissive: 0xc6ff00, emissiveIntensity: 2.5 });
+      k.add(tierTeil(tierKugel, fell, 0, 0.62, 0, 0.32, 0.3, 0.75));
+      k.add(tierTeil(tierKugel, bauch, 0, 0.5, 0, 0.26, 0.2, 0.6));
+      const kopf = new THREE.Group(); kopf.position.set(0, 0.85, 0.72); k.add(kopf);
+      kopf.add(tierTeil(tierKugel, fell, 0, 0, 0, 0.24, 0.21, 0.24));
+      kopf.add(tierTeil(tierKugel, bauch, 0, -0.06, 0.18, 0.12, 0.09, 0.1));
+      kopf.add(tierTeil(tierKugel, punkt, 0, -0.01, 0.27, 0.04, 0.03, 0.03));
+      for (const s of [-1, 1]) {
+        kopf.add(tierTeil(tierKegel, fell, s * 0.15, 0.2, -0.02, 0.07, 0.1, 0.05));
+        kopf.add(tierTeil(tierKugel, augen, s * 0.09, 0.05, 0.19, 0.04, 0.035, 0.03));
+      }
+      // Flecken
+      for (let i = 0; i < 22; i++) {
+        const w = Math.random() * Math.PI * 2, l = (Math.random() - 0.5) * 1.2;
+        k.add(tierTeil(tierKugel, punkt, Math.cos(w) * 0.3, 0.64 + Math.abs(Math.sin(w)) * 0.24, l, 0.06, 0.06, 0.06));
+      }
+      const beine = [[-0.18, 0.45], [0.18, 0.45], [-0.18, -0.45], [0.18, -0.45]].map(([x, z]) => {
+        const b = new THREE.Group(); b.position.set(x, 0.55, z); k.add(b);
+        b.add(tierTeil(tierRohr, fell, 0, -0.27, 0, 0.07, 0.55, 0.07));
+        b.add(tierTeil(tierKugel, fell, 0, -0.55, 0.04, 0.09, 0.05, 0.11));
+        return b;
+      });
+      const schwanz = new THREE.Group(); schwanz.position.set(0, 0.7, -0.72); k.add(schwanz);
+      schwanz.add(tierTeil(tierRohr, fell, 0, -0.2, -0.36, 0.05, 0.8, 0.05, Math.PI / 2 + 0.5));   // hängt nach unten
+      g.visible = false;
+      szene.add(g);
+      return { gruppe: g, koerper: k, kopf, beine, schwanz, x: 0, z: 0, y: 0, blick: 0, zustand: 'weg', ziel: null, bis: 0, laufZeit: 0, umweg: 0, umwegBis: 0 };
+    })();
+    const LEO_JAGD = 8.5, LEO_SCHLEICHEN = 3.2;      // zum Vergleich: Affe läuft 6, rennt 10
+    function leopardBlockiert(x, z) {
+      const L = leopard;
+      return bloecke.some(o => o.art !== 'lava' && !o.krone && Math.abs(x - o.x) < o.b / 2 + 0.35 && Math.abs(z - o.z) < o.t / 2 + 0.35 && o.unten < L.y + 0.9 && o.oben > L.y + 0.6);
+    }
+    function spielerSicher() {
+      const p = affe.position;
+      return !!aktuellesFahrzeug || !!mitfahrt || imGefaengnis || imGeheimversteck(p) || p.y > 4.5 || GRUNDSTUECKE.some(g => imHaus(g, p));
+    }
+    function leopardHinsetzen(abstand) {             // irgendwo in der Nähe des Spielers auftauchen (außer Sicht)
+      const p = affe.position;
+      for (let i = 0; i < 30; i++) {
+        const w = Math.random() * Math.PI * 2;
+        const x = THREE.MathUtils.clamp(p.x + Math.cos(w) * abstand, WIESE.x1 + 5, WIESE.x2 - 5);
+        const z = THREE.MathUtils.clamp(p.z + Math.sin(w) * abstand, WIESE.z1 + 5, WIESE.z2 - 5);
+        leopard.y = 0;
+        if (!leopardBlockiert(x, z)) { leopard.x = x; leopard.z = z; return; }
+      }
+    }
+    function erwischt() {
+      const verlust = punkte;
+      punkte = 0; punkteZeigen();
+      Object.assign(inventar, { pistole: false, munition: 0, rauch: 0, minigun: false, mgMun: 0, bazooka: false, bzMun: 0, schrot: false, srMun: 0 });
+      waehlen(0); inventarZeigen();
+      selbstLiegtBis = spielZeit + 2.5;
+      klang('knurren');
+      zeigeMeldung(`🐆 Der Leopard hat dich erwischt! ${verlust} Punkte und alle Waffen sind weg!`, 4);
+      leopard.zustand = 'flucht'; leopard.bis = spielZeit + 12;     // er rennt mit der Beute davon
+    }
+    function leopardGetroffen(q) {
+      const L = leopard;
+      if (!L.gruppe.visible || L.zustand === 'betaeubt') return false;
+      if (Math.hypot(q.x - L.x, q.z - L.z) < 0.9 && q.y < L.y + 1.3) {
+        L.zustand = 'betaeubt'; L.bis = spielZeit + 5;
+        zeigeMeldung('🍌 Leopard getroffen! Schnell weg, er schläft nur 5 Sekunden!', 2.5);
+        return true;
+      }
+      return false;
+    }
+    function leopardBewegen(dt) {
+      const L = leopard;
+      if (!nachtAktiv) { L.zustand = 'weg'; L.gruppe.visible = false; return; }
+      if (L.zustand === 'weg') { leopardHinsetzen(70); L.zustand = 'streifen'; L.ziel = null; }
+      L.gruppe.visible = true;
+      const p = aktuellesFahrzeug ? { x: aktuellesFahrzeug.x, z: aktuellesFahrzeug.z } : affe.position;
+      const abstand = Math.hypot(p.x - L.x, p.z - L.z);
+      const sicher = spielerSicher();
+      let ziel = null, tempo = 0;
+      if (L.zustand === 'betaeubt') {
+        L.koerper.rotation.z = Math.PI / 2; L.koerper.position.y = 0.3;
+        if (spielZeit > L.bis) { L.zustand = 'streifen'; L.koerper.rotation.z = 0; L.koerper.position.y = 0; }
+      } else if (L.zustand === 'flucht') {
+        ziel = { x: L.x + (L.x - p.x), z: L.z + (L.z - p.z) }; tempo = 9;
+        if (spielZeit > L.bis) { L.zustand = 'streifen'; L.ziel = null; }
+      } else if (L.zustand === 'streifen') {
+        if (abstand > 130) leopardHinsetzen(70);                   // nie zu weit weg …
+        if (!L.ziel || Math.hypot(L.ziel.x - L.x, L.ziel.z - L.z) < 2 || spielZeit > L.bis)
+          { L.ziel = { x: p.x + (Math.random() - 0.5) * 60, z: p.z + (Math.random() - 0.5) * 60 }; L.bis = spielZeit + 8; }
+        ziel = L.ziel; tempo = LEO_SCHLEICHEN;
+        if (!sicher && abstand < 28) {                              // … und wenn er dich sieht, jagt er los!
+          L.zustand = 'jagen'; klang('knurren');
+          zeigeMeldung('🐆 Ein Leopard hat dich entdeckt! RENN! (Shift)', 2.5);
+        }
+      } else if (L.zustand === 'jagen') {
+        ziel = p; tempo = LEO_JAGD;
+        if (sicher) { L.zustand = 'streifen'; L.ziel = null; zeigeMeldung('😮‍💨 Puh – hier ist der Leopard keine Gefahr.', 2); }
+        else if (abstand > 45) { L.zustand = 'streifen'; L.ziel = null; zeigeMeldung('😮‍💨 Der Leopard hat dich verloren!', 2); }
+        else if (abstand < 1.2 && Math.abs(affe.position.y - (L.y + 0.5)) < 1.2) erwischt();
+      }
+      if (ziel && tempo) {
+        let w = Math.atan2(ziel.x - L.x, ziel.z - L.z);
+        if (spielZeit < L.umwegBis) w += L.umweg;                  // um ein Hindernis herum
+        const nx = L.x + Math.sin(w) * tempo * dt, nz = L.z + Math.cos(w) * tempo * dt;
+        let bewegt = false;
+        if (!leopardBlockiert(nx, L.z)) { L.x = nx; bewegt = true; }
+        if (!leopardBlockiert(L.x, nz)) { L.z = nz; bewegt = true; }
+        if (!bewegt && spielZeit > L.umwegBis) { L.umweg = (Math.random() < 0.5 ? -1 : 1) * 1.3; L.umwegBis = spielZeit + 0.7; }
+        let u = w - L.blick; u = Math.atan2(Math.sin(u), Math.cos(u)); L.blick += u * Math.min(1, 8 * dt);
+        L.laufZeit += dt * (4 + tempo * 1.4);
+        const zielY = bodenUnter(L.x, L.y + 0.7, L.z).hoehe;
+        L.y += (Math.max(0, zielY) - L.y) * Math.min(1, 10 * dt);
+      }
+      // Animation: Beine, Schwanz, Kopf
+      const lauf = tempo > 0;
+      L.beine.forEach((b, i) => { b.rotation.x = lauf ? Math.sin(L.laufZeit + (i === 0 || i === 3 ? 0 : Math.PI)) * (tempo > 5 ? 0.9 : 0.5) : 0; });
+      L.schwanz.rotation.y = Math.sin(spielZeit * 3) * 0.4;
+      if (L.zustand !== 'betaeubt') L.koerper.position.y = lauf && tempo > 5 ? Math.abs(Math.sin(L.laufZeit)) * 0.08 : 0;
+      L.kopf.rotation.x = L.zustand === 'jagen' ? 0.15 : Math.sin(spielZeit) * 0.1;
+      L.gruppe.position.set(L.x, L.y, L.z);
+      L.gruppe.rotation.y = L.blick;
+    }
+
     // ================= MISSIONEN: der Auftrags-Affe gibt dir Aufgaben =================
     // Jede geschaffte Mission macht die nächste etwas schwerer (weniger Zeit, mehr zu tun) – aber auch die Belohnung größer.
     const AUFTRAGGEBER = { x: -6, z: 7 };
@@ -4795,12 +4947,14 @@
     function auftragAktion(p) {
       if (!amAuftraggeber(p)) return false;
       if (miniSpiel) { zeigeMeldung('Erst das Mini-Spiel fertig spielen!', 2); return true; }
+      if (nachtAktiv && !auftrag) { zeigeMeldung('🌙 Der Auftrags-Affe ist nachts zu Hause. Komm ab 6 Uhr wieder!', 2.5); return true; }
       if (auftrag) auftragBeenden(false, 'Auftrag abgebrochen');
       else { auftrag = { letzte: auftragLetzte }; auftragStarten(p); }
       return true;
     }
     function auftragHinweis(p) {
       if (!amAuftraggeber(p)) return null;
+      if (nachtAktiv && !auftrag) return '<b>🌙 Der Auftrags-Affe schläft</b><small>Komm morgen ab 6 Uhr wieder!</small>';
       return auftrag ? `<b>⏳ ${auftrag.m.titel} läuft</b><small>${E_TASTE}: Auftrag abbrechen</small>`
         : `<b>❗ ${E_TASTE} drücken: neuen Auftrag holen</b><small>Geschaffte Missionen: ${auftraegeGeschafft} · jede wird etwas schwerer!</small>`;
     }
@@ -5096,6 +5250,7 @@
 
       // Die Sonne (oder nachts der Mond) folgt dem Affen, damit es überall Schatten gibt
       mitfahrtAktualisieren();
+      leopardBewegen(dt);
       tagNacht(dt, p);
       auftragAktualisieren(dt, aktuellesFahrzeug || p);
       haeuserAktualisieren(p);
