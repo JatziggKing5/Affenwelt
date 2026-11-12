@@ -443,6 +443,7 @@
     <button data-taste="rauch" hidden>💨</button>
     <button data-taste="zielen" hidden>🎯</button>
     <button data-taste="schuss" hidden>🔫</button>
+    <button data-taste="runter" hidden>⬇️</button>
     <button data-taste="aktion">✋</button>
     <button data-taste="sprung" class="gross">⬆️</button>
   </div>
@@ -5423,7 +5424,7 @@
         kopf.rotation.z = Math.sin(spielZeit * 3) * 0.05;
         figur.position.y = 0; figur.rotation.x = 0;
         const kmh = Math.round(Math.abs(f.tempo) * 3.6);
-        fahrInfo.innerHTML = f.typ === 'flugzeug' ? `<b>${f.emoji} ${f.name} · ${kmh} km/h · ${Math.round(f.hoeheJetzt || 0)} m hoch</b><small>W Gas · A/D lenken · Leertaste steigen (ab ${Math.round(ABHEBE_TEMPO * 3.6)} km/h) · Shift sinken · E aussteigen (nur am Boden)</small>` : rennHinweis(f) || `<b>${f.emoji} ${f.name} · ${kmh} km/h</b>` +
+        fahrInfo.innerHTML = f.typ === 'flugzeug' ? `<b>${f.emoji} ${f.name} · ${kmh} km/h · ${Math.round(f.hoeheJetzt || 0)} m hoch</b><small>${IST_HANDY ? `Stick: Gas und lenken · ⬆️ steigen (ab ${Math.round(ABHEBE_TEMPO * 3.6)} km/h) · ⬇️ sinken · ✋ aussteigen (nur am Boden)` : `W Gas · A/D lenken · Leertaste steigen (ab ${Math.round(ABHEBE_TEMPO * 3.6)} km/h) · Shift sinken · E aussteigen (nur am Boden)`}</small>` : rennHinweis(f) || `<b>${f.emoji} ${f.name} · ${kmh} km/h</b>` +
           (IST_HANDY ? '<small>Stick: Gas, Bremse und lenken · 📯 hupen · ✋ aussteigen</small>' : `<small>W Gas · S Bremse/Rückwärts · A/D lenken · Leertaste hupen · E aussteigen</small>`);
         fahrInfo.classList.add('offen');
       } else {
@@ -6484,11 +6485,12 @@
         const was = k.dataset.taste;
         if (was === 'sprung') { tasten.Space = true; sprungGedrueckt = true; sprungGedruecktUm = spielZeit; }
         if (was === 'aktion') eGedrueckt = true;
+        if (was === 'runter') tasten.ShiftLeft = true;   // Flugzeug: sinken
         if (was === 'schuss') { if (hatWaffe() && !aktuellesFahrzeug && !WAFFEN_NR.includes(auswahl)) { auswahl = ersteWaffe(); inventarZeigen(); } fGedrueckt = true; handySchussGehalten = true; }
         if (was === 'zielen') zielfernrohrBenutzen(!zielModus);
         if (was === 'rauch') gGedrueckt = true;
       });
-      const los = () => { k.classList.remove('gedrueckt'); if (k.dataset.taste === 'sprung') tasten.Space = false; if (k.dataset.taste === 'schuss') handySchussGehalten = false; };
+      const los = () => { k.classList.remove('gedrueckt'); if (k.dataset.taste === 'sprung') tasten.Space = false; if (k.dataset.taste === 'runter') tasten.ShiftLeft = false; if (k.dataset.taste === 'schuss') handySchussGehalten = false; };
       k.addEventListener('pointerup', los);
       k.addEventListener('pointercancel', los);
       k.addEventListener('pointerleave', los);
@@ -6499,7 +6501,9 @@
       handyKnoepfe.querySelector('[data-taste="schuss"]').hidden = !hatWaffe() || !!aktuellesFahrzeug;
       handyKnoepfe.querySelector('[data-taste="zielen"]').hidden = !hatWaffe() || !!aktuellesFahrzeug;
       handyKnoepfe.querySelector('[data-taste="rauch"]').hidden = inventar.rauch <= 0;
-      handyKnoepfe.querySelector('[data-taste="sprung"]').textContent = aktuellesFahrzeug ? '📯' : '⬆️';
+      const imFlugzeug = aktuellesFahrzeug?.typ === 'flugzeug';
+      handyKnoepfe.querySelector('[data-taste="runter"]').hidden = !imFlugzeug;   // ⬇️ nur im Flugzeug
+      handyKnoepfe.querySelector('[data-taste="sprung"]').textContent = aktuellesFahrzeug && !imFlugzeug ? '📯' : '⬆️'; // im Flugzeug: steigen
     }
 
     // ================= LIVE-VERBINDUNG ZU BLENDER =================
