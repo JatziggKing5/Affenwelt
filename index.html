@@ -346,6 +346,7 @@
     const startPunkt = new THREE.Vector3(0, 0.5, 0);
     let letzterCheckpoint = null;
     let imZiel = false;
+    let zurueckZumStartUm = 0;  // wann der Affe nach dem Ziel zurück zum Start kommt
     let stehtAufLetztes = null; // auf welchem Block der Affe im letzten Bild stand
 
     // Große Meldung in der Mitte (z. B. "Checkpoint!")
@@ -496,7 +497,15 @@
         imZiel = true;
         punkte += 100;
         punkteZeigen();
-        zeigeMeldung('🏆 Obby geschafft! +100 Punkte', 4);
+        zeigeMeldung('🏆 Obby geschafft! +100 Punkte', 3);
+        zurueckZumStartUm = spielZeit + 3; // in 3 Sekunden geht's zurück zum Start
+      }
+      // Nach dem Ziel: zurück auf die Wiese, alles wieder von vorne
+      if (imZiel && spielZeit >= zurueckZumStartUm) {
+        imZiel = false;
+        letzterCheckpoint = null;
+        startPunkt.set(0, 0.5, 0);   // Startpunkt wieder auf die Wiese
+        neuStart('Zurück zum Start! 🏁');
       }
       if (spielZeit > meldungBis) meldung.style.opacity = 0;
 
