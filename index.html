@@ -312,6 +312,8 @@
     #auftrag .balken { height: 6px; margin-top: 6px; border-radius: 3px; background: rgba(0,0,0,0.25); overflow: hidden; }
     #auftrag .balken div { height: 100%; background: #fff; }
     #auftrag.eilig .balken div { background: #ff1744; }
+    #auftrag.rennen { background: rgba(33, 33, 33, 0.92); }
+    #auftrag.rennen b { font-size: 20px; font-family: monospace; }
     @media (max-width: 600px) { #auftrag { top: 64px; width: 46vw; min-width: 0; left: auto; right: 130px; transform: none; padding: 6px 8px; } #auftrag b { font-size: 12px; } #auftrag small { font-size: 11px; } }
     body.handy #auftrag { top: 64px; width: 46vw; min-width: 0; left: auto; right: 130px; transform: none; padding: 6px 8px; }
     body.handy #auftrag b { font-size: 12px; } body.handy #auftrag small { font-size: 11px; }
@@ -456,7 +458,7 @@
       ['👥 Mehrspieler', [['Raum öffnen / beitreten', k('P')], ['Chat schreiben', k('T') + ' oder ' + k('Enter')], ['Funkgerät', k('V') + ' halten']]],
     ];
     HILFE.push(['🗺️ Zum Entdecken', [
-      ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
+      ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🏁 Straßenrennen', 'mit einem Fahrzeug unters Start-Tor fahren'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
       ['🔫 Waffenhändler', 'Bananen-Pistole & Zielfernrohr'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
       ['🚔 Polizei', 'nicht über Rot fahren, nichts Verbotenes tun'], ['🔒 Gefängnis', 'man kann ausbrechen …'],
       ['🤫 Geheimversteck', 'irgendwo gibt es eins – nicht auf der Karte!'],
@@ -4099,6 +4101,112 @@
     }
 
     // Jetzt sind alle Bäume, Laternen und Straßenstriche gesammelt: alles auf einmal bauen
+    // ================= STRASSENRENNEN mit Zeitmessung =================
+    // Start und Ziel: das Tor auf der Hauptstraße. Dann durch alle Ringe in der richtigen Reihenfolge.
+    const RENN_START = { x: 0, z: 90 };
+    const RENN_RINGE = [[0, 170], [0, 250], [45, 290], [90, 250], [90, 170], [135, 130], [180, 90], [135, 50], [45, 50], [0, 90]];
+    const MEDAILLEN = [[40, '🥇 Gold', 300], [55, '🥈 Silber', 200], [75, '🥉 Bronze', 100]];
+    let rennen = null;           // { phase: 'warten'|'countdown'|'fahren', ... }
+    let bestzeit = null, besteMedaille = 99;
+    // Start-Tor
+    (() => {
+      const pfosten = new THREE.MeshStandardMaterial({ color: 0x212121 });
+      for (const sx of [-1, 1]) instanz(einheitsKiste, pfosten, RENN_START.x + sx * (HALB + 0.6), 3, RENN_START.z, 0.4, 6, 0.4, 0, null, true);
+      schildBauen('🏁 START · ZIEL 🏁', HALB * 2 + 1.6, 1.3, '#111', '#fff', RENN_START.x, 5.6, RENN_START.z, 0);
+      schildBauen('🏁 START · ZIEL 🏁', HALB * 2 + 1.6, 1.3, '#111', '#fff', RENN_START.x, 5.6, RENN_START.z - 0.05, Math.PI);
+      // Schachbrett-Linie am Boden
+      const weiss = new THREE.MeshBasicMaterial({ color: 0xffffff }), schwarz = new THREE.MeshBasicMaterial({ color: 0x111111 });
+      const n = Math.round(HALB * 2 / 0.7);
+      for (let i = 0; i < n; i++) for (let j = 0; j < 2; j++)
+        instanz(einheitsKiste, (i + j) % 2 ? weiss : schwarz, RENN_START.x - HALB + 0.35 + i * 0.7, 0.03, RENN_START.z - 0.35 + j * 0.7, 0.7, 0.02, 0.7, 0, null, false);
+    })();
+    // Ringe (nur während des Rennens zu sehen)
+    const ringForm = new THREE.TorusGeometry(4.2, 0.35, 10, 32);
+    const ringMaterial = new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.85 });
+    const ringMaterialNaechster = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25 });
+    const ringe = RENN_RINGE.map(([x, z], i) => {
+      const [vx, vz] = i === 0 ? RENN_START_V() : [RENN_RINGE[i - 1][0], RENN_RINGE[i - 1][1]];
+      const m = new THREE.Mesh(ringForm, ringMaterial);
+      m.position.set(x, 3.6, z);
+      m.rotation.y = Math.atan2(x - vx, z - vz);     // Ring schaut in die Fahrtrichtung
+      m.visible = false;
+      szene.add(m);
+      return m;
+    });
+    function RENN_START_V() { return [RENN_START.x, RENN_START.z]; }
+    const imStartTor = f => Math.abs(f.x - RENN_START.x) < HALB + 0.5 && Math.abs(f.z - RENN_START.z) < 5;
+    const zeitText = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+    function rennHinweis(f) {
+      if (!rennen || rennen.phase === 'fahren') {
+        if (!rennen && imStartTor(f)) return auftrag?.m ? '<b>🏁 Straßenrennen</b><small>Mach zuerst deinen Auftrag fertig!</small>'
+          : `<b>🏁 Straßenrennen – kurz stehen bleiben zum Starten!</b><small>${bestzeit ? 'Deine Bestzeit: ' + zeitText(bestzeit) : 'Fahr durch alle Ringe. Ampeln sind beim Rennen egal!'} · 🥇 unter ${MEDAILLEN[0][0]} s</small>`;
+        return null;
+      }
+      return null;
+    }
+    function rennenAktualisieren(dt) {
+      const f = aktuellesFahrzeug;
+      if (rennen && !f) { rennenEnde(false, 'Ausgestiegen – Rennen abgebrochen'); return; }
+      if (!f) return;
+      if (!rennen) {
+        if (auftrag?.m || !imStartTor(f) || Math.abs(f.tempo) > 1.5) { rennenStehZeit = 0; return; }
+        rennenStehZeit += dt;
+        if (rennenStehZeit > 1.2) { rennen = { phase: 'countdown', start: spielZeit + 3, ring: 0, gezaehlt: 4 }; rennenStehZeit = 0; }
+        return;
+      }
+      const box = auftragBox;
+      box.classList.add('offen', 'rennen'); box.classList.remove('eilig');
+      if (rennen.phase === 'countdown') {
+        f.tempo = 0;                                   // während dem Countdown stehen bleiben
+        const rest = rennen.start - spielZeit;
+        const zahl = Math.ceil(rest);
+        if (zahl !== rennen.gezaehlt && zahl > 0) { rennen.gezaehlt = zahl; klang('tick'); zeigeMeldung(['', '1 …', '2 …', '3 …'][zahl] || '', 0.8); }
+        box.querySelector('b').textContent = `🏁 ${zahl > 0 ? zahl : 'LOS!'}`;
+        box.querySelector('small').textContent = 'Gleich geht\'s los …';
+        box.querySelector('.balken div').style.width = '0%';
+        if (rest <= 0) { rennen.phase = 'fahren'; rennen.laeuft = true; klang('start'); zeigeMeldung('🏁 LOS!', 1); }
+        return;
+      }
+      // Rennen läuft: nächster Ring
+      const zeit = spielZeit - rennen.start;
+      const [rx, rz] = RENN_RINGE[rennen.ring];
+      ringe.forEach((r, i) => { r.visible = i === rennen.ring || i === rennen.ring + 1; r.material = i === rennen.ring ? ringMaterial : ringMaterialNaechster; });
+      ringe[rennen.ring].rotation.z += dt * 0.8;
+      wegpunkt = { x: rx, z: rz };
+      if (Math.hypot(f.x - rx, f.z - rz) < 6) {
+        rennen.ring++;
+        if (rennen.ring >= RENN_RINGE.length) { rennenEnde(true, zeit); return; }
+        klang('plopp');
+      }
+      if (zeit > 240) { rennenEnde(false, 'Zu langsam – Rennen vorbei!'); return; }
+      box.querySelector('b').textContent = `⏱️ ${zeitText(zeit)}`;
+      box.querySelector('small').textContent = `Ring ${rennen.ring + 1} von ${RENN_RINGE.length}${bestzeit ? ' · Bestzeit ' + zeitText(bestzeit) : ''}`;
+      box.querySelector('.balken div').style.width = (rennen.ring / RENN_RINGE.length * 100) + '%';
+    }
+    let rennenStehZeit = 0;
+    function rennenEnde(geschafft, zeitOderGrund) {
+      for (const r of ringe) r.visible = false;
+      wegpunkt = null;
+      auftragBox.classList.remove('offen', 'rennen');
+      rennen = null;
+      if (!geschafft) { klang('fehler'); zeigeMeldung('❌ ' + zeitOderGrund, 2.5); return; }
+      const t = zeitOderGrund;
+      const neu = !bestzeit || t < bestzeit;
+      if (neu) bestzeit = t;
+      const medaille = MEDAILLEN.findIndex(m => t < m[0]);
+      let text = `🏁 Ziel! ${zeitText(t)}${neu ? ' – neue Bestzeit!' : ''}`;
+      if (medaille >= 0) {
+        text += ` ${MEDAILLEN[medaille][1]}`;
+        if (medaille < besteMedaille) {                 // Belohnung nur für eine bessere Medaille als bisher
+          besteMedaille = medaille; punkte += MEDAILLEN[medaille][2]; punkteZeigen();
+          text += ` +${MEDAILLEN[medaille][2]} Punkte`;
+        }
+      }
+      klang('erfolg');
+      zeigeMeldung(text, 4);
+      if (mp.raum) { mpSenden('chat', { m: `🏁 ${text}` }); chatZeile(mp.name, text, true); }
+    }
+
     instanzenBauen();
 
     // --- Tag und Nacht: ein ganzer Tag dauert etwa 7 Minuten (die Nacht geht schneller vorbei) ---
@@ -4406,7 +4514,7 @@
           const vorherDrin = Math.abs(f.vorherX - k.x) < k.hw && Math.abs(f.vorherZ - k.z) < k.hw;
           if (drin && !vorherDrin && Math.abs(f.tempo) > 2) {
             const achse = Math.abs(Math.sin(f.richtung)) > 0.7 ? 'ew' : 'ns';
-            if (ampelFarbe(k, achse, spielZeit) === 'rot') straftat('Über Rot gefahren!');
+            if (ampelFarbe(k, achse, spielZeit) === 'rot' && !(rennen && rennen.laeuft)) straftat('Über Rot gefahren!'); // beim Rennen sind die Ampeln egal
           }
         }
         f.vorherX = f.x; f.vorherZ = f.z;
@@ -4428,7 +4536,7 @@
         kopf.rotation.z = Math.sin(spielZeit * 3) * 0.05;
         figur.position.y = 0; figur.rotation.x = 0;
         const kmh = Math.round(Math.abs(f.tempo) * 3.6);
-        fahrInfo.innerHTML = `<b>${f.emoji} ${f.name} · ${kmh} km/h</b>` +
+        fahrInfo.innerHTML = rennHinweis(f) || `<b>${f.emoji} ${f.name} · ${kmh} km/h</b>` +
           (IST_HANDY ? '<small>Stick: Gas, Bremse und lenken · 📯 hupen · ✋ aussteigen</small>' : `<small>W Gas · S Bremse/Rückwärts · A/D lenken · Leertaste hupen · E aussteigen</small>`);
         fahrInfo.classList.add('offen');
       } else {
@@ -4595,6 +4703,7 @@
       // Die Sonne (oder nachts der Mond) folgt dem Affen, damit es überall Schatten gibt
       tagNacht(dt, p);
       auftragAktualisieren(dt, aktuellesFahrzeug || p);
+      rennenAktualisieren(dt);
 
       // Umkleidekabine: Menü zeigen, solange der Affe (zu Fuß) drin steht
       kabinenMenue.classList.toggle('offen', !aktuellesFahrzeug && inKabine(p));
