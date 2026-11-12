@@ -134,6 +134,26 @@
     }
     body.handy #chatVerlauf { bottom: auto; top: 130px; width: 42vw; font-size: 12px; }
     body.handy #chatEingabe { bottom: auto; top: 70px; }
+    /* --- Tanz-Rad (B halten) --- */
+    #tanzRad { position: fixed; inset: 0; z-index: 24; display: none; background: radial-gradient(circle, rgba(0,0,0,0.55) 0, rgba(0,0,0,0.15) 60%, transparent 75%); }
+    #tanzRad.offen { display: block; }
+    #tanzRad .tanz {
+      position: absolute; width: 84px; height: 84px; margin: -42px 0 0 -42px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.7);
+      background: rgba(0,0,0,0.6); color: #fff; font-size: 34px; cursor: pointer; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; transition: transform 0.1s, background 0.1s; padding: 0;
+    }
+    #tanzRad .tanz small { font-size: 11px; font-weight: bold; margin-top: 2px; }
+    #tanzRad .tanz.gewaehlt { background: #ffd600; color: #000; transform: scale(1.18); border-color: #fff; }
+    #tanzRad .mitte {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 120px; text-align: center;
+      color: #fff; font-weight: bold; font-size: 16px; text-shadow: 0 2px 4px #000; pointer-events: none;
+    }
+    #tanzKnopf { display: none; }
+    body.handy #tanzKnopf {
+      display: block; position: fixed; left: 14px; top: 45%; width: 54px; height: 54px; border-radius: 50%; z-index: 6;
+      border: 2px solid rgba(255,255,255,0.6); background: rgba(0,0,0,0.5); font-size: 26px;
+    }
+    @media (max-width: 600px) { #tanzRad .tanz { width: 64px; height: 64px; margin: -32px 0 0 -32px; font-size: 26px; } #tanzRad .tanz small { font-size: 9px; } }
     #karteZu {
       position: fixed; top: 14px; right: 14px; z-index: 21; width: 48px; height: 48px; border-radius: 50%;
       border: 3px solid #fff; background: rgba(0,0,0,0.7); color: #fff; font-size: 24px; display: none; cursor: pointer;
@@ -313,6 +333,8 @@
   <form id="chatEingabe" autocomplete="off"><input id="chatText" maxlength="80" placeholder="Nachricht schreiben … (Enter = senden)"><button>➤</button></form>
   <button id="karteZu" title="Karte schließen">✕</button>
   <div id="stick"><div id="stickKnopf"></div></div>
+  <div id="tanzRad"><div class="mitte"></div></div>
+  <button id="tanzKnopf">🕺</button>
   <div id="handyknoepfe">
     <button data-taste="rauch" hidden>💨</button>
     <button data-taste="zielen" hidden>🎯</button>
@@ -326,7 +348,7 @@
     <div id="farben"></div>
     <p class="klein">Zum Verlassen einfach rauslaufen.</p>
   </div>
-  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1–5: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · Shift: rennen · Jetpack: Leertaste halten · M: Karte (Klick = Wegpunkt) · P: 👥 Mehrspieler · T: Chat · V halten: Funk 🎙️ · 🚔 Nicht über Rot fahren!</div>
+  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1–5: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · Shift: rennen · Jetpack: Leertaste halten · M: Karte (Klick = Wegpunkt) · P: 👥 Mehrspieler · B halten: Tanzen 🕺 · T: Chat · V halten: Funk 🎙️ · 🚔 Nicht über Rot fahren!</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -763,6 +785,137 @@
     function laufAnimation(t, zeit, staerke) {
       t.armL.rotation.set(Math.sin(zeit) * staerke, 0, -0.35); t.armR.rotation.set(-Math.sin(zeit) * staerke, 0, 0.35);
       t.beinL.rotation.set(-Math.sin(zeit) * staerke * 0.7, 0, 0); t.beinR.rotation.set(Math.sin(zeit) * staerke * 0.7, 0, 0);
+    }
+
+    // --- Tänze: jeder Tanz stellt Arme, Beine, Kopf und Körper ein ---
+    // t = { armL, armR, beinL, beinR, kopf, figur }, z = Sekunden seit Tanzbeginn
+    const TAENZE = [
+      { id: 'disco',    emoji: '🕺', name: 'Disco',          bpm: 120 },
+      { id: 'huefte',   emoji: '💃', name: 'Hüftschwung',    bpm: 100 },
+      { id: 'roboter',  emoji: '🤖', name: 'Roboter',        bpm: 110 },
+      { id: 'huhn',     emoji: '🐔', name: 'Hühnertanz',     bpm: 130 },
+      { id: 'kreisel',  emoji: '🌀', name: 'Breakdance',     bpm: 125 },
+      { id: 'hampel',   emoji: '🤸', name: 'Hampelmann',     bpm: 115 },
+      { id: 'party',    emoji: '🙌', name: 'Party-Arme',     bpm: 120 },
+      { id: 'trommel',  emoji: '🦍', name: 'Brust-Trommeln', bpm: 140 },
+      { id: 'floss',    emoji: '🦷', name: 'Floss',          bpm: 130 },
+      { id: 'salto',    emoji: '🔄', name: 'Salto',          bpm: 75  },
+      { id: 'pudding',  emoji: '🍮', name: 'Wackelpudding',  bpm: 110 },
+      { id: 'dab',      emoji: '😎', name: 'Dab',            bpm: 100 },
+    ];
+    function tanzPose(t, tanz, z) {
+      const b = z * tanz.bpm / 60 * Math.PI;      // eine halbe Schwingung pro Takt
+      const s = Math.sin, c = Math.cos, ab = Math.abs;
+      const f = t.figur;
+      f.userData.s0 ??= f.scale.clone();          // Originalgröße merken (zum Zurücksetzen)
+      f.scale.copy(f.userData.s0);
+      f.rotation.set(0, 0, 0); f.position.y = 0;
+      t.kopf.rotation.set(0, 0, 0);
+      t.beinL.rotation.set(0, 0, 0); t.beinR.rotation.set(0, 0, 0);
+      switch (tanz.id) {
+        case 'disco': {                            // Finger hoch – Finger runter
+          const hoch = Math.floor(z * tanz.bpm / 60) % 2 === 0;
+          t.armR.rotation.set(0, 0, hoch ? 2.5 : 0.5);
+          t.armL.rotation.set(-0.6, 0, -0.5);
+          f.rotation.z = s(b) * 0.12; f.position.y = ab(s(b)) * 0.05;
+          t.kopf.rotation.z = s(b) * 0.2;
+          t.beinR.rotation.z = hoch ? 0.25 : 0;
+          break;
+        }
+        case 'huefte':                             // Hüften kreisen, Arme schwingen
+          f.rotation.z = s(b) * 0.25; f.rotation.y = s(b * 0.5) * 0.5;
+          t.armL.rotation.set(s(b) * 0.5, 0, -1.3); t.armR.rotation.set(-s(b) * 0.5, 0, 1.3);
+          t.beinL.rotation.z = -s(b) * 0.15; t.beinR.rotation.z = -s(b) * 0.15;
+          t.kopf.rotation.z = -s(b) * 0.2;
+          break;
+        case 'roboter': {                          // ruckartig, wie eine Maschine
+          const q = Math.floor(z * tanz.bpm / 30);
+          const arme = [[0, -1.57], [-1.57, 0], [-1.57, -1.57], [0, 0]][q % 4];
+          t.armL.rotation.set(arme[0], 0, -0.1); t.armR.rotation.set(arme[1], 0, 0.1);
+          t.kopf.rotation.y = [-0.6, 0, 0.6, 0][q % 4];
+          f.rotation.y = [0, 0.5, 0, -0.5][Math.floor(q / 2) % 4];
+          f.position.y = q % 2 ? 0.04 : 0;
+          break;
+        }
+        case 'huhn':                               // Flügel schlagen und picken
+          t.armL.rotation.set(0.4, 0, -(0.5 + ab(s(b * 2)) * 0.8));
+          t.armR.rotation.set(0.4, 0, 0.5 + ab(s(b * 2)) * 0.8);
+          t.kopf.rotation.x = s(b * 2) * 0.35;
+          f.rotation.x = 0.3; f.position.y = ab(s(b)) * 0.12;
+          t.beinL.rotation.x = Math.max(0, s(b)) * -0.7; t.beinR.rotation.x = Math.max(0, -s(b)) * -0.7;
+          break;
+        case 'kreisel':                            // dreht sich wie verrückt
+          f.rotation.y = z * 12; f.position.y = 0.15 + ab(s(b)) * 0.1;
+          t.armL.rotation.set(0, 0, -1.55); t.armR.rotation.set(0, 0, 1.55);
+          t.beinL.rotation.z = -0.5; t.beinR.rotation.z = 0.5;
+          t.kopf.rotation.z = 0.3;
+          break;
+        case 'hampel': {                           // Hampelmann: Arme und Beine auf und zu
+          const auf = (1 - c(b * 2)) / 2;
+          t.armL.rotation.set(0, 0, -(0.3 + auf * 2.6)); t.armR.rotation.set(0, 0, 0.3 + auf * 2.6);
+          t.beinL.rotation.z = -auf * 0.5; t.beinR.rotation.z = auf * 0.5;
+          f.position.y = ab(s(b * 2)) * 0.35;
+          break;
+        }
+        case 'party':                              // beide Arme hoch und hin und her
+          t.armL.rotation.set(s(b) * 0.5, 0, -2.6); t.armR.rotation.set(s(b) * 0.5, 0, 2.6);
+          f.rotation.z = s(b) * 0.15; f.position.y = ab(s(b * 2)) * 0.08;
+          t.kopf.rotation.z = s(b) * 0.25;
+          break;
+        case 'trommel':                            // wie ein Gorilla auf die Brust trommeln
+          t.armL.rotation.set(-1.3 + s(b * 2) * 0.45, 0, 0.5);
+          t.armR.rotation.set(-1.3 - s(b * 2) * 0.45, 0, -0.5);
+          t.kopf.rotation.x = -0.35;
+          t.beinL.rotation.x = Math.min(0, s(b)) * 0.6; t.beinR.rotation.x = Math.min(0, -s(b)) * 0.6;
+          f.rotation.z = s(b) * 0.1; f.position.y = ab(s(b)) * 0.06;
+          break;
+        case 'floss': {                            // Arme hin und her, Hüfte andersrum
+          const w = s(b * 2), vorn = s(b * 4) > 0 ? 0.5 : -0.5;
+          t.armL.rotation.set(vorn, 0, -0.3 + w * 0.6); t.armR.rotation.set(vorn, 0, 0.3 + w * 0.6);
+          f.rotation.z = -w * 0.15;
+          t.beinL.rotation.z = w * 0.1; t.beinR.rotation.z = w * 0.1;
+          break;
+        }
+        case 'salto': {                            // Rückwärtssalto!
+          const p = (z % 1.6) / 1.6;
+          if (p < 0.15) {                          // in die Knie gehen
+            f.position.y = -0.05; t.armL.rotation.set(0.6, 0, -0.3); t.armR.rotation.set(0.6, 0, 0.3);
+            t.beinL.rotation.x = -0.4; t.beinR.rotation.x = -0.4;
+          } else if (p < 0.75) {                   // in der Luft drehen
+            const q = (p - 0.15) / 0.6;
+            f.rotation.x = -q * Math.PI * 2; f.position.y = s(q * Math.PI) * 1.3 + 0.2 * s(q * Math.PI);
+            t.armL.rotation.set(0, 0, -2.6); t.armR.rotation.set(0, 0, 2.6);
+            t.beinL.rotation.x = -1.2 * s(q * Math.PI); t.beinR.rotation.x = -1.2 * s(q * Math.PI);
+          } else {                                 // gelandet: Ta-daa!
+            t.armL.rotation.set(0, 0, -2.2); t.armR.rotation.set(0, 0, 2.2);
+            t.beinL.rotation.z = -0.15; t.beinR.rotation.z = 0.15;
+          }
+          break;
+        }
+        case 'pudding': {                          // wabbelt wie Wackelpudding
+          const w = s(b * 2) * 0.13, s0 = f.userData.s0;
+          f.scale.set(s0.x * (1 + w), s0.y * (1 - w), s0.z * (1 + w));
+          f.rotation.z = s(b) * 0.2;
+          t.armL.rotation.set(s(b * 3) * 0.4, 0, -(0.9 + s(b * 3) * 0.5)); t.armR.rotation.set(-s(b * 3) * 0.4, 0, 0.9 + s(b * 3) * 0.5);
+          t.kopf.rotation.z = s(b * 2) * 0.3;
+          break;
+        }
+        case 'dab': {                              // Dab – mal links, mal rechts
+          const links = Math.floor(z * tanz.bpm / 60 / 2) % 2 === 0;
+          const zuck = Math.max(0, s(b * 2)) * 0.1;
+          if (links) { t.armL.rotation.set(-0.3, 0, -2.3 - zuck); t.armR.rotation.set(-1.4, 0, -0.6); t.kopf.rotation.set(0.5, 0, -0.4); }
+          else       { t.armR.rotation.set(-0.3, 0, 2.3 + zuck); t.armL.rotation.set(-1.4, 0, 0.6); t.kopf.rotation.set(0.5, 0, 0.4); }
+          f.rotation.z = links ? -0.08 : 0.08;
+          break;
+        }
+      }
+    }
+    function tanzEnde(t) {                         // alles wieder gerade hinstellen
+      const f = t.figur;
+      if (f.userData.s0) f.scale.copy(f.userData.s0);
+      f.rotation.set(0, 0, 0); f.position.y = 0;
+      t.kopf.rotation.set(0, 0, 0);
+      t.beinL.rotation.set(0, 0, 0); t.beinR.rotation.set(0, 0, 0);
     }
 
     // --- Alle Blöcke der Welt landen in dieser Liste ---
@@ -1683,6 +1836,103 @@
       if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault(); // Seite nicht scrollen
     });
     addEventListener('keyup', (e) => { tasten[e.code] = false; });
+
+    // --- Tanzen: B halten = Tanz-Rad, Maus auf einen Tanz, B loslassen = tanzen ---
+    let tanz = null, tanzStart = 0, tanzNaechsterTakt = 0;
+    const tanzRad = document.getElementById('tanzRad');
+    const tanzMitte = tanzRad.querySelector('.mitte');
+    let tanzGewaehlt = null, tanzRadOffen = false, tanzMitTaste = false;
+    const tanzKnoepfe = TAENZE.map((tz, i) => {
+      const k = document.createElement('button');
+      k.className = 'tanz';
+      k.innerHTML = `${tz.emoji}<small>${tz.name}</small>`;
+      k.addEventListener('click', e => { e.stopPropagation(); tanzLos(i); tanzRadZu(); });
+      k.addEventListener('pointerenter', () => tanzMarkieren(i));
+      tanzRad.append(k);
+      return k;
+    });
+    function tanzRadAnordnen() {                   // Tänze im Kreis um die Bildschirmmitte
+      const r = Math.min(innerWidth, innerHeight) * 0.36;
+      tanzKnoepfe.forEach((k, i) => {
+        const w = i / TAENZE.length * Math.PI * 2 - Math.PI / 2;
+        k.style.left = (innerWidth / 2 + Math.cos(w) * r) + 'px';
+        k.style.top = (innerHeight / 2 + Math.sin(w) * r) + 'px';
+      });
+    }
+    function tanzMarkieren(i) {
+      tanzGewaehlt = i;
+      tanzKnoepfe.forEach((k, j) => k.classList.toggle('gewaehlt', j === i));
+      tanzMitte.textContent = i === null ? (tanz ? '⏹ Mitte = aufhören' : '🕺 Wähl einen Tanz!') : TAENZE[i].emoji + ' ' + TAENZE[i].name;
+    }
+    function tanzRadAuf(mitTaste) {
+      if (tanzRadOffen || aktuellesFahrzeug) return;
+      tanzRadOffen = true; tanzMitTaste = mitTaste;
+      for (const t in tasten) tasten[t] = false;
+      tanzRadAnordnen(); tanzMarkieren(null);
+      tanzRad.classList.add('offen');
+    }
+    function tanzRadZu() { tanzRadOffen = false; tanzRad.classList.remove('offen'); }
+    // Maus-Richtung von der Mitte aus wählt den Tanz (man muss nicht genau treffen)
+    tanzRad.addEventListener('pointermove', e => {
+      const dx = e.clientX - innerWidth / 2, dy = e.clientY - innerHeight / 2;
+      if (Math.hypot(dx, dy) < 50) { tanzMarkieren(null); return; }
+      let w = Math.atan2(dy, dx) + Math.PI / 2;
+      if (w < 0) w += Math.PI * 2;
+      tanzMarkieren(Math.round(w / (Math.PI * 2) * TAENZE.length) % TAENZE.length);
+    });
+    tanzRad.addEventListener('click', e => {      // in die Mitte / daneben tippen
+      e.stopPropagation();
+      if (tanz) tanzStoppen();
+      tanzRadZu();
+    });
+    for (const ev of ['pointerdown', 'mousedown', 'touchstart', 'contextmenu']) tanzRad.addEventListener(ev, e => { e.stopPropagation(); if (ev === 'contextmenu') e.preventDefault(); });
+    addEventListener('keydown', e => {
+      if (e.code === 'KeyB' && !e.repeat) tanzRadAuf(true);
+      if (e.code === 'Escape' && tanzRadOffen) tanzRadZu();
+    });
+    addEventListener('keyup', e => {
+      if (e.code !== 'KeyB' || !tanzRadOffen || !tanzMitTaste) return;
+      if (tanzGewaehlt !== null) { tanzLos(tanzGewaehlt); tanzRadZu(); }
+      else if (tanz) { tanzStoppen(); tanzRadZu(); }
+      // nichts gewählt: Rad bleibt offen, dann kann man klicken
+    });
+    const tanzKnopf = document.getElementById('tanzKnopf');
+    tanzKnopf.addEventListener('pointerdown', e => e.stopPropagation());
+    tanzKnopf.addEventListener('click', e => { e.stopPropagation(); tanzRadOffen ? tanzRadZu() : tanzRadAuf(false); });
+    function tanzLos(i) {
+      tanz = TAENZE[i]; tanzStart = spielZeit; tanzNaechsterTakt = spielZeit;
+      zeigeMeldung(`${tanz.emoji} ${tanz.name}!`, 1.5);
+    }
+    function tanzStoppen() {
+      if (!tanz) return;
+      tanz = null;
+      tanzEnde({ armL: armLinks, armR: armRechts, beinL: beinLinks, beinR: beinRechts, kopf, figur });
+    }
+    // Ein kleiner Beat zum Tanzen (Bumm – tss – Bumm – tss)
+    function tanzBeat() {
+      if (!tanz || spielZeit < tanzNaechsterTakt) return;
+      const takt = 60 / tanz.bpm / 2;
+      const nr = Math.round((tanzNaechsterTakt - tanzStart) / takt);
+      tanzNaechsterTakt += takt;
+      if (spielZeit - tanzNaechsterTakt > 1) tanzNaechsterTakt = spielZeit + takt;  // nach einer Pause nicht nachholen
+      try {
+        tonMaschine ??= new AudioContext();
+        const jetzt = tonMaschine.currentTime, laut = tonMaschine.createGain();
+        laut.connect(tonMaschine.destination);
+        if (nr % 2 === 0) {                        // Bumm (Bass-Trommel)
+          const o = tonMaschine.createOscillator();
+          o.frequency.setValueAtTime(130, jetzt); o.frequency.exponentialRampToValueAtTime(40, jetzt + 0.15);
+          laut.gain.setValueAtTime(0.25, jetzt); laut.gain.exponentialRampToValueAtTime(0.001, jetzt + 0.2);
+          o.connect(laut); o.start(jetzt); o.stop(jetzt + 0.2);
+        } else {                                   // tss (Becken aus Rauschen)
+          const n = tonMaschine.createBuffer(1, 2205, 44100), d = n.getChannelData(0);
+          for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+          const q = tonMaschine.createBufferSource(), hp = tonMaschine.createBiquadFilter();
+          hp.type = 'highpass'; hp.frequency.value = 6000;
+          q.buffer = n; q.connect(hp); hp.connect(laut); laut.gain.value = 0.08; q.start(jetzt);
+        }
+      } catch (e) {}
+    }
 
     // --- Spielwerte ---
     const TEMPO = 6;          // wie schnell der Affe läuft
@@ -3680,6 +3930,7 @@
           kameraWinkel += unterschied * Math.min(1, 2.5 * dt);
         }
         kameraAbstand += ((f.typ === 'monster' ? 14 : 12) - kameraAbstand) * Math.min(1, 3 * dt);
+        if (tanz) tanzStoppen();
         // Arme nach vorne ans Lenkrad, Beine nach vorne (sitzen)
         armLinks.rotation.set(-1.2, 0, -0.2); armRechts.rotation.set(-1.2, 0, 0.2);
         beinLinks.rotation.x = -1.4; beinRechts.rotation.x = -1.4;
@@ -3782,6 +4033,9 @@
           armLinks.rotation.z = -0.35; armRechts.rotation.z = 0.35;
         }
         if (WAFFEN_NR.includes(auswahl)) armRechts.rotation.set(-Math.PI / 2 + (zielModus ? zielNeigung : 0), 0, 0.1); // Waffe nach vorne halten
+        // Tanzen: hört auf, sobald man läuft, springt oder umgehauen wird
+        if (tanz && (laeuft || !amBoden || liegt)) tanzStoppen();
+        if (tanz) { tanzPose({ armL: armLinks, armR: armRechts, beinL: beinLinks, beinR: beinRechts, kopf, figur }, tanz, spielZeit - tanzStart); tanzBeat(); }
 
         // Hinweis, wenn ein Fahrzeug in der Nähe ist (oder im Gefängnis)
         const nah = imGefaengnis ? null : naechstesFahrzeug(p);
@@ -4410,6 +4664,7 @@
           n: mp.name, x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), r: +blickRichtung.toFixed(2),
           t: +Math.hypot(laufV.x, laufV.z).toFixed(1), l: zuletztAmBoden ? 0 : 1, g: spielZeit < selbstLiegtBis ? 1 : 0,
           f: regenbogen ? 0xff00ff : fell.color.getHex(), k: Object.values(kleider.an), w: WAFFEN_NR.includes(auswahl) ? 1 : 0,
+          tz: tanz ? TAENZE.indexOf(tanz) + 1 : 0,
           v: f ? f.typ : null, vx: f ? +f.x.toFixed(2) : 0, vz: f ? +f.z.toFixed(2) : 0, vr: f ? +f.richtung.toFixed(2) : 0,
         });
       }
@@ -4433,7 +4688,11 @@
           sitzen(a.teile);
         } else if (d.g) {                       // liegt am Boden (von Banane getroffen)
           a.figur.rotation.x = -Math.PI / 2; a.figur.position.y = -0.25;
+        } else if (d.tz && TAENZE[d.tz - 1]) {   // tanzt gerade
+          if (a.tanzNr !== d.tz) { a.tanzNr = d.tz; a.tanzStart = spielZeit; }
+          tanzPose({ armL: a.teile.armL, armR: a.teile.armR, beinL: a.teile.beinL, beinR: a.teile.beinR, kopf: a.teile.kopf, figur: a.figur }, TAENZE[d.tz - 1], spielZeit - a.tanzStart);
         } else {
+          if (a.tanzNr) { a.tanzNr = 0; tanzEnde({ armL: a.teile.armL, armR: a.teile.armR, beinL: a.teile.beinL, beinR: a.teile.beinR, kopf: a.teile.kopf, figur: a.figur }); }
           a.figur.rotation.x = 0; a.figur.position.y = 0;
           a.laufZeit += dt * (d.t > 0.4 ? 4 + d.t * 1.7 : 3);
           laufAnimation(a.teile, a.laufZeit, d.t > 0.4 ? Math.min(1.1, 0.2 + d.t * 0.1) : 0.1);
