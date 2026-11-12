@@ -20,7 +20,7 @@
   </script>
 </head>
 <body>
-  <div id="hilfe">Pfeiltasten: bewegen · W: nach vorne · S: nach hinten · Leertaste: springen</div>
+  <div id="hilfe">Pfeiltasten oder W A S D: bewegen · Leertaste: springen</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -143,8 +143,8 @@
       // Bewegen mit den Pfeiltasten (erst links/rechts, dann vor/zurück)
       const p = wuerfel.position;
       let dx = 0, dz = 0;
-      if (tasten.ArrowLeft)  dx -= TEMPO * dt;
-      if (tasten.ArrowRight) dx += TEMPO * dt;
+      if (tasten.ArrowLeft  || tasten.KeyA) dx -= TEMPO * dt; // Pfeil links oder A = nach links
+      if (tasten.ArrowRight || tasten.KeyD) dx += TEMPO * dt; // Pfeil rechts oder D = nach rechts
       if (tasten.ArrowUp || tasten.KeyW) dz -= TEMPO * dt; // Pfeil hoch oder W = nach vorne
       if (tasten.ArrowDown || tasten.KeyS) dz += TEMPO * dt; // Pfeil runter oder S = nach hinten
 
