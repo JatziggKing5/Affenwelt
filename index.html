@@ -17,7 +17,7 @@
       border-radius: 10px; font-size: 22px; font-weight: bold; white-space: nowrap;
     }
     #kabine {
-      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+      position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
       width: min(440px, calc(100vw - 32px)); box-sizing: border-box;
       padding: 14px 16px; background: rgba(30, 10, 40, 0.85); color: #fff;
       border-radius: 14px; text-align: center; display: none;
@@ -44,8 +44,49 @@
       box-shadow: 0 2px 10px rgba(0,0,0,0.4); pointer-events: none;
     }
     @media (max-width: 500px) { #karte { width: 110px; height: 110px; } }
+    #waffenleiste {
+      position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+      display: none; gap: 8px; user-select: none;
+    }
+    #waffenleiste.offen { display: flex; }
+    #waffenleiste .feld {
+      position: relative; width: 92px; padding: 8px 6px 6px; border-radius: 12px; text-align: center; cursor: pointer;
+      background: rgba(0,0,0,0.6); color: #fff; border: 3px solid rgba(255,255,255,0.25);
+    }
+    #waffenleiste .feld.gewaehlt { border-color: #ffd600; background: rgba(60,45,0,0.75); box-shadow: 0 0 12px rgba(255,214,0,0.6); }
+    #waffenleiste .taste {
+      position: absolute; top: 3px; left: 6px; font-size: 12px; font-weight: bold; color: #ffd600;
+    }
+    #waffenleiste .symbol { display: block; font-size: 26px; line-height: 1.2; }
+    #waffenleiste .info { display: block; font-size: 11px; opacity: 0.9; white-space: nowrap; }
+    #zielfernrohr { position: fixed; inset: 0; pointer-events: none; display: none; }
+    #zielfernrohr.offen { display: block; }
+    /* ohne Zielfernrohr: kleines Fadenkreuz in der Mitte */
+    #zielfernrohr::before, #zielfernrohr::after {
+      content: ''; position: absolute; left: 50%; top: 50%; background: rgba(255,255,255,0.9);
+      box-shadow: 0 0 2px #000; transform: translate(-50%, -50%);
+    }
+    #zielfernrohr::before { width: 22px; height: 2px; }
+    #zielfernrohr::after { width: 2px; height: 22px; }
+    /* mit Zielfernrohr: runder Blick, außen schwarz, langes Fadenkreuz */
+    #zielfernrohr.fernrohr { background: radial-gradient(circle at center, transparent 0, transparent 38vmin, rgba(0,0,0,0.95) 38.5vmin); }
+    #zielfernrohr.fernrohr::before { width: 76vmin; height: 2px; background: rgba(0,0,0,0.85); box-shadow: none; }
+    #zielfernrohr.fernrohr::after { width: 2px; height: 76vmin; background: rgba(0,0,0,0.85); box-shadow: none; }
+    #haendler {
+      position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+      width: min(420px, calc(100vw - 32px)); box-sizing: border-box;
+      padding: 14px 16px; background: rgba(40, 10, 10, 0.9); color: #fff; border-radius: 14px; display: none;
+    }
+    #haendler.offen { display: block; }
+    #haendler h2 { margin: 0 0 4px; font-size: 22px; text-align: center; }
+    #haendler p { margin: 4px 0 10px; font-size: 13px; text-align: center; }
+    #haendler p.klein { font-size: 11px; opacity: 0.7; margin-top: 10px; }
+    #haendler .ware { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.15); }
+    #haendler .ware small { opacity: 0.75; font-size: 11px; }
+    #haendler button { background: #ffd600; border: none; border-radius: 8px; padding: 8px 12px; font-weight: bold; cursor: pointer; white-space: nowrap; }
+    #haendler button:hover { background: #ffea00; }
     #fahndung {
-      position: fixed; bottom: 96px; left: 50%; transform: translateX(-50%);
+      position: fixed; bottom: 170px; left: 50%; transform: translateX(-50%);
       max-width: calc(100vw - 32px); box-sizing: border-box; text-align: center;
       padding: 8px 16px; color: #fff; font-weight: bold; font-size: 16px; border-radius: 10px;
       display: none; pointer-events: none; animation: blinken 0.6s infinite alternate;
@@ -54,7 +95,7 @@
     #fahndung small { display: block; font-size: 11px; font-weight: normal; opacity: 0.9; }
     @keyframes blinken { from { background: rgba(213, 0, 0, 0.85); } to { background: rgba(41, 98, 255, 0.85); } }
     #fahrinfo {
-      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+      position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
       max-width: calc(100vw - 32px); box-sizing: border-box;
       padding: 10px 18px; background: rgba(0, 0, 0, 0.7); color: #fff;
       border-radius: 12px; text-align: center; display: none; pointer-events: none;
@@ -83,6 +124,16 @@
   <div id="meldung"></div>
   <div id="fahrinfo"></div>
   <div id="fahndung"></div>
+  <div id="waffenleiste"></div>
+  <div id="zielfernrohr"></div>
+  <div id="haendler">
+    <h2>🍌 Bananen-Waffen</h2>
+    <p>Bezahlt wird mit deinen Punkten.</p>
+    <div class="ware"><span>🍌🔫 Bananen-Pistole<br><small>mit 10 Schuss · wer getroffen wird, liegt 5 Sekunden am Boden</small></span><button data-ware="pistole">40 Punkte</button></div>
+    <div class="ware"><span>🔭 Zielfernrohr<br><small>für die Pistole · rechte Maustaste: weit heranzoomen</small></span><button data-ware="zielfernrohr">50 Punkte</button></div>
+    <div class="ware"><span>💨 Rauchbombe<br><small>Polizei weiter als 15 m weg? Dann verliert sie dich</small></span><button data-ware="rauch">60 Punkte</button></div>
+    <p class="klein">1 = Pistole · 2 = Rauchbombe · linke Maus = schießen · rechte Maus = zielen · Zum Verlassen rauslaufen</p>
+  </div>
   <canvas id="karte" width="180" height="180" title="Mini-Karte"></canvas>
   <div id="kabine">
     <h2>👕 Umkleidekabine</h2>
@@ -90,7 +141,7 @@
     <div id="farben"></div>
     <p class="klein">Zum Verlassen einfach rauslaufen.</p>
   </div>
-  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 🚔 Nicht über Rot fahren!</div>
+  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1/2: Waffe wählen · Linksklick: schießen · Rechtsklick: zielen · 🚔 Nicht über Rot fahren!</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -831,6 +882,79 @@
     supermarkt(-40, 222.5, -1); // an der Querstraße bei z = 210
     supermarkt(40, 277.5, 1);   // an der Querstraße bei z = 290
 
+    // ================= BANK =================
+    // Groß, mit Säulen. Hinten steht der Tresor – den kann man knacken (E drücken) …
+    const BANK = { x: -30, z: 145, b: 18, t: 14, h: 7, vorne: -1, geraubtUm: -999, zaehler: 0 };
+    {
+      const { x: cx, z: cz, b: B, t: T, h: H, vorne } = BANK, W = 0.4;
+      const fz = cz + vorne * T / 2, hz = cz - vorne * T / 2;
+      const stein = 0xeceff1;
+      neuerBlock(cx, hz, B, W, 0, H, 'block', stein);
+      neuerBlock(cx - B / 2, cz, W, T, 0, H, 'block', stein);
+      neuerBlock(cx + B / 2, cz, W, T, 0, H, 'block', stein);
+      neuerBlock(cx - (B / 4 + 0.9), fz, B / 2 - 1.8, W, 0, H, 'block', stein);
+      neuerBlock(cx + (B / 4 + 0.9), fz, B / 2 - 1.8, W, 0, H, 'block', stein);
+      neuerBlock(cx, fz, 3.6, W, 3.2, H, 'block', stein);
+      neuerBlock(cx, cz, B + 1, T + 1, H, H + 0.5, 'block', 0x90a4ae);              // Dach
+      flach(new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.5 }), cx, cz, B - 0.5, T - 0.5, 0.03); // Holzboden
+      // Säulen vor dem Eingang
+      const saeulenForm = new THREE.CylinderGeometry(0.35, 0.4, 1, 14);
+      const marmor = new THREE.MeshStandardMaterial({ color: 0xfafafa, roughness: 0.4 });
+      for (const sx of [-6.5, -3.5, 3.5, 6.5]) instanz(saeulenForm, marmor, cx + sx, H / 2, fz + vorne * 1.1, 1, H, 1);
+      neuerBlock(cx, fz + vorne * 1.1, B, 1.6, H - 0.6, H, 'block', stein);          // Vordach auf den Säulen
+      schildBauen('🏦 BANK', 6, 1.1, '#37474f', '#ffd54f', cx, H - 0.3, fz + vorne * 1.95, vorne > 0 ? 0 : Math.PI);
+      // Schalter mit Bank-Affe (rechts bleibt ein Durchgang nach hinten frei)
+      neuerBlock(cx - 2.5, fz - vorne * 4.5, 11, 0.8, 0, 1.1, 'block', 0x6d4c41);
+      const angestellter = affenKlon(0x9e9e9e);
+      angestellter.gruppe.position.set(cx - 4, 0.5, fz - vorne * 5.4);
+      angestellter.gruppe.rotation.y = vorne > 0 ? 0 : Math.PI;
+      szene.add(angestellter.gruppe);
+      // Der Tresor: eine große runde Stahltür an der Rückwand, davor Goldbarren
+      const stahl = new THREE.MeshStandardMaterial({ color: 0x90a4ae, metalness: 0.9, roughness: 0.25 });
+      const tresorTuer = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 0.3, 32), stahl);
+      tresorTuer.rotation.x = Math.PI / 2;
+      tresorTuer.position.set(cx, 1.8, hz + vorne * 0.35);
+      szene.add(tresorTuer);
+      const rad = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.08, 8, 24), new THREE.MeshStandardMaterial({ color: 0xffd54f, metalness: 0.8, roughness: 0.3 }));
+      rad.position.set(cx, 1.8, hz + vorne * 0.55);
+      szene.add(rad);
+      BANK.tresorRad = rad;
+      const gold = new THREE.MeshStandardMaterial({ color: 0xffc107, metalness: 0.9, roughness: 0.2, emissive: 0x3e2a00 });
+      for (let i = 0; i < 12; i++) instanz(einheitsKiste, gold, cx - 3 + (i % 4) * 0.5, 0.12 + Math.floor(i / 4) * 0.15, hz + vorne * 1.0, 0.4, 0.14, 0.22);
+      BANK.tresor = { x: cx, z: hz + vorne * 1.8 }; // hier muss man stehen
+    }
+
+    // ================= WAFFENHÄNDLER =================
+    // Ein kleiner Laden mit Bananen-Waffen, gleich bei der ersten Kreuzung.
+    const HAENDLER = { x: -24, z: 64, b: 8, t: 6, h: 3.6, vorne: -1 };
+    {
+      const { x: cx, z: cz, b: B, t: T, h: H, vorne } = HAENDLER, W = 0.3;
+      const fz = cz + vorne * T / 2, hz = cz - vorne * T / 2;
+      const holz = 0x4e342e;
+      neuerBlock(cx, hz, B, W, 0, H, 'block', holz);
+      neuerBlock(cx - B / 2, cz, W, T, 0, H, 'block', holz);
+      neuerBlock(cx + B / 2, cz, W, T, 0, H, 'block', holz);
+      neuerBlock(cx - 2.6, fz, B / 2 - 1.2, W, 0, H, 'block', holz);
+      neuerBlock(cx + 2.6, fz, B / 2 - 1.2, W, 0, H, 'block', holz);
+      neuerBlock(cx, fz, 2.4, W, 2.6, H, 'block', holz);
+      neuerBlock(cx, cz, B + 0.6, T + 0.6, H, H + 0.25, 'block', 0x212121);
+      flach(new THREE.MeshStandardMaterial({ color: 0x3e2723 }), cx, cz, B - 0.4, T - 0.4, 0.03);
+      neuerBlock(cx, hz + vorne * 1.6, B - 1, 0.7, 0, 1.0, 'block', 0x795548);       // Verkaufstheke
+      const haendler = affenKlon(0x212121);
+      haendler.gruppe.position.set(cx, 0.5, hz + vorne * 0.9);
+      haendler.gruppe.rotation.y = vorne > 0 ? 0 : Math.PI; // schaut zur Tür
+      const brille = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.1, 0.06), new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.1, metalness: 0.5 }));
+      brille.position.set(0, 0.09, 0.3);
+      haendler.teile.kopf.add(brille);                                                // cool mit Sonnenbrille
+      szene.add(haendler.gruppe);
+      // Bananen an der Wand als Deko
+      const bananenDeko = new THREE.MeshStandardMaterial({ color: 0xffe135, roughness: 0.6 });
+      for (let i = 0; i < 6; i++) instanz(new THREE.TorusGeometry(0.18, 0.06, 6, 12, Math.PI * 0.9), bananenDeko,
+        cx - 2.5 + i, 2.2, hz + vorne * 0.3, 1, 1, 1, 0, null, false);
+      schildBauen('🍌 WAFFEN', 5, 1, '#b71c1c', '#ffeb3b', cx, H + 0.6, fz + vorne * 0.2, vorne > 0 ? 0 : Math.PI);
+      freiHalten.push({ x: cx, z: cz, r: 9 });
+    }
+
     // ================= GEFÄNGNIS =================
     // Ein Hof mit hoher Mauer, in der Mitte eine Zelle. In der Rückwand der Zelle ist eine lockere Stelle …
     const GEF = { x: -135, z: 20 };
@@ -889,7 +1013,7 @@
         for (let z = gebiet.z1 + 8; z < gebiet.z2 - 4; z += 14) {
           const b = zwischen(7, 10), t = zwischen(7, 10);
           if (nahAnStrasse(x, z, Math.max(b, t) / 2 + 2.6)) continue;
-          if (LAEDEN.some(l => Math.abs(l.x - x) < (l.b + b) / 2 + 3 && Math.abs(l.z - z) < (l.t + t) / 2 + 3)) continue;
+          if ([...LAEDEN, BANK].some(l => Math.abs(l.x - x) < (l.b + b) / 2 + 3 && Math.abs(l.z - z) < (l.t + t) / 2 + 3)) continue;
           const hoch = zufall() < 0.25; // manche sind Hochhäuser
           const h = hoch ? zwischen(12, 22) : zwischen(4, 7);
           const wandFarbe = HAUS_FARBEN[Math.floor(zufall() * HAUS_FARBEN.length)];
@@ -1221,6 +1345,11 @@
       tasten[e.code] = true;
       if (e.code === 'Space' && !e.repeat) sprungGedrueckt = true; // nur neues Drücken zählt, nicht Gedrückthalten
       if (e.code === 'KeyE' && !e.repeat) eGedrueckt = true;       // E = ein- oder aussteigen
+      if (e.code === 'KeyF' && !e.repeat) fGedrueckt = true;       // F = schießen / benutzen
+      if (e.code === 'KeyG' && !e.repeat) gGedrueckt = true;       // G = Rauchbombe
+      if (e.code === 'Digit1' && !e.repeat) waehlen(1);            // 1 = Bananen-Pistole
+      if (e.code === 'Digit2' && !e.repeat) waehlen(2);            // 2 = Rauchbombe
+      if (e.code === 'KeyZ' && !e.repeat) zielfernrohrBenutzen(!zielModus); // Z = zielen an/aus (für Trackpads)
       if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault(); // Seite nicht scrollen
     });
     addEventListener('keyup', (e) => { tasten[e.code] = false; });
@@ -1233,6 +1362,7 @@
     const MAX_SPRUENGE = 2;   // 2 = Doppelsprung
     let sprungZaehler = 0;    // wie oft er seit dem letzten Landen gesprungen ist
     let sprungGedrueckt = false;
+    let fGedrueckt = false, gGedrueckt = false;
 
     // --- Kamera-Werte ---
     const KAMERA_ABSTAND = 10;   // wie weit die Kamera vom Affe weg ist
@@ -1877,11 +2007,11 @@
     }
 
     // Einen Fußgänger umwerfen (wenn ihn jemand anfährt). Nach 3 Sekunden steht er wieder auf.
-    function umwerfen(f) {
+    function umwerfen(f, dauer = 3) {
       if (f.zustand === 'liegt') return;
       f.vorher = f.zustand;
       f.zustand = 'liegt';
-      f.aufstehenUm = spielZeit + 3;
+      f.aufstehenUm = spielZeit + dauer;
     }
 
     function fussgaengerBewegen(dt) {
@@ -2070,7 +2200,19 @@
       polizei.blaulicht.emissiveIntensity = an ? 4 : 0.2;
       polizei.rotlicht.emissiveIntensity = an ? 0.2 : 4;
 
-      if (polizei.zustand === 'fahren') {
+      const betaeubt = spielZeit < (polizei.betaeubtBis || 0);   // ausgerutscht oder hustet im Rauch
+      const vMax = fahndung && fahndung.stark ? 27 : 22;           // beim Banküberfall schneller
+      if (polizei.zustand === 'fahren' && betaeubt) {
+        polizei.tempo *= 0.9;
+        polizei.richtung += 5 * dt;                                 // dreht sich auf der Banane
+        polizei.x += Math.sin(polizei.richtung) * polizei.tempo * dt;
+        polizei.z += Math.cos(polizei.richtung) * polizei.tempo * dt;
+      } else if ((polizei.zustand === 'rennen' || polizei.zustand === 'zurueck') && betaeubt) {
+        const l = polizei.laeufer;                                  // liegt am Boden
+        l.figur.rotation.x = -Math.PI / 2;
+        l.gruppe.position.set(l.x, 0.25, l.z);
+      } else if (polizei.zustand === 'fahren') {
+        polizei.laeufer.figur.rotation.x = 0;
         const direkt = Math.hypot(ziel.x - polizei.x, ziel.z - polizei.z);
         let zielPunkt;
         if (direkt < 40) {
@@ -2091,12 +2233,14 @@
         let u = wunsch - polizei.richtung; u = Math.atan2(Math.sin(u), Math.cos(u));
         polizei.richtung = Math.atan2(Math.sin(polizei.richtung + THREE.MathUtils.clamp(u, -2.5 * dt, 2.5 * dt)),
                                       Math.cos(polizei.richtung + THREE.MathUtils.clamp(u, -2.5 * dt, 2.5 * dt)));
-        const wunschTempo = direkt < 40 ? Math.min(22, Math.max(5, direkt * 1.2)) : 22;
+        // Zu Fuß: das Auto bremst rechtzeitig und hält ca. 25 m vorher – der Polizist muss rennen
+        const halteAbstand = ziel.imAuto ? 0 : 25;
+        const wunschTempo = direkt < 40 + halteAbstand ? Math.min(vMax, Math.max(ziel.imAuto ? 5 : 0, (direkt - halteAbstand) * 1.2)) : vMax;
         polizei.tempo += THREE.MathUtils.clamp(wunschTempo * Math.max(0.3, Math.cos(u)) - polizei.tempo, -15 * dt, 8 * dt);
         polizei.x = THREE.MathUtils.clamp(polizei.x + Math.sin(polizei.richtung) * polizei.tempo * dt, WIESE.x1 + 2, WIESE.x2 - 2);
         polizei.z = THREE.MathUtils.clamp(polizei.z + Math.cos(polizei.richtung) * polizei.tempo * dt, WIESE.z1 + 2, WIESE.z2 - 2);
         if (ziel.imAuto && direkt < (polizei.laenge + ziel.laenge) / 2 + 0.8) { verhaften(); return; }
-        if (!ziel.imAuto && direkt < 12) {
+        if (!ziel.imAuto && direkt < 27 && polizei.tempo < 3) {
           // Aussteigen und hinterherrennen!
           polizei.zustand = 'rennen';
           polizei.tempo = 0;
@@ -2107,6 +2251,7 @@
         }
       } else if (polizei.zustand === 'rennen' || polizei.zustand === 'zurueck') {
         const l = polizei.laeufer;
+        l.figur.rotation.x = 0;
         const hin = polizei.zustand === 'rennen' ? ziel : polizei;
         const abstand = Math.hypot(hin.x - l.x, hin.z - l.z);
         if (polizei.zustand === 'rennen' && !ziel.imAuto && abstand < 1.2) { verhaften(); return; }
@@ -2116,7 +2261,7 @@
         } else {
           // Hinrennen und Hindernissen ausweichen
           const wunsch = Math.atan2(hin.x - l.x, hin.z - l.z);
-          const schritt = 7 * dt;
+          const schritt = (fahndung && fahndung.stark ? 7.6 : 7) * dt;
           for (const versatz of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8]) {
             const w = wunsch + versatz, nx = l.x + Math.sin(w) * schritt, nz = l.z + Math.cos(w) * schritt;
             if (frei(nx, nz)) { l.x = nx; l.z = nz; l.richtung = w; break; }
@@ -2176,8 +2321,13 @@
       polizeiBeenden();
       punkte = Math.max(0, punkte - 20);
       punkteZeigen();
+      const hatteSachen = inventar.pistole || inventar.rauch > 0;
+      Object.assign(inventar, { pistole: false, munition: 0, zielfernrohr: false, rauch: 0 }); // die Polizei nimmt alles weg
+      auswahl = 0;
+      zielfernrohrBenutzen(false);
+      inventarZeigen();
       lockereStelleZu();
-      inDieZelle('🚔 Verhaftet! −20 Punkte. Ab ins Gefängnis!');
+      inDieZelle('🚔 Verhaftet! −20 Punkte' + (hatteSachen ? ', Waffen weg' : '') + '. Ab ins Gefängnis!');
     }
     // E-Taste in der Zelle: an der lockeren Stelle graben
     function graben(p) {
@@ -2193,6 +2343,16 @@
       return true;
     }
     function gefaengnisBewegen(dt, p) {
+      // Ausgerutscht? Dann liegt der Wärter ein paar Sekunden und sieht nichts.
+      const waerterLiegt = spielZeit < (waerter.betaeubtBis || 0);
+      waerter.figur.rotation.x = waerterLiegt ? -Math.PI / 2 : 0;
+      if (waerterLiegt) {
+        waerter.gruppe.position.set(waerter.x, 0.25, waerter.z);
+        if (imGefaengnis && !aktuellesFahrzeug && !imGefaengnisHof(p) && p.y < 3) {
+          imGefaengnis = false; zeigeMeldung('🏃 Ausgebrochen!', 2); straftatPause = 0; straftat('Aus dem Gefängnis ausgebrochen!');
+        }
+        return;
+      }
       // Der Wärter läuft seine Runde im Hof
       const z = WAERTER_RUNDE[waerter.ziel];
       const d = Math.hypot(z.x - waerter.x, z.z - waerter.z);
@@ -2223,6 +2383,273 @@
       }
     }
 
+    // ================= WAFFENHÄNDLER: BANANEN-PISTOLE, ZIELFERNROHR, RAUCHBOMBE =================
+    const inventar = { pistole: false, munition: 0, zielfernrohr: false, rauch: 0 };
+    let auswahl = 0;          // was der Affe in der Hand hat: 0 = nichts, 1 = Bananen-Pistole, 2 = Rauchbombe
+    let zielModus = false;    // gerade durchs Zielfernrohr schauen?
+    let zielNeigung = 0;      // mit dem Zielfernrohr nach oben (+) oder unten (−) zielen
+    const LIEGEZEIT = 5;      // so viele Sekunden liegt jemand, der von einer Banane getroffen wurde
+    const PREISE = { pistole: 40, munition: 20, zielfernrohr: 50, rauch: 60 }; // in Punkten
+    const waffenLeiste = document.getElementById('waffenleiste');
+    const haendlerMenue = document.getElementById('haendler');
+    const zielfernrohrBild = document.getElementById('zielfernrohr');
+
+    // --- Die Bananen-Pistole: eine gebogene Banane als Lauf, mit Griff und Abzug ---
+    const pistolenGelb = new THREE.MeshStandardMaterial({ color: 0xffe135, roughness: 0.45, name: 'Bananen_Pistole' });
+    const pistolenBraun = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.6 });
+    const pistolenSchwarz = new THREE.MeshStandardMaterial({ color: 0x212121, metalness: 0.6, roughness: 0.3 });
+    function bananenPistoleBauen() {
+      const g = new THREE.Group();
+      g.name = 'Bananen_Pistole';
+      // Lauf: eine leicht gebogene Banane, die nach vorne (+z) zeigt
+      const kurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, 0.0, -0.08), new THREE.Vector3(0, 0.035, 0.06),
+        new THREE.Vector3(0, 0.03, 0.2), new THREE.Vector3(0, -0.01, 0.32),
+      ]);
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(kurve, 16, 0.045, 10), pistolenGelb));
+      const spitze = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), pistolenBraun); // braunes Bananen-Ende vorne
+      spitze.position.set(0, -0.01, 0.33);
+      const ende = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.06, 8), pistolenBraun); // Stiel hinten
+      ende.rotation.x = Math.PI / 2; ende.position.set(0, 0, -0.1);
+      const griff = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.15, 0.08), pistolenGelb);
+      griff.position.set(0, -0.09, -0.02); griff.rotation.x = 0.25;
+      const abzug = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.008, 6, 12), pistolenSchwarz);
+      abzug.rotation.y = Math.PI / 2; abzug.position.set(0, -0.05, 0.05);
+      const muendung = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.03, 10), pistolenSchwarz);
+      muendung.rotation.x = Math.PI / 2; muendung.position.set(0, -0.01, 0.35);
+      g.add(spitze, ende, griff, abzug, muendung);
+      g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+      return g;
+    }
+    // Zielfernrohr oben auf der Pistole (wird erst nach dem Kauf sichtbar)
+    const fernrohrModell = new THREE.Group();
+    {
+      const rohr = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.18, 10), pistolenSchwarz);
+      rohr.rotation.x = Math.PI / 2;
+      const glasVorne = new THREE.Mesh(new THREE.CircleGeometry(0.02, 10), new THREE.MeshStandardMaterial({ color: 0x4fc3f7, emissive: 0x01579b }));
+      glasVorne.position.z = 0.091;
+      fernrohrModell.add(rohr, glasVorne);
+      fernrohrModell.position.set(0, 0.09, 0.1);
+      fernrohrModell.visible = false;
+    }
+    const pistoleImArm = bananenPistoleBauen();
+    pistoleImArm.add(fernrohrModell);
+    pistoleImArm.position.set(0, -0.47, 0.03); // in der rechten Hand
+    pistoleImArm.rotation.x = Math.PI / 2;     // Lauf zeigt in Arm-Richtung
+    pistoleImArm.scale.setScalar(1.4);         // etwas größer, damit man sie gut sieht
+    pistoleImArm.visible = false;
+    armRechts.add(pistoleImArm);
+
+    // --- Waffenleiste unten in der Mitte ---
+    function inventarZeigen() {
+      const feld = (nr, symbol, text, gewaehlt) =>
+        `<div class="feld${gewaehlt ? ' gewaehlt' : ''}" data-nr="${nr}"><span class="taste">${nr}</span><span class="symbol">${symbol}</span><span class="info">${text}</span></div>`;
+      const felder = [];
+      if (inventar.pistole) felder.push(feld(1, '🍌🔫', `${inventar.munition} Schuss${inventar.zielfernrohr ? ' · 🔭' : ''}`, auswahl === 1));
+      if (inventar.rauch > 0) felder.push(feld(2, '💨', `${inventar.rauch}× Rauch`, auswahl === 2));
+      waffenLeiste.innerHTML = felder.join('');
+      waffenLeiste.classList.toggle('offen', felder.length > 0);
+      pistoleImArm.visible = auswahl === 1 && !aktuellesFahrzeug;
+      fernrohrModell.visible = inventar.zielfernrohr;
+      // Händler-Knöpfe passend beschriften
+      haendlerMenue.querySelector('[data-ware="pistole"]').textContent = inventar.pistole ? `+10 Schuss · ${PREISE.munition}` : `${PREISE.pistole} Punkte`;
+      const fk = haendlerMenue.querySelector('[data-ware="zielfernrohr"]');
+      fk.textContent = inventar.zielfernrohr ? 'Hast du ✓' : `${PREISE.zielfernrohr} Punkte`;
+      fk.disabled = inventar.zielfernrohr;
+    }
+    waffenLeiste.addEventListener('mousedown', e => {
+      e.preventDefault();
+      const feld = e.target.closest('.feld');
+      if (feld) waehlen(Number(feld.dataset.nr));
+    });
+    // Mit 1 oder 2 eine Waffe in die Hand nehmen (nochmal drücken = wegstecken)
+    function waehlen(nr) {
+      if (nr === 1 && !inventar.pistole) { zeigeMeldung('Du hast noch keine Bananen-Pistole – der Waffenhändler hat eine! 🍌', 2); return; }
+      if (nr === 2 && inventar.rauch <= 0) { zeigeMeldung('Keine Rauchbombe – der Waffenhändler hat welche! 💨', 2); return; }
+      auswahl = auswahl === nr ? 0 : nr;
+      if (auswahl !== 1) zielfernrohrBenutzen(false);
+      inventarZeigen();
+    }
+
+    const imHaendlerLaden = p => Math.abs(p.x - HAENDLER.x) < HAENDLER.b / 2 && Math.abs(p.z - HAENDLER.z) < HAENDLER.t / 2 && p.y < 2;
+    function kaufen(ware) {
+      if (ware === 'pistole' && inventar.pistole) ware = 'munition';
+      if (ware === 'zielfernrohr' && inventar.zielfernrohr) return;
+      if (punkte < PREISE[ware]) { zeigeMeldung(`Zu wenig Punkte! (${PREISE[ware]} nötig)`, 1.5); return; }
+      punkte -= PREISE[ware];
+      punkteZeigen();
+      if (ware === 'pistole') { inventar.pistole = true; inventar.munition += 10; auswahl = 1; zeigeMeldung('🍌🔫 Bananen-Pistole gekauft! Taste 1', 2); }
+      if (ware === 'munition') { inventar.munition += 10; zeigeMeldung('🍌 +10 Schuss', 1.5); }
+      if (ware === 'zielfernrohr') { inventar.zielfernrohr = true; zeigeMeldung('🔭 Zielfernrohr! Rechte Maustaste halten (oder Z)', 2.5); }
+      if (ware === 'rauch') { inventar.rauch += 1; zeigeMeldung('💨 Rauchbombe gekauft! Taste 2 oder G', 2); }
+      inventarZeigen();
+      hupen(1300);
+    }
+    for (const knopf of haendlerMenue.querySelectorAll('button')) {
+      knopf.addEventListener('mousedown', e => e.preventDefault()); // Knopf soll die Tastatur nicht "klauen"
+      knopf.addEventListener('click', () => kaufen(knopf.dataset.ware));
+    }
+    inventarZeigen();
+
+    // --- Zielfernrohr: heranzoomen, mit Fadenkreuz ---
+    function zielfernrohrBenutzen(an) {
+      if (an) {
+        if (aktuellesFahrzeug || !inventar.pistole) return;
+        if (auswahl !== 1) { auswahl = 1; inventarZeigen(); }
+        if (!zielModus) zielNeigung = 0;
+      }
+      zielModus = an;
+      zielfernrohrBild.classList.toggle('offen', zielModus);
+      zielfernrohrBild.classList.toggle('fernrohr', zielModus && inventar.zielfernrohr); // ohne Fernrohr: nur Fadenkreuz
+    }
+    // In welche Richtung zeigt das Zielfernrohr? (3D, mit Neigung)
+    function zielRichtung() {
+      const k = kameraWinkel, n = zielNeigung;
+      return new THREE.Vector3(-Math.sin(k) * Math.cos(n), Math.sin(n), -Math.cos(k) * Math.cos(n));
+    }
+    // Maus: linke Taste = schießen, rechte Taste halten = zielen (mit Zielfernrohr: weit heranzoomen), Maus bewegen = Ziel verschieben
+    renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+    renderer.domElement.addEventListener('mousedown', e => {
+      if (e.button === 2) zielfernrohrBenutzen(true);
+      if (e.button === 0 && inventar.pistole && !aktuellesFahrzeug) {   // linke Maustaste = schießen
+        if (auswahl !== 1) { auswahl = 1; inventarZeigen(); }
+        fGedrueckt = true;
+      }
+    });
+    addEventListener('mouseup', e => { if (e.button === 2) zielfernrohrBenutzen(false); });
+    addEventListener('mousemove', e => {
+      if (!zielModus) return;
+      kameraWinkel -= e.movementX * 0.0025;
+      zielNeigung = THREE.MathUtils.clamp(zielNeigung - e.movementY * 0.0025, -0.6, 0.8);
+    });
+
+    // --- Schießen: eine Banane fliegt los ---
+    const bananenForm = new THREE.TorusGeometry(0.12, 0.045, 6, 12, Math.PI * 0.9);
+    const bananenMaterial = new THREE.MeshStandardMaterial({ color: 0xffe135, roughness: 0.5 });
+    const geschosse = [];
+    const _hand = new THREE.Vector3();
+    function benutzen() {
+      if (auswahl === 2) { rauchbombe(); return; }
+      if (auswahl !== 1) {
+        zeigeMeldung(inventar.pistole ? 'Nimm die Bananen-Pistole mit Taste 1 in die Hand' : 'Du hast keine Waffe – geh zum Waffenhändler 🍌', 1.8);
+        return;
+      }
+      if (aktuellesFahrzeug) return;
+      if (inventar.munition <= 0) { zeigeMeldung('Keine Schuss mehr! Beim Waffenhändler gibt es +10 🍌', 1.8); return; }
+      inventar.munition--;
+      inventarZeigen();
+      const r = zielModus ? zielRichtung() : new THREE.Vector3(Math.sin(blickRichtung), 0.06, Math.cos(blickRichtung)).normalize();
+      pistoleImArm.getWorldPosition(_hand);
+      const start = zielModus ? kamera.position.clone().addScaledVector(r, 0.6) : _hand.addScaledVector(r, 0.3);
+      const m = new THREE.Mesh(bananenForm, bananenMaterial);
+      m.position.copy(start);
+      m.castShadow = true;
+      szene.add(m);
+      geschosse.push({ mesh: m, vx: r.x * 40, vy: r.y * 40, vz: r.z * 40, leben: 2 });
+      hupen(700); // "Peng!"
+    }
+    // Getroffen? Dann rutscht man aus und liegt 5 Sekunden am Boden.
+    function getroffen(g) {
+      const q = g.mesh.position;
+      const nah = (x, z, r) => Math.hypot(q.x - x, q.z - z) < r && q.y < 1.6 && q.y > -0.1;
+      if (polizei.aktiv && polizei.laeufer.gruppe.visible && nah(polizei.laeufer.x, polizei.laeufer.z, 0.7)) {
+        polizei.betaeubtBis = spielZeit + LIEGEZEIT; zeigeMeldung('🍌 Polizist getroffen!', 1.5); return true;
+      }
+      if (polizei.aktiv && punktInFahrzeug(polizei, q.x, q.z, 0.2) && q.y < polizei.hoehe) {
+        polizei.betaeubtBis = spielZeit + LIEGEZEIT; zeigeMeldung('🍌 Polizeiauto rutscht weg!', 1.5); return true;
+      }
+      if (nah(waerter.x, waerter.z, 0.7)) {
+        waerter.betaeubtBis = spielZeit + LIEGEZEIT; zeigeMeldung('🍌 Der Wärter liegt am Boden – schnell!', 2); return true;
+      }
+      for (const f of fussgaenger) {
+        if (f.zustand !== 'liegt' && f.zustand !== 'einkaufen' && nah(f.x, f.z, 0.6)) { umwerfen(f, LIEGEZEIT); straftat('Auf Fußgänger geschossen!'); return true; }
+      }
+      for (const a of verkehr) if (punktInFahrzeug(a, q.x, q.z, 0.1) && q.y < a.hoehe) return true; // prallt am Auto ab
+      return false;
+    }
+    function geschosseBewegen(dt) {
+      for (let i = geschosse.length - 1; i >= 0; i--) {
+        const g = geschosse[i];
+        g.vy -= 4 * dt; // fällt nur ganz wenig
+        // in kleinen Schritten fliegen, damit sie nicht durch dünne Ziele "durchspringt"
+        const schritte = 4;
+        let weg = false;
+        for (let s = 0; s < schritte && !weg; s++) {
+          g.mesh.position.x += g.vx * dt / schritte; g.mesh.position.y += g.vy * dt / schritte; g.mesh.position.z += g.vz * dt / schritte;
+          const q = g.mesh.position;
+          const inWand = bloecke.some(o => o.art !== 'lava' && Math.abs(q.x - o.x) < o.b / 2 && Math.abs(q.z - o.z) < o.t / 2 && q.y < o.oben && q.y > o.unten);
+          weg = getroffen(g) || inWand || q.y < 0;
+        }
+        g.mesh.rotation.x += 14 * dt; g.mesh.rotation.y += 9 * dt;
+        g.leben -= dt;
+        if (weg || g.leben < 0) { szene.remove(g.mesh); geschosse.splice(i, 1); }
+      }
+    }
+
+    // --- Rauchbombe: eine graue Wolke. Ist die Polizei weit genug weg, verliert sie dich. ---
+    const rauchMaterial = new THREE.MeshStandardMaterial({ color: 0x9e9e9e, transparent: true, opacity: 0.7, roughness: 1 });
+    const rauchWolken = [];
+    function rauchbombe() {
+      if (inventar.rauch <= 0) { zeigeMeldung('Keine Rauchbombe! Kauf eine beim Waffenhändler 💨', 1.8); return; }
+      inventar.rauch--;
+      if (inventar.rauch <= 0 && auswahl === 2) auswahl = 0;
+      inventarZeigen();
+      const p = aktuellesFahrzeug || affe.position;
+      for (let i = 0; i < 14; i++) {
+        const m = new THREE.Mesh(kugelForm, rauchMaterial.clone());
+        m.position.set(p.x + (Math.random() - 0.5) * 3, 0.5 + Math.random() * 1.5, p.z + (Math.random() - 0.5) * 3);
+        m.scale.setScalar(0.5);
+        szene.add(m);
+        rauchWolken.push({ mesh: m, alter: 0, wachsen: 1.5 + Math.random() * 2 });
+      }
+      hupen(70);
+      if (!polizei.aktiv) { zeigeMeldung('💨 Puff!', 1); return; }
+      const ort = spielerOrt();
+      const abstand = Math.min(Math.hypot(ort.x - polizei.x, ort.z - polizei.z),
+        polizei.laeufer.gruppe.visible ? Math.hypot(ort.x - polizei.laeufer.x, ort.z - polizei.laeufer.z) : Infinity);
+      if (abstand > 15) { polizeiBeenden(); zeigeMeldung('😶‍🌫️ Im Rauch verschwunden! Die Polizei hat dich verloren.', 3); }
+      else { polizei.betaeubtBis = spielZeit + 4; zeigeMeldung('💨 Die Polizei hustet und sieht nichts!', 2); }
+    }
+    function rauchBewegen(dt) {
+      for (let i = rauchWolken.length - 1; i >= 0; i--) {
+        const w = rauchWolken[i];
+        w.alter += dt;
+        w.mesh.scale.setScalar(0.5 + w.alter * w.wachsen);
+        w.mesh.position.y += dt * 0.4;
+        w.mesh.material.opacity = Math.max(0, 0.7 * (1 - w.alter / 5));
+        if (w.alter > 5) { szene.remove(w.mesh); rauchWolken.splice(i, 1); }
+      }
+    }
+
+    // ================= BANKÜBERFALL =================
+    const BANK_PAUSE = 90; // Sekunden, bis die Bank wieder Geld hat
+    const amTresor = p => Math.hypot(p.x - BANK.tresor.x, p.z - BANK.tresor.z) < 2.2 && p.y < 2;
+    let alarmBis = 0;
+    function tresorKnacken(p) {
+      if (!amTresor(p)) return false;
+      if (spielZeit - BANK.geraubtUm < BANK_PAUSE) { zeigeMeldung('Der Tresor ist leer. Komm später wieder!', 1.5); return true; }
+      BANK.zaehler++;
+      BANK.tresorRad.rotation.z += 0.6;
+      hupen(1500); // "Klick"
+      if (BANK.zaehler >= 10) {
+        BANK.zaehler = 0;
+        BANK.geraubtUm = spielZeit;
+        punkte += 200;
+        punkteZeigen();
+        alarmBis = spielZeit + 6;
+        zeigeMeldung('💰 Tresor geknackt! +200 Punkte – ALARM!', 3);
+        straftatPause = 0;
+        straftat('Banküberfall!');
+        if (fahndung) fahndung.stark = true; // bei einem Banküberfall ist die Polizei schneller
+      }
+      return true;
+    }
+    let naechsterAlarmTon = 0;
+    function bankBewegen() {
+      // Alarmglocke schrillt ein paar Sekunden
+      if (spielZeit < alarmBis && spielZeit > naechsterAlarmTon) { hupen(1250); naechsterAlarmTon = spielZeit + 0.3; }
+    }
+
     // ================= MINI-KARTE =================
     const karte = document.getElementById('karte');
     const kartenPinsel = karte.getContext('2d');
@@ -2245,6 +2672,8 @@
       p.fillStyle = '#f48fb1'; p.fillRect(kx2(KABINE.x - 1.6), kz2(KABINE.z + 1.6), 3.2 * massstab + 1, 3.2 * massstab + 1);
       p.fillStyle = '#ff9800'; // Supermärkte
       for (const l of LAEDEN) p.fillRect(kx2(l.x - l.b / 2), kz2(l.z + l.t / 2), l.b * massstab, l.t * massstab);
+      p.fillStyle = '#ffd54f'; p.fillRect(kx2(BANK.x - BANK.b / 2), kz2(BANK.z + BANK.t / 2), BANK.b * massstab, BANK.t * massstab); // Bank
+      p.fillStyle = '#d32f2f'; p.fillRect(kx2(HAENDLER.x - 4), kz2(HAENDLER.z + 3), 8 * massstab + 1, 6 * massstab + 1);            // Waffenhändler
       p.fillStyle = '#37474f'; p.strokeStyle = '#ffffff'; p.lineWidth = 1; // Gefängnis
       p.fillRect(kx2(GEF.x - 13), kz2(GEF.z + 13), 26 * massstab, 26 * massstab);
       p.strokeRect(kx2(GEF.x - 13), kz2(GEF.z + 13), 26 * massstab, 26 * massstab);
@@ -2281,10 +2710,16 @@
       spielZeit += dt;
 
       // Kamera drehen mit den Pfeiltasten
-      if (tasten.ArrowLeft)  kameraWinkel += DREH_TEMPO * dt; // Blick nach links drehen
-      if (tasten.ArrowRight) kameraWinkel -= DREH_TEMPO * dt; // Blick nach rechts drehen
-      if (tasten.ArrowUp)    kameraNeigung -= DREH_TEMPO * dt; // flacher schauen (Blick nach oben)
-      if (tasten.ArrowDown)  kameraNeigung += DREH_TEMPO * dt; // mehr von oben schauen (Blick nach unten)
+      const drehTempo = zielModus ? 0.5 : DREH_TEMPO;          // beim Zielen langsamer und genauer
+      if (tasten.ArrowLeft)  kameraWinkel += drehTempo * dt; // Blick nach links drehen
+      if (tasten.ArrowRight) kameraWinkel -= drehTempo * dt; // Blick nach rechts drehen
+      if (zielModus) {                                          // beim Zielen: hoch/runter zielen
+        if (tasten.ArrowUp)   zielNeigung = Math.min(0.8, zielNeigung + drehTempo * dt);
+        if (tasten.ArrowDown) zielNeigung = Math.max(-0.6, zielNeigung - drehTempo * dt);
+      } else {
+        if (tasten.ArrowUp)    kameraNeigung -= DREH_TEMPO * dt; // flacher schauen (Blick nach oben)
+        if (tasten.ArrowDown)  kameraNeigung += DREH_TEMPO * dt; // mehr von oben schauen (Blick nach unten)
+      }
       kameraNeigung = THREE.MathUtils.clamp(kameraNeigung, 0.1, 1.4); // nicht unter den Boden, nicht ganz senkrecht
 
       const p = affe.position;
@@ -2293,11 +2728,16 @@
       ampelnZeigen(spielZeit);       // Ampeln umschalten
       fussgaengerBewegen(dt);        // Fußgänger-Affen
       polizeiBewegen(dt);            // Polizei (wenn jemand gesucht wird)
+      geschosseBewegen(dt);          // fliegende Bananen
+      rauchBewegen(dt);              // Rauchwolken
+      bankBewegen();                 // Alarmglocke
+      if (fGedrueckt) { fGedrueckt = false; benutzen(); }
+      if (gGedrueckt) { gGedrueckt = false; rauchbombe(); }
 
       // E-Taste: einsteigen oder aussteigen
       if (eGedrueckt) {
         eGedrueckt = false;
-        if (!aktuellesFahrzeug && graben(p)) { /* im Gefängnis: an der Wand graben */ }
+        if (!aktuellesFahrzeug && (graben(p) || tresorKnacken(p))) { /* graben im Gefängnis oder Tresor knacken */ }
         else if (aktuellesFahrzeug) aussteigen();
         else if (!imGefaengnis) { const f = naechstesFahrzeug(p); if (f) einsteigen(f); }
       }
@@ -2411,6 +2851,7 @@
         } else {
           armLinks.rotation.z = -0.35; armRechts.rotation.z = 0.35;
         }
+        if (auswahl === 1) armRechts.rotation.set(-Math.PI / 2 + (zielModus ? zielNeigung : 0), 0, 0.1); // Pistole nach vorne halten
 
         // Hinweis, wenn ein Fahrzeug in der Nähe ist (oder im Gefängnis)
         const nah = imGefaengnis ? null : naechstesFahrzeug(p);
@@ -2420,6 +2861,10 @@
           fahrInfo.innerHTML = loch ? '<b>🕳️ Durchs Loch – und dann über die Mauer!</b><small>Achte auf den Wärter. Die Kisten in der Ecke helfen …</small>'
             : amStein ? `<b>⛏️ E drücken zum Graben (${grabZaehler}/${GRAB_NOETIG})</b>`
             : '<b>🔒 Du bist im Gefängnis!</b><small>Tipp: Ein Stück der Rückwand sieht locker aus …</small>';
+          fahrInfo.classList.add('offen');
+        } else if (amTresor(p)) {
+          fahrInfo.innerHTML = spielZeit - BANK.geraubtUm < BANK_PAUSE ? '<b>Der Tresor ist leer.</b><small>In ein paar Minuten ist wieder Geld drin …</small>'
+            : `<b>💰 E drücken: Tresor knacken (${BANK.zaehler}/10)</b><small>Achtung: Danach kommt die Polizei!</small>`;
           fahrInfo.classList.add('offen');
         } else if (nah) {
           fahrInfo.innerHTML = `<b>Drücke E zum Einsteigen: ${nah.emoji} ${nah.name}</b>`;
@@ -2464,6 +2909,7 @@
 
       // Umkleidekabine: Menü zeigen, solange der Affe (zu Fuß) drin steht
       kabinenMenue.classList.toggle('offen', !aktuellesFahrzeug && inKabine(p));
+      haendlerMenue.classList.toggle('offen', !aktuellesFahrzeug && imHaendlerLaden(p));
       if (regenbogen) fell.color.setHSL((spielZeit * 0.2) % 1, 0.8, 0.45);
 
       // Münzen drehen sich, werden eingesammelt und kommen nach 7 Sekunden wieder
@@ -2486,6 +2932,21 @@
         }
       }
 
+      // Beim Zielen: Kamera sitzt über der Schulter des Affen und zoomt heran
+      const zoom = zielModus ? (inventar.zielfernrohr ? 15 : 40) : 60;
+      if (kamera.fov !== zoom) { kamera.fov = zoom; kamera.updateProjectionMatrix(); }
+      figur.visible = !(zielModus && inventar.zielfernrohr); // im Zielfernrohr sieht man den Affen nicht
+      if (zielModus) {
+        if (aktuellesFahrzeug) zielfernrohrBenutzen(false);
+        const r = zielRichtung();
+        blickRichtung = Math.atan2(r.x, r.z);           // Affe dreht sich zum Ziel
+        affe.rotation.y = blickRichtung;
+        const seitlich = inventar.zielfernrohr ? 0 : 0.5; // ohne Fernrohr: etwas rechts über der Schulter
+        kamera.position.set(p.x - r.z * seitlich - r.x * 0.2, p.y + 0.45, p.z + r.x * seitlich - r.z * 0.2);
+        kamera.lookAt(kamera.position.x + r.x * 50, kamera.position.y + r.y * 50, kamera.position.z + r.z * 50);
+        renderer.render(szene, kamera);
+        return;
+      }
       // Kamera kreist um den Affen: Winkel = rundherum, Neigung = wie hoch von oben
       const flach = Math.cos(kameraNeigung) * kameraAbstand;
       const wunschX = p.x + Math.sin(kameraWinkel) * flach;
