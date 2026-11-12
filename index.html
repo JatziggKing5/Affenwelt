@@ -16,6 +16,12 @@
       padding: 8px 16px; background: rgba(0,0,0,0.6); color: #ffd700;
       border-radius: 10px; font-size: 22px; font-weight: bold; white-space: nowrap;
     }
+    #meldung {
+      position: fixed; top: 35%; left: 50%; transform: translate(-50%, -50%);
+      color: #fff; font-size: 40px; font-weight: bold; text-align: center;
+      text-shadow: 0 3px 8px rgba(0,0,0,0.6); pointer-events: none;
+      opacity: 0; transition: opacity 0.3s;
+    }
   </style>
   <!-- Import-Map: sagt dem Browser, wo er Three.js herunterladen soll -->
   <script type="importmap">
@@ -27,7 +33,8 @@
 </head>
 <body>
   <div id="punkte"></div>
-  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera drehen · Leertaste: springen (2× = Doppelsprung)</div>
+  <div id="meldung"></div>
+  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera drehen · Leertaste: springen (2× = Doppelsprung) · Obby: mit W nach hinten über den Rand der Wiese!</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -63,6 +70,7 @@
     sonne.shadow.camera.left = -30; sonne.shadow.camera.right = 30;
     sonne.shadow.camera.top = 30;   sonne.shadow.camera.bottom = -30;
     szene.add(sonne);
+    szene.add(sonne.target); // damit die Sonne dem Würfel folgen kann
 
     // --- Grüner Boden: eine große flache Fläche ---
     const BODEN_GROESSE = 50;
@@ -83,8 +91,29 @@
     wuerfel.castShadow = true;
     szene.add(wuerfel);
 
-    // --- Hindernisse: Blöcke in verschiedenen Größen ---
-    // [x, z, breite, höhe, tiefe, farbe]
+    // --- Alle Blöcke der Welt landen in dieser Liste ---
+    // Jeder Block: x/z = Mitte, b = Breite, t = Tiefe, unten/oben = Höhe von Unterkante und Oberkante,
+    // art = 'block' (normal), 'lava' (tödlich), 'checkpoint' (Speicherpunkt), 'ziel' (Ende der Obby)
+    const bloecke = [];
+    const FARBEN = { lava: 0xff3300, checkpoint: 0x2196f3, ziel: 0xffd700 };
+    function neuerBlock(x, z, b, t, unten, oben, art = 'block', farbe = 0x9e9e9e) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(b, oben - unten, t),
+        new THREE.MeshStandardMaterial({
+          color: FARBEN[art] ?? farbe,
+          emissive: art === 'lava' ? 0x991100 : 0x000000 // Lava leuchtet
+        })
+      );
+      mesh.position.set(x, (unten + oben) / 2, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      szene.add(mesh);
+      const block = { x, z, b, t, unten, oben, art, mesh };
+      bloecke.push(block);
+      return block;
+    }
+
+    // --- Hindernisse auf der Wiese: [x, z, breite, höhe, tiefe, farbe] ---
     const hindernisListe = [
       [ 3, -3, 2, 1,   2, 0x8d6e63],
       [-4, -6, 1, 2,   4, 0x795548],
@@ -95,36 +124,103 @@
       [-2,-14, 4, 1,   4, 0x9e9e9e],
       [ 9,  0, 1, 2,   6, 0x607d8b],
     ];
-    const hindernisse = hindernisListe.map(([x, z, b, h, t, farbe]) => {
-      const block = new THREE.Mesh(
-        new THREE.BoxGeometry(b, h, t),
-        new THREE.MeshStandardMaterial({ color: farbe })
-      );
-      block.position.set(x, h / 2, z); // unten auf dem Boden
-      block.castShadow = true;
-      block.receiveShadow = true;
-      szene.add(block);
-      return { x, z, b, h, t };
-    });
+    for (const [x, z, b, h, t, farbe] of hindernisListe) neuerBlock(x, z, b, t, 0, h, 'block', farbe);
 
-    // Prüft: Überlappt der Würfel (an Stelle px/pz, Höhe py) ein Hindernis?
-    function stoesstAn(px, py, pz) {
-      return hindernisse.some(o =>
-        Math.abs(px - o.x) < (o.b + 1) / 2 - 0.001 &&
-        Math.abs(pz - o.z) < (o.t + 1) / 2 - 0.001 &&
-        py - 0.5 < o.h - 0.001 // Unterkante des Würfels ist tiefer als die Oberkante des Blocks
-      );
+    // ================= OBBY =================
+    // Startet hinten am Ende der Wiese (z = -25) und geht über den Abgrund.
+    // Plattform: [x, z, breite, tiefe, höhe der Oberseite, art]
+    const D = 0.5; // Dicke einer Plattform
+    const obby = [
+      // Teil 1: Treppe über den Abgrund
+      [ 0, -28,   3,   3,   0.5],
+      [ 0, -32,   2,   2,   1.0],
+      [ 2, -36,   2,   2,   1.5],
+      [ 0, -40,   2,   2,   2.0],
+      [ 0, -45,   4,   4,   2.0, 'checkpoint'],   // Checkpoint 1
+      // Teil 2: langer Steg mit Lava-Streifen – drüberspringen!
+      [ 0, -53,   3,  10,   2.0],
+      // Teil 3: schmaler Balken
+      [ 0, -62,   0.6, 6,   2.0],
+      // Teil 4: hoch hinaus – hier brauchst du den Doppelsprung
+      [ 0, -68,   2,   2,   4.0],
+      [ 3, -72,   1.5, 1.5, 4.5],
+      [ 0, -76,   1.5, 1.5, 5.0],
+      [ 0, -81,   4,   4,   5.0, 'checkpoint'],   // Checkpoint 2
+      // Teil 5: kleine Inseln mit Lava-Rand
+      [ 0, -87,   2,   2,   5.0],
+      [-3, -91,   2,   2,   5.0],
+      [ 0, -95,   2,   2,   5.0],
+      // Teil 6: großer Doppelsprung zum Ziel
+      [ 0,-102,   2,   2,   6.0],
+      [ 0,-108,   5,   5,   6.0, 'ziel'],         // ZIEL
+    ];
+    for (const [x, z, b, t, oben, art] of obby) {
+      neuerBlock(x, z, b, t, oben - D, oben, art ?? 'block', 0xb0bec5);
+    }
+    // Lava: [x, z, breite, tiefe, höhe des Bodens darunter]
+    const lavaListe = [
+      [ 0, -50,   3,   1,   2.0],  // Streifen auf dem langen Steg
+      [ 0, -54,   3,   1,   2.0],
+      [ 0, -87.5, 2,   0.5, 5.0],  // Lava-Kante auf der ersten Insel
+      [-3, -91,   0.5, 2,   5.0],  // Lava in der Mitte der zweiten Insel
+    ];
+    for (const [x, z, b, t, h] of lavaListe) neuerBlock(x, z, b, t, h, h + 0.15, 'lava');
+
+    // Prüft, ob der Würfel (Mitte px/py/pz, Größe 1) einen Block berührt
+    function ueberlappt(o, px, py, pz) {
+      return Math.abs(px - o.x) < (o.b + 1) / 2 - 0.001 &&
+             Math.abs(pz - o.z) < (o.t + 1) / 2 - 0.001 &&
+             py - 0.5 < o.oben - 0.001 && py + 0.5 > o.unten + 0.001;
     }
 
-    // Wie hoch ist der "Boden" unter dem Würfel? (0 oder die Oberseite eines Blocks)
-    function bodenHoehe(px, py, pz) {
-      let hoehe = 0;
-      for (const o of hindernisse) {
+    // Prüft: Steht ein fester Block im Weg? (Lava hält dich nicht auf – sie ist tödlich)
+    function stoesstAn(px, py, pz) {
+      return bloecke.some(o => o.art !== 'lava' && ueberlappt(o, px, py, pz));
+    }
+
+    // Was ist unter dem Würfel? Gibt Höhe und Block zurück (oder -Unendlich = Abgrund)
+    const WIESE_RAND = BODEN_GROESSE / 2;
+    function bodenUnter(px, py, pz) {
+      let hoehe = -Infinity, block = null;
+      if (Math.abs(px) <= WIESE_RAND + 0.5 && Math.abs(pz) <= WIESE_RAND + 0.5 && py - 0.5 >= -0.05) {
+        hoehe = 0; // auf der Wiese
+      }
+      for (const o of bloecke) {
+        if (o.art === 'lava') continue;
         const drueber = Math.abs(px - o.x) < (o.b + 1) / 2 - 0.001 &&
                         Math.abs(pz - o.z) < (o.t + 1) / 2 - 0.001;
-        if (drueber && py - 0.5 >= o.h - 0.05) hoehe = Math.max(hoehe, o.h);
+        if (drueber && py - 0.5 >= o.oben - 0.05 && o.oben > hoehe) { hoehe = o.oben; block = o; }
       }
-      return hoehe;
+      return { hoehe, block };
+    }
+
+    // Berührt der Würfel Lava?
+    function inLava(px, py, pz) {
+      return bloecke.some(o => o.art === 'lava' &&
+        Math.abs(px - o.x) < (o.b + 1) / 2 - 0.001 &&
+        Math.abs(pz - o.z) < (o.t + 1) / 2 - 0.001 &&
+        py - 0.5 <= o.oben + 0.01 && py + 0.5 >= o.unten);
+    }
+
+    // --- Startpunkt: hier taucht der Würfel nach dem Runterfallen wieder auf ---
+    const startPunkt = new THREE.Vector3(0, 0.5, 0);
+    let letzterCheckpoint = null;
+    let imZiel = false;
+
+    // Große Meldung in der Mitte (z. B. "Checkpoint!")
+    const meldung = document.getElementById('meldung');
+    let meldungBis = 0;
+    function zeigeMeldung(text, sekunden = 2) {
+      meldung.textContent = text;
+      meldung.style.opacity = 1;
+      meldungBis = spielZeit + sekunden;
+    }
+
+    // Zurück zum letzten Startpunkt (nach Lava oder Runterfallen)
+    function neuStart(grund) {
+      wuerfel.position.copy(startPunkt);
+      fallTempo = 0;
+      zeigeMeldung(grund, 1.5);
     }
 
     // --- Münzen: goldene Scheiben, die Punkte geben ---
@@ -137,6 +233,9 @@
       [-2,-14, 1],   // auf dem grauen Block hinten
       [ 9,  0, 2],   // auf der blauen Wand (Doppelsprung!)
       [-4, -6, 2],   // auf der braunen Wand (Doppelsprung!)
+      // Münzen in der Obby
+      [ 0,-32, 1.0], [ 0,-40, 2.0], [ 0,-52, 2.0], [ 0,-62, 2.0],
+      [ 3,-72, 4.5], [ 0,-95, 5.0], [ 0,-102, 6.0],
     ];
     const muenzForm = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 24);
     const muenzFarbe = new THREE.MeshStandardMaterial({
@@ -180,7 +279,6 @@
     const MAX_SPRUENGE = 2;   // 2 = Doppelsprung
     let sprungZaehler = 0;    // wie oft er seit dem letzten Landen gesprungen ist
     let sprungGedrueckt = false;
-    const RAND = BODEN_GROESSE / 2 - 0.5;
 
     // --- Kamera-Werte ---
     const KAMERA_ABSTAND = 10;   // wie weit die Kamera vom Würfel weg ist
@@ -209,13 +307,12 @@
       const dz = (-cos * vor - sin * seite) * TEMPO * dt;
 
       // Nur bewegen, wenn dort kein Hindernis im Weg ist
-      const neuX = THREE.MathUtils.clamp(p.x + dx, -RAND, RAND);
-      if (!stoesstAn(neuX, p.y, p.z)) p.x = neuX;
-      const neuZ = THREE.MathUtils.clamp(p.z + dz, -RAND, RAND);
-      if (!stoesstAn(p.x, p.y, neuZ)) p.z = neuZ;
+      if (!stoesstAn(p.x + dx, p.y, p.z)) p.x += dx;
+      if (!stoesstAn(p.x, p.y, p.z + dz)) p.z += dz;
 
-      // Wo ist unter dem Würfel fester Boden? (Gras oder Oberseite eines Blocks)
-      const standHoehe = bodenHoehe(p.x, p.y, p.z) + 0.5;
+      // Wo ist unter dem Würfel fester Boden? (Gras, Block – oder Abgrund)
+      const unter = bodenUnter(p.x, p.y, p.z);
+      const standHoehe = unter.hoehe + 0.5;
 
       // Springen: am Boden immer, in der Luft noch einmal (Doppelsprung)
       const amBoden = p.y <= standHoehe + 0.001 && fallTempo <= 0;
@@ -234,8 +331,30 @@
       p.y += fallTempo * dt;
       if (p.y < standHoehe) { p.y = standHoehe; fallTempo = 0; }
 
-      // Münzen drehen sich, werden eingesammelt und kommen nach 7 Sekunden wieder
       spielZeit += dt;
+
+      // --- Obby-Regeln ---
+      if (p.y < -15) neuStart('Runtergefallen! 😵');   // in den Abgrund gefallen
+      if (inLava(p.x, p.y, p.z)) neuStart('Lava! 🔥');  // Lava berührt
+      const stehtAuf = amBoden ? unter.block : null;
+      if (stehtAuf?.art === 'checkpoint' && stehtAuf !== letzterCheckpoint) {
+        letzterCheckpoint = stehtAuf;
+        startPunkt.set(stehtAuf.x, stehtAuf.oben + 0.5, stehtAuf.z); // ab jetzt startest du hier
+        zeigeMeldung('Checkpoint! ✅');
+      }
+      if (stehtAuf?.art === 'ziel' && !imZiel) {
+        imZiel = true;
+        punkte += 100;
+        punkteZeigen();
+        zeigeMeldung('🏆 Obby geschafft! +100 Punkte', 4);
+      }
+      if (spielZeit > meldungBis) meldung.style.opacity = 0;
+
+      // Die Sonne folgt dem Würfel, damit es überall Schatten gibt
+      sonne.position.set(p.x + 10, p.y + 20, p.z + 10);
+      sonne.target.position.copy(p);
+
+      // Münzen drehen sich, werden eingesammelt und kommen nach 7 Sekunden wieder
 
       // Würfel wechselt ständig die Farbe: läuft einmal durch den Regenbogen (alle 5 Sekunden)
       wuerfel.material.color.setHSL((spielZeit * FARB_TEMPO) % 1, 0.9, 0.55);
