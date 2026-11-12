@@ -11,6 +11,9 @@
       background: rgba(0,0,0,0.5); color: #fff; border-radius: 8px; font-size: 14px;
       max-width: calc(100vw - 240px); /* Platz lassen für die Punkte oben rechts */
     }
+    #hilfe.zu { max-width: none; cursor: pointer; }
+    #hilfe.zu .text { display: none; }
+    #hilfe:not(.zu) .knopf { display: none; }
     #punkte {
       position: fixed; top: 12px; right: 12px;
       padding: 8px 16px; background: rgba(0,0,0,0.6); color: #ffd700;
@@ -211,6 +214,12 @@
     hilfe.textContent += renderer.backend.isWebGPUBackend
       ? ' · WebGPU ✓'
       : ' · Achtung: kein WebGPU, nur WebGL';
+    // Hilfe: nach 15 Sekunden klein zusammenklappen, mit H (oder Klick) auf- und zuklappen
+    hilfe.innerHTML = `<span class="text">${hilfe.textContent} · H: Hilfe zu</span><span class="knopf">❓ H = Hilfe</span>`;
+    const hilfeUmschalten = (zu = !hilfe.classList.contains('zu')) => hilfe.classList.toggle('zu', zu);
+    setTimeout(() => hilfeUmschalten(true), 15000);
+    hilfe.addEventListener('click', () => hilfeUmschalten());
+    addEventListener('keydown', e => { if (e.code === 'KeyH' && !e.repeat) hilfeUmschalten(); });
 
     // --- Licht: eine weiche Grundhelligkeit plus eine "Sonne", die Schatten wirft ---
     szene.add(new THREE.HemisphereLight(0xffffff, 0x446644, 1.0));
