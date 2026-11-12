@@ -50,6 +50,9 @@
     const sonne = new THREE.DirectionalLight(0xffffff, 2);
     sonne.position.set(10, 20, 10);
     sonne.castShadow = true;
+    sonne.shadow.bias = -0.0005;      // verhindert Streifen-Muster auf den Blöcken
+    sonne.shadow.normalBias = 0.02;
+    sonne.shadow.mapSize.set(2048, 2048); // schärfere Schatten
     sonne.shadow.camera.left = -30; sonne.shadow.camera.right = 30;
     sonne.shadow.camera.top = 30;   sonne.shadow.camera.bottom = -30;
     szene.add(sonne);
@@ -73,6 +76,50 @@
     wuerfel.castShadow = true;
     szene.add(wuerfel);
 
+    // --- Hindernisse: Blöcke in verschiedenen Größen ---
+    // [x, z, breite, höhe, tiefe, farbe]
+    const hindernisListe = [
+      [ 3, -3, 2, 1,   2, 0x8d6e63],
+      [-4, -6, 1, 2,   4, 0x795548],
+      [ 0, -9, 6, 0.8, 1, 0x9e9e9e],
+      [ 6, -8, 2, 3,   2, 0x607d8b],
+      [-7,  1, 3, 1.2, 3, 0x8d6e63],
+      [ 5,  4, 1, 1.5, 1, 0x795548],
+      [-2,-14, 4, 1,   4, 0x9e9e9e],
+      [ 9,  0, 1, 2,   6, 0x607d8b],
+    ];
+    const hindernisse = hindernisListe.map(([x, z, b, h, t, farbe]) => {
+      const block = new THREE.Mesh(
+        new THREE.BoxGeometry(b, h, t),
+        new THREE.MeshStandardMaterial({ color: farbe })
+      );
+      block.position.set(x, h / 2, z); // unten auf dem Boden
+      block.castShadow = true;
+      block.receiveShadow = true;
+      szene.add(block);
+      return { x, z, b, h, t };
+    });
+
+    // Prüft: Überlappt der Würfel (an Stelle px/pz, Höhe py) ein Hindernis?
+    function stoesstAn(px, py, pz) {
+      return hindernisse.some(o =>
+        Math.abs(px - o.x) < (o.b + 1) / 2 - 0.001 &&
+        Math.abs(pz - o.z) < (o.t + 1) / 2 - 0.001 &&
+        py - 0.5 < o.h - 0.001 // Unterkante des Würfels ist tiefer als die Oberkante des Blocks
+      );
+    }
+
+    // Wie hoch ist der "Boden" unter dem Würfel? (0 oder die Oberseite eines Blocks)
+    function bodenHoehe(px, py, pz) {
+      let hoehe = 0;
+      for (const o of hindernisse) {
+        const drueber = Math.abs(px - o.x) < (o.b + 1) / 2 - 0.001 &&
+                        Math.abs(pz - o.z) < (o.t + 1) / 2 - 0.001;
+        if (drueber && py - 0.5 >= o.h - 0.05) hoehe = Math.max(hoehe, o.h);
+      }
+      return hoehe;
+    }
+
     // --- Tasten merken: welche Taste ist gerade gedrückt? ---
     const tasten = {};
     addEventListener('keydown', (e) => {
@@ -93,24 +140,31 @@
     function spielSchleife() {
       const dt = Math.min(uhr.getDelta(), 0.05); // Zeit seit dem letzten Bild
 
-      // Bewegen mit den Pfeiltasten
-      if (tasten.ArrowLeft)  wuerfel.position.x -= TEMPO * dt;
-      if (tasten.ArrowRight) wuerfel.position.x += TEMPO * dt;
-      if (tasten.ArrowUp)    wuerfel.position.z -= TEMPO * dt;
-      if (tasten.ArrowDown)  wuerfel.position.z += TEMPO * dt;
+      // Bewegen mit den Pfeiltasten (erst links/rechts, dann vor/zurück)
+      const p = wuerfel.position;
+      let dx = 0, dz = 0;
+      if (tasten.ArrowLeft)  dx -= TEMPO * dt;
+      if (tasten.ArrowRight) dx += TEMPO * dt;
+      if (tasten.ArrowUp)    dz -= TEMPO * dt;
+      if (tasten.ArrowDown)  dz += TEMPO * dt;
 
-      // Nicht vom Boden herunterlaufen
-      wuerfel.position.x = THREE.MathUtils.clamp(wuerfel.position.x, -RAND, RAND);
-      wuerfel.position.z = THREE.MathUtils.clamp(wuerfel.position.z, -RAND, RAND);
+      // Nur bewegen, wenn dort kein Hindernis im Weg ist
+      const neuX = THREE.MathUtils.clamp(p.x + dx, -RAND, RAND);
+      if (!stoesstAn(neuX, p.y, p.z)) p.x = neuX;
+      const neuZ = THREE.MathUtils.clamp(p.z + dz, -RAND, RAND);
+      if (!stoesstAn(p.x, p.y, neuZ)) p.z = neuZ;
 
-      // Springen: nur wenn der Würfel auf dem Boden steht
-      const amBoden = wuerfel.position.y <= 0.5;
+      // Wo ist unter dem Würfel fester Boden? (Gras oder Oberseite eines Blocks)
+      const standHoehe = bodenHoehe(p.x, p.y, p.z) + 0.5;
+
+      // Springen: nur wenn der Würfel auf etwas steht
+      const amBoden = p.y <= standHoehe + 0.001;
       if (tasten.Space && amBoden) fallTempo = SPRUNGKRAFT;
 
-      // Schwerkraft zieht ihn wieder herunter
+      // Schwerkraft zieht ihn wieder herunter, bis er auf etwas landet
       fallTempo -= SCHWERKRAFT * dt;
-      wuerfel.position.y += fallTempo * dt;
-      if (wuerfel.position.y < 0.5) { wuerfel.position.y = 0.5; fallTempo = 0; }
+      p.y += fallTempo * dt;
+      if (p.y < standHoehe) { p.y = standHoehe; fallTempo = 0; }
 
       // Kamera folgt dem Würfel von schräg hinten
       kamera.position.set(wuerfel.position.x, wuerfel.position.y + 5, wuerfel.position.z + 9);
