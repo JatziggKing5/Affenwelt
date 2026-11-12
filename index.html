@@ -155,6 +155,7 @@
     const PUNKTE_PRO_MUENZE = 10;
     const WIEDERKOMMEN_NACH = 7; // Sekunden, bis eine eingesammelte Münze wieder da ist
     let spielZeit = 0;           // Sekunden seit Spielstart
+    const FARB_TEMPO = 0.2;      // wie schnell der Würfel die Farbe wechselt (0.2 = 1 Runde in 5 Sekunden)
     let punkte = 0;
     const punkteAnzeige = document.getElementById('punkte');
     function punkteZeigen() {
@@ -235,6 +236,9 @@
 
       // Münzen drehen sich, werden eingesammelt und kommen nach 7 Sekunden wieder
       spielZeit += dt;
+
+      // Würfel wechselt ständig die Farbe: läuft einmal durch den Regenbogen (alle 5 Sekunden)
+      wuerfel.material.color.setHSL((spielZeit * FARB_TEMPO) % 1, 0.9, 0.55);
       for (const muenze of muenzen) {
         if (!muenze.visible) {
           // Unsichtbare Münze: ist ihre Wartezeit vorbei?
