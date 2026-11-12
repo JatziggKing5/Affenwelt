@@ -289,6 +289,106 @@
     schild.rotation.y = Math.PI / 2; // zur Wiese hin drehen
     szene.add(schild);
 
+    // ================= WALD =================
+    // Ein Zufallsgenerator mit festem Startwert: der Wald sieht bei jedem Start gleich aus
+    let saat = 12345;
+    function zufall() {
+      saat = (saat + 0x6D2B79F5) | 0;
+      let t = Math.imul(saat ^ (saat >>> 15), 1 | saat);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    }
+    const zwischen = (a, b) => a + zufall() * (b - a);
+
+    // Formen und Farben einmal bauen und für alle Bäume wiederverwenden (spart Arbeit)
+    const stammForm  = new THREE.CylinderGeometry(0.2, 0.28, 1, 8);
+    const kegelForm  = new THREE.ConeGeometry(1, 1, 9);
+    const kugelForm  = new THREE.IcosahedronGeometry(1, 1);
+    const stammFarbe = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 1 });
+    const blattFarben = [0x2e7d32, 0x388e3c, 0x1b5e20, 0x43a047, 0x558b2f].map(
+      c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9, flatShading: true })
+    );
+    const busch = new THREE.MeshStandardMaterial({ color: 0x33691e, roughness: 1, flatShading: true });
+    const pilzHut = new THREE.MeshStandardMaterial({ color: 0xe53935 });
+    const pilzPunkt = new THREE.MeshStandardMaterial({ color: 0xffffff });
+
+    function teil(form, material, x, y, z, sx, sy, sz) {
+      const m = new THREE.Mesh(form, material);
+      m.position.set(x, y, z);
+      m.scale.set(sx, sy, sz);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      szene.add(m);
+      return m;
+    }
+
+    // Tannenbaum: Stamm + 3 Kegel übereinander
+    function tanne(x, z, groesse) {
+      const blatt = blattFarben[Math.floor(zufall() * blattFarben.length)];
+      teil(stammForm, stammFarbe, x, 0.6 * groesse, z, groesse, 1.2 * groesse, groesse);
+      for (let i = 0; i < 3; i++) {
+        const breite = (1.4 - i * 0.35) * groesse;
+        teil(kegelForm, blatt, x, (1.6 + i * 1.0) * groesse, z, breite, 1.6 * groesse, breite);
+      }
+      return 4.2 * groesse; // Höhe
+    }
+    // Laubbaum: Stamm + mehrere dicke Blätter-Kugeln
+    function laubbaum(x, z, groesse) {
+      const blatt = blattFarben[Math.floor(zufall() * blattFarben.length)];
+      teil(stammForm, stammFarbe, x, 1.1 * groesse, z, groesse, 2.2 * groesse, groesse);
+      teil(kugelForm, blatt, x, 2.9 * groesse, z, 1.3 * groesse, 1.1 * groesse, 1.3 * groesse);
+      for (let i = 0; i < 3; i++) {
+        const w = zufall() * Math.PI * 2;
+        teil(kugelForm, blatt, x + Math.cos(w) * 0.7 * groesse, (2.5 + zufall() * 0.8) * groesse,
+             z + Math.sin(w) * 0.7 * groesse, 0.8 * groesse, 0.7 * groesse, 0.8 * groesse);
+      }
+      return 4 * groesse;
+    }
+
+    // Wo darf ein Baum stehen? Im Wald-Gebiet, nicht zu nah an anderen Sachen
+    const waldGebiete = [
+      { x1: 13.5, x2: 24.5, z1: -24.5, z2: 24.5 },  // rechte Seite der Wiese
+      { x1: -24.5, x2: 13.5, z1: 15, z2: 24.5 },    // vorne quer über die Wiese
+    ];
+    const freiHalten = [
+      { x: KABINE.x, z: KABINE.z, r: 4 },           // Umkleidekabine
+      { x: 0, z: 0, r: 4 },                         // Startplatz
+    ];
+    const baumOrte = [];
+    let versuche = 0;
+    while (baumOrte.length < 70 && versuche < 3000) {
+      versuche++;
+      const g = waldGebiete[zufall() < 0.6 ? 0 : 1];
+      const x = zwischen(g.x1, g.x2), z = zwischen(g.z1, g.z2);
+      if (baumOrte.some(o => Math.hypot(o.x - x, o.z - z) < 2.4)) continue;
+      if (freiHalten.some(o => Math.hypot(o.x - x, o.z - z) < o.r)) continue;
+      if (bloecke.some(o => Math.abs(o.x - x) < o.b / 2 + 1 && Math.abs(o.z - z) < o.t / 2 + 1)) continue;
+      baumOrte.push({ x, z });
+    }
+    for (const { x, z } of baumOrte) {
+      const groesse = zwischen(0.8, 1.4);
+      const hoehe = zufall() < 0.5 ? tanne(x, z, groesse) : laubbaum(x, z, groesse);
+      // Unsichtbarer Klotz am Stamm: man kann nicht durch Bäume laufen
+      bloecke.push({ x, z, b: 0.5 * groesse, t: 0.5 * groesse, unten: 0, oben: hoehe, art: 'block' });
+    }
+
+    // Büsche und Pilze zwischen den Bäumen (nur Deko, man kann durchlaufen)
+    for (let i = 0; i < 45; i++) {
+      const g = waldGebiete[zufall() < 0.6 ? 0 : 1];
+      const x = zwischen(g.x1, g.x2), z = zwischen(g.z1, g.z2);
+      if (freiHalten.some(o => Math.hypot(o.x - x, o.z - z) < o.r)) continue;
+      if (zufall() < 0.65) {
+        const s = zwischen(0.4, 0.8);
+        teil(kugelForm, busch, x, s * 0.5, z, s, s * 0.8, s);
+      } else {
+        const s = zwischen(0.6, 1.1);
+        teil(stammForm, pilzPunkt, x, 0.12 * s, z, 0.35 * s, 0.25 * s, 0.35 * s); // Stiel
+        teil(kugelForm, pilzHut, x, 0.27 * s, z, 0.22 * s, 0.12 * s, 0.22 * s); // roter Hut
+        teil(kugelForm, pilzPunkt, x + 0.08 * s, 0.36 * s, z, 0.03 * s, 0.03 * s, 0.03 * s); // Punkt
+        teil(kugelForm, pilzPunkt, x - 0.06 * s, 0.37 * s, z + 0.06 * s, 0.025 * s, 0.025 * s, 0.025 * s);
+      }
+    }
+
     // Ist der Affe in der Kabine?
     function inKabine(p) {
       return Math.abs(p.x - kx) < 1.3 && Math.abs(p.z - kz) < 1.3 && p.y < 1.5;
