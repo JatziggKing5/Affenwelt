@@ -141,7 +141,7 @@
     <div id="farben"></div>
     <p class="klein">Zum Verlassen einfach rauslaufen.</p>
   </div>
-  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1/2: Waffe wählen · Linksklick: schießen · Rechtsklick: zielen · 🚔 Nicht über Rot fahren!</div>
+  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1/2: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · 🚔 Nicht über Rot fahren!</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -2509,18 +2509,24 @@
     }
     // Maus: linke Taste = schießen, rechte Taste halten = zielen (mit Zielfernrohr: weit heranzoomen), Maus bewegen = Ziel verschieben
     renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+    let rechteMausGedrueckt = false;
     renderer.domElement.addEventListener('mousedown', e => {
-      if (e.button === 2) zielfernrohrBenutzen(true);
+      if (e.button === 2) { rechteMausGedrueckt = true; zielfernrohrBenutzen(true); }
       if (e.button === 0 && inventar.pistole && !aktuellesFahrzeug) {   // linke Maustaste = schießen
         if (auswahl !== 1) { auswahl = 1; inventarZeigen(); }
         fGedrueckt = true;
       }
     });
-    addEventListener('mouseup', e => { if (e.button === 2) zielfernrohrBenutzen(false); });
+    addEventListener('mouseup', e => { if (e.button === 2) { rechteMausGedrueckt = false; zielfernrohrBenutzen(false); } });
+    addEventListener('blur', () => { rechteMausGedrueckt = false; });   // Fenster verlassen: Maus gilt als losgelassen
     addEventListener('mousemove', e => {
-      if (!zielModus) return;
-      kameraWinkel -= e.movementX * 0.0025;
-      zielNeigung = THREE.MathUtils.clamp(zielNeigung - e.movementY * 0.0025, -0.6, 0.8);
+      if (zielModus) {                       // beim Zielen: Fadenkreuz bewegen
+        kameraWinkel -= e.movementX * 0.0025;
+        zielNeigung = THREE.MathUtils.clamp(zielNeigung - e.movementY * 0.0025, -0.6, 0.8);
+      } else if (rechteMausGedrueckt) {      // sonst: rechte Maustaste halten = Kamera drehen
+        kameraWinkel -= e.movementX * 0.006;
+        kameraNeigung = THREE.MathUtils.clamp(kameraNeigung + e.movementY * 0.006, 0.1, 1.4);
+      }
     });
 
     // --- Schießen: eine Banane fliegt los ---
@@ -2767,7 +2773,7 @@
           if (g.zustand !== 'liegt' && Math.abs(f.tempo) > 2 && punktInFahrzeug(f, g.x, g.z, 0.3)) { umwerfen(g); straftat('Fußgänger angefahren!'); }
         }
         // Kamera dreht sich langsam hinter das Fahrzeug, sobald es fährt
-        if (Math.abs(f.tempo) > 1 && !tasten.ArrowLeft && !tasten.ArrowRight) {
+        if (Math.abs(f.tempo) > 1 && !tasten.ArrowLeft && !tasten.ArrowRight && !rechteMausGedrueckt) {
           let unterschied = (f.richtung + Math.PI) - kameraWinkel;
           unterschied = Math.atan2(Math.sin(unterschied), Math.cos(unterschied));
           kameraWinkel += unterschied * Math.min(1, 2.5 * dt);
