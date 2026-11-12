@@ -11,7 +11,7 @@
     #hilfe {
       position: fixed; top: 12px; left: 12px; padding: 8px 12px;
       background: rgba(0,0,0,0.5); color: #fff; border-radius: 8px; font-size: 14px;
-      max-width: calc(100vw - 240px); /* Platz lassen für die Punkte oben rechts */
+      max-width: calc(100vw - 310px); /* Platz lassen für Mehrspieler-Knopf und Punkte oben rechts */
     }
     #hilfe.zu { max-width: none; cursor: pointer; }
     #hilfe.zu .text { display: none; }
@@ -55,6 +55,35 @@
       pointer-events: auto; cursor: crosshair;
     }
     #karte { pointer-events: auto; cursor: pointer; }
+    #mehrspielerKnopf {
+      position: fixed; top: 12px; right: 210px; width: 44px; height: 44px; border-radius: 12px; z-index: 6;
+      border: 2px solid rgba(255,255,255,0.6); background: rgba(0,0,0,0.55); font-size: 22px; cursor: pointer;
+    }
+    #mpLeiste {
+      position: fixed; top: 62px; right: 210px; padding: 4px 10px; border-radius: 8px; background: #43a047;
+      color: #fff; font-size: 12px; font-weight: bold; display: none; pointer-events: none; white-space: nowrap;
+    }
+    #mpLeiste.offen { display: block; }
+    #mehrspieler {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 22;
+      width: min(340px, calc(100vw - 24px)); max-height: calc(100vh - 40px); overflow-y: auto; box-sizing: border-box;
+      padding: 16px; border-radius: 16px; background: rgba(27, 94, 32, 0.97); color: #fff; text-align: center; display: none;
+    }
+    #mehrspieler.offen { display: block; }
+    #mehrspieler h2 { margin: 0 0 6px; }
+    #mehrspieler p { margin: 6px 0; font-size: 14px; }
+    #mehrspieler small { opacity: 0.8; }
+    #mehrspieler .mpCode { font-size: 34px; font-weight: bold; letter-spacing: 3px; margin: 6px 0; font-family: monospace; color: #ffeb3b; }
+    #mehrspieler button { cursor: pointer; border: none; border-radius: 10px; font-weight: bold; }
+    #mehrspieler .mpBreit { display: block; width: 100%; padding: 10px; margin: 8px 0 0; font-size: 16px; background: #ffd600; color: #000; }
+    #mehrspieler .mpBreit.leise { background: rgba(255,255,255,0.2); color: #fff; }
+    #mehrspieler .mpKlein { padding: 4px 8px; font-size: 12px; background: rgba(255,255,255,0.25); color: #fff; }
+    #mehrspieler .mpZiffern { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 6px 0; }
+    #mehrspieler .mpZiffer { padding: 12px 0; font-size: 20px; background: rgba(255,255,255,0.2); color: #fff; }
+    #mehrspieler .mpListe { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+    #mehrspieler .mpSpieler { padding: 8px; background: rgba(255,255,255,0.18); color: #fff; font-size: 15px; }
+    body.handy #mehrspielerKnopf { right: 136px; }
+    body.handy #mpLeiste { right: 136px; top: 60px; }
     #karteZu {
       position: fixed; top: 14px; right: 14px; z-index: 21; width: 48px; height: 48px; border-radius: 50%;
       border: 3px solid #fff; background: rgba(0,0,0,0.7); color: #fff; font-size: 24px; display: none; cursor: pointer;
@@ -224,6 +253,9 @@
   </div>
   <canvas id="karte" width="180" height="180" title="Mini-Karte"></canvas>
   <div id="wegpunkt"></div>
+  <button id="mehrspielerKnopf" title="Mehrspieler (P)">👥</button>
+  <div id="mpLeiste"></div>
+  <div id="mehrspieler"></div>
   <button id="karteZu" title="Karte schließen">✕</button>
   <div id="stick"><div id="stickKnopf"></div></div>
   <div id="handyknoepfe">
@@ -239,7 +271,7 @@
     <div id="farben"></div>
     <p class="klein">Zum Verlassen einfach rauslaufen.</p>
   </div>
-  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1/2: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · Shift: rennen · Jetpack: Leertaste halten · M: Karte (Klick = Wegpunkt) · 🚔 Nicht über Rot fahren!</div>
+  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1/2: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · Shift: rennen · Jetpack: Leertaste halten · M: Karte (Klick = Wegpunkt) · P: 👥 Mehrspieler · 🚔 Nicht über Rot fahren!</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -642,13 +674,13 @@
     const AFFEN_FELLE = [0x3b2314, 0x5d4037, 0x8d6e63, 0x795548, 0x4e342e, 0x9e9e9e, 0xbcaaa4, 0x212121, 0xa1887f];
     const muetzenMaterial = new THREE.MeshStandardMaterial({ color: 0x1a237e, roughness: 0.6, name: 'Polizeimuetze' });
     const sternMaterial = new THREE.MeshStandardMaterial({ color: 0xffd600, metalness: 0.6, roughness: 0.3, emissive: 0x332800 });
-    function affenKlon(fellFarbe, polizei = false) {
-      const k = figur.clone(true);
+    function affenKlon(fellFarbe, polizei = false, vorlage = figur) {
+      const k = vorlage.clone(true);
       k.position.set(0, 0, 0);
       k.rotation.set(0, 0, 0);
       const eigenesFell = fell.clone();
       eigenesFell.color.set(fellFarbe);
-      k.traverse(o => { if (o.isMesh) { o.castShadow = false; if (o.material === fell) o.material = eigenesFell; } });
+      k.traverse(o => { if (o.isMesh) { o.castShadow = false; if (o.material === fell || o.material.name === 'Fell') o.material = eigenesFell; } });
       const leer = () => new THREE.Group();
       const teile = {
         kopf: finde(k, 'Affe_Kopf') || leer(),
@@ -1685,7 +1717,7 @@
     }
 
     const fahrzeuge = [];
-    function neuesFahrzeug(typ, x, z, richtung) {
+    function neuesFahrzeug(typ, x, z, richtung, nurBild = false) {
       const f = { ...FAHRZEUG_TYPEN[typ], typ, x, z, richtung, tempo: 0, lenkung: 0, raeder: [] };
       f.gruppe = new THREE.Group();
       f.karosserie = new THREE.Group(); // darin ist alles, was sich (beim Motorrad) zur Seite neigt
@@ -1715,7 +1747,7 @@
       }
       f.gruppe.traverse(m => { if (m.isMesh) m.castShadow = true; });
       fahrzeugZeigen(f);
-      fahrzeuge.push(f);
+      if (!nurBild) fahrzeuge.push(f); // nur ein Bild (für Mitspieler): nicht zum Einsteigen
       return f;
     }
     function fahrzeugZeigen(f) {
@@ -2735,6 +2767,7 @@
       m.castShadow = true;
       szene.add(m);
       geschosse.push({ mesh: m, vx: r.x * 40, vy: r.y * 40, vz: r.z * 40, leben: 2 });
+      eigeneBananeGeschossen(geschosse[geschosse.length - 1]); // auch die Mitspieler sehen die Banane
       hupen(700); // "Peng!"
     }
     // Getroffen? Dann rutscht man aus und liegt 5 Sekunden am Boden.
@@ -2767,7 +2800,7 @@
           g.mesh.position.x += g.vx * dt / schritte; g.mesh.position.y += g.vy * dt / schritte; g.mesh.position.z += g.vz * dt / schritte;
           const q = g.mesh.position;
           const inWand = bloecke.some(o => o.art !== 'lava' && Math.abs(q.x - o.x) < o.b / 2 && Math.abs(q.z - o.z) < o.t / 2 && q.y < o.oben && q.y > o.unten);
-          weg = getroffen(g) || inWand || q.y < 0;
+          weg = (g.fremd ? triffMich(g) : (getroffen(g) || triffMitspieler(g))) || inWand || q.y < 0;
         }
         g.mesh.rotation.x += 14 * dt; g.mesh.rotation.y += 9 * dt;
         g.leben -= dt;
@@ -3063,6 +3096,8 @@
       szene.add(v.gruppe);
     }
 
+    // Eine Vorlage ohne Kleider, für die Affen der anderen Mitspieler
+    const affenVorlage = figur.clone(true);
     // Erst jetzt (nach den Puppen-Kopien) deine gespeicherten Kleider wieder anziehen
     for (const id of Object.values({ ...kleider.an })) anziehen(id);
 
@@ -3304,6 +3339,7 @@
       ampelnZeigen(spielZeit);       // Ampeln umschalten
       fussgaengerBewegen(dt);        // Fußgänger-Affen
       polizeiBewegen(dt);            // Polizei (wenn jemand gesucht wird)
+      mehrspielerBewegen(dt);        // Mitspieler
       geschosseBewegen(dt);          // fliegende Bananen
       rauchBewegen(dt);              // Rauchwolken
       bankBewegen();                 // Alarmglocke
@@ -3373,6 +3409,8 @@
         let vor   = (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0); // W = nach vorne, S = nach hinten
         let seite = (tasten.KeyD ? 1 : 0) - (tasten.KeyA ? 1 : 0); // D = nach rechts, A = nach links
         if (stick.aktiv) { vor = stick.y; seite = stick.x; }        // Handy: Joystick (auch halb gedrückt = langsamer)
+        const liegt = spielZeit < selbstLiegtBis;                   // von einer Banane getroffen: nicht bewegen
+        if (liegt) { vor = 0; seite = 0; sprungGedrueckt = false; sprungGedruecktUm = -1; }
         const sin = Math.sin(kameraWinkel), cos = Math.cos(kameraWinkel);
         let wx = -sin * vor + cos * seite, wz = -cos * vor - sin * seite;
         const laenge = Math.hypot(wx, wz);
@@ -3441,6 +3479,7 @@
         kopf.rotation.z = Math.sin(laufZeit * 0.5) * (laeuft ? 0.15 : 0.08);
         figur.position.y = amBoden && laeuft ? Math.abs(Math.sin(laufZeit)) * (rennt ? 0.1 : 0.06) : 0; // hüpft beim Laufen
         figur.rotation.x = amBoden ? Math.min(0.25, tempo * 0.02) : 0;                              // beim Rennen leicht nach vorne gebeugt
+        if (liegt) { figur.rotation.x = -Math.PI / 2; figur.position.y = -0.25; }                  // liegt am Boden
         // In der Luft: Arme hoch wie "Juhuu!"
         if (!amBoden) {
           armLinks.rotation.z = -2.4; armRechts.rotation.z = 2.4;
@@ -3579,6 +3618,267 @@
 
       renderer.render(szene, kamera);
     }
+    // ================= MEHRSPIELER =================
+    // Freunde spielen zusammen in einem "Raum". Wer den Raum-Code kennt, kommt hinein.
+    // Die Browser verbinden sich direkt miteinander (WebRTC, mit der Bibliothek Trystero) – ohne eigenen Server.
+    // Jeder sieht die anderen als Affen (Fellfarbe, Kleider, Pistole, Auto). Bananen treffen auch Mitspieler.
+    // Autos, Fußgänger und Polizei sind bei jedem Spieler eigene (die werden nicht geteilt).
+    const AFFEN_NAMEN = ['Bananen-Boss', 'Kokos-König', 'Lianen-Lisa', 'Turbo-Tarzan', 'Mango-Max', 'Ninja-Nuss', 'Chili-Charly',
+      'Dschungel-Dino', 'Kiwi-Kalle', 'Papaya-Paula', 'Rakete-Rudi', 'Banane-Bella', 'Wuschel-Willi', 'Zappel-Zoe', 'Grinse-Gustav', 'Hüpf-Hanna'];
+    const APP_ID = 'jatziggking5-mein-spiel-affen'; // eindeutiger Name unseres Spiels
+    const mp = {
+      raum: null, code: null, zustand: null, schussAktion: null, trefferAktion: null,
+      name: AFFEN_NAMEN[Math.floor(Math.random() * AFFEN_NAMEN.length)],
+      andere: new Map(),   // userId -> { daten, gruppe, figur, teile, ziel: {x,y,z,r}, ... }
+      sendeUm: 0,
+    };
+    let selbstLiegtBis = 0;                    // wurde ich von einer Banane getroffen?
+    const mpPanel = document.getElementById('mehrspieler');
+    const mpKnopf = document.getElementById('mehrspielerKnopf');
+    const mpLeiste = document.getElementById('mpLeiste');
+
+    // --- Panel: Raum erstellen / beitreten ---
+    let codeEingabe = '';
+    function mpPanelZeigen() {
+      if (mp.raum) {
+        const liste = [...mp.andere.values()].map(a =>
+          `<button class="mpSpieler" data-id="${a.id}">🐒 ${a.daten?.n || '…'} <small>(hinbeamen)</small></button>`).join('') || '<p>Noch niemand da – gib deinen Freunden den Code!</p>';
+        mpPanel.innerHTML = `<h2>👥 Mehrspieler</h2>
+          <p>Raum-Code für deine Freunde:</p><div class="mpCode">AFFE-${mp.code}</div>
+          <p>Du heißt: <b>${mp.name}</b></p>
+          <div class="mpListe">${liste}</div>
+          <button class="mpBreit" data-tun="verlassen">🚪 Raum verlassen</button>
+          <button class="mpBreit leise" data-tun="zu">Schließen</button>`;
+      } else {
+        const ziffern = [1, 2, 3, 4, 5, 6, 7, 8, 9, '⌫', 0, '✓'].map(z => `<button class="mpZiffer" data-ziffer="${z}">${z}</button>`).join('');
+        mpPanel.innerHTML = `<h2>👥 Mehrspieler</h2>
+          <p>Spiel mit Freunden in derselben Welt!<br><small>Gib den Code nur Leuten, die du kennst.</small></p>
+          <p>Dein Name: <b>${mp.name}</b> <button class="mpKlein" data-tun="name">🎲 anderer Name</button></p>
+          <button class="mpBreit" data-tun="neu">✨ Neuen Raum erstellen</button>
+          <p>…oder Code von einem Freund eingeben:</p>
+          <div class="mpCode">AFFE-${codeEingabe.padEnd(4, '_')}</div>
+          <div class="mpZiffern">${ziffern}</div>
+          <button class="mpBreit leise" data-tun="zu">Schließen</button>`;
+      }
+    }
+    function mpPanelUmschalten(offen = !mpPanel.classList.contains('offen')) {
+      mpPanel.classList.toggle('offen', offen);
+      if (offen) mpPanelZeigen();
+    }
+    mpKnopf.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); mpPanelUmschalten(); });
+    mpPanel.addEventListener('pointerdown', e => {
+      e.preventDefault(); e.stopPropagation(); // die Tastatur bleibt beim Spiel
+      const z = e.target.closest('[data-ziffer]')?.dataset.ziffer;
+      const tun = e.target.closest('[data-tun]')?.dataset.tun;
+      const spieler = e.target.closest('.mpSpieler')?.dataset.id;
+      if (z !== undefined) {
+        if (z === '⌫') codeEingabe = codeEingabe.slice(0, -1);
+        else if (z === '✓') { if (codeEingabe.length === 4) raumBeitreten(codeEingabe); }
+        else if (codeEingabe.length < 4) codeEingabe += z;
+        if (codeEingabe.length === 4 && z !== '⌫' && z !== '✓') raumBeitreten(codeEingabe);
+        else mpPanelZeigen();
+      }
+      if (tun === 'neu') raumBeitreten(String(Math.floor(1000 + Math.random() * 9000)));
+      if (tun === 'name') { mp.name = AFFEN_NAMEN[(AFFEN_NAMEN.indexOf(mp.name) + 1) % AFFEN_NAMEN.length]; mpPanelZeigen(); }
+      if (tun === 'verlassen') raumVerlassen();
+      if (tun === 'zu') mpPanelUmschalten(false);
+      if (spieler) zuSpielerBeamen(spieler);
+    });
+    addEventListener('keydown', e => { if (e.code === 'KeyP' && !e.repeat) mpPanelUmschalten(); });
+
+    // --- Raum betreten und verlassen ---
+    async function raumBeitreten(code) {
+      if (mp.raum) raumVerlassen();
+      codeEingabe = '';
+      mp.code = code;
+      mpPanel.innerHTML = '<h2>👥 Verbinde …</h2><p>Einen Moment!</p>';
+      try {
+        const { joinRoom } = await import('https://cdn.jsdelivr.net/npm/trystero@0.26.0/+esm');
+        // Der Code ist gleichzeitig das Passwort: Wer ihn nicht kennt, kann den Raum nicht finden.
+        mp.raum = joinRoom({ appId: APP_ID, password: 'affen-' + code }, 'raum-' + code);
+      } catch (fehler) {
+        console.warn('Mehrspieler geht nicht:', fehler);
+        mp.raum = null; mp.code = null;
+        zeigeMeldung('😕 Mehrspieler-Verbindung klappt gerade nicht', 2.5);
+        mpPanelZeigen();
+        return;
+      }
+      // Zwei Arten von Nachrichten: "affe" (wo bin ich, wie sehe ich aus – 10× pro Sekunde) und "banane" (ein Schuss)
+      const absender = info => typeof info === 'string' ? info : info?.peerId ?? info?.userId;
+      mp.zustand = mp.raum.makeAction('affe');
+      mp.schussAktion = mp.raum.makeAction('banane');
+      // je nach Version ist "onMessage" eine Funktion oder eine Einstellung, der man etwas zuweist
+      const wenn = (ding, name, fn) => typeof ding[name] === 'function' ? ding[name](fn) : (ding[name] = fn);
+      wenn(mp.zustand, 'onMessage', (daten, info) => { if (daten && typeof daten.x === 'number') mitspielerAktualisieren(absender(info), daten); });
+      wenn(mp.schussAktion, 'onMessage', g => { if (g && typeof g.x === 'number') fremdeBananeFliegt(g); });
+      wenn(mp.raum, 'onPeerLeave', info => mitspielerEntfernen(absender(info)));
+      wenn(mp.raum, 'onPeerJoin', () => { mp.sendeUm = 0; }); // ein Neuer: sofort unsere Daten schicken
+      zeigeMeldung(`👥 Raum AFFE-${code} – gib den Code deinen Freunden!`, 3);
+      mpPanelZeigen();
+      mpLeisteZeigen();
+    }
+    function raumVerlassen() {
+      try { mp.raum?.leave(); } catch (e) {}
+      for (const id of [...mp.andere.keys()]) mitspielerEntfernen(id);
+      mp.raum = null; mp.code = null; mp.zustand = null; mp.schussAktion = null;
+      zeigeMeldung('🚪 Raum verlassen', 1.5);
+      mpPanelZeigen();
+      mpLeisteZeigen();
+    }
+    function mpLeisteZeigen() {
+      mpLeiste.classList.toggle('offen', !!mp.raum);
+      if (mp.raum) mpLeiste.textContent = `👥 AFFE-${mp.code} · ${mp.andere.size + 1} Spieler`;
+    }
+
+    // --- Mitspieler als Affen zeigen ---
+    function namensSchild(text) {
+      const lw = document.createElement('canvas');
+      lw.width = 256; lw.height = 64;
+      const p = lw.getContext('2d');
+      p.fillStyle = 'rgba(0,0,0,0.55)'; p.beginPath(); p.roundRect(4, 8, 248, 48, 20); p.fill();
+      p.fillStyle = '#fff'; p.font = 'bold 28px sans-serif'; p.textAlign = 'center'; p.textBaseline = 'middle';
+      p.fillText(text, 128, 33);
+      const tex = new THREE.CanvasTexture(lw); tex.colorSpace = THREE.SRGBColorSpace;
+      const schild = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+      schild.scale.set(1.6, 0.4, 1);
+      schild.position.y = 1.15;
+      schild.renderOrder = 10;
+      return schild;
+    }
+    function mitspielerAktualisieren(id, daten) {
+      let a = mp.andere.get(id);
+      const neu = !a;
+      if (neu) {
+        a = { id, daten: {}, ziel: { x: daten.x, y: daten.y, z: daten.z, r: daten.r }, laufZeit: 0, auto: null, autoTyp: null };
+        mp.andere.set(id, a);
+        zeigeMeldung(`👋 ${daten.n || 'Ein Affe'} ist da!`, 2);
+      }
+      // Aussehen neu bauen, wenn sich Fell oder Kleider geändert haben
+      const aussehen = `${daten.f}|${(daten.k || []).join(',')}|${daten.n}`;
+      if (aussehen !== a.aussehen) {
+        a.aussehen = aussehen;
+        if (a.gruppe) szene.remove(a.gruppe);
+        Object.assign(a, affenKlon(daten.f ?? 0x3b2314, false, affenVorlage));
+        const teile = { kopf: a.teile.kopf, koerper: a.figur, beinL: a.teile.beinL, beinR: a.teile.beinR };
+        for (const kid of daten.k || []) { const stueck = KLEIDER.find(k => k.id === kid); if (stueck) anheften(teile, stueck); }
+        a.pistole = bananenPistoleBauen();
+        a.pistole.position.set(0, -0.47, 0.03); a.pistole.rotation.x = Math.PI / 2; a.pistole.scale.setScalar(1.4);
+        a.teile.armR.add(a.pistole);
+        a.gruppe.add(namensSchild(daten.n || 'Affe'));
+        a.gruppe.position.set(a.ziel.x, a.ziel.y, a.ziel.z);
+        szene.add(a.gruppe);
+      }
+      // Fährt er gerade ein Auto?
+      if (daten.v !== a.autoTyp) {
+        if (a.auto) { szene.remove(a.auto.gruppe); a.auto = null; }
+        a.autoTyp = daten.v || null;
+        if (a.autoTyp) a.auto = neuesFahrzeug(a.autoTyp, daten.vx, daten.vz, daten.vr, true);
+      }
+      a.daten = daten;
+      a.zuletzt = spielZeit; // wann zuletzt etwas kam
+      a.ziel = { x: daten.x, y: daten.y, z: daten.z, r: daten.r, vx: daten.vx, vz: daten.vz, vr: daten.vr };
+      mpLeisteZeigen();
+      if (mpPanel.classList.contains('offen') && neu) mpPanelZeigen();
+    }
+    function mitspielerEntfernen(id) {
+      const a = mp.andere.get(id);
+      if (!a) return;
+      if (a.gruppe) szene.remove(a.gruppe);
+      if (a.auto) szene.remove(a.auto.gruppe);
+      mp.andere.delete(id);
+      zeigeMeldung(`👋 ${a.daten?.n || 'Ein Affe'} ist gegangen`, 1.5);
+      mpLeisteZeigen();
+      if (mpPanel.classList.contains('offen')) mpPanelZeigen();
+    }
+    function zuSpielerBeamen(id) {
+      const a = mp.andere.get(id);
+      if (!a || imGefaengnis) return;
+      if (aktuellesFahrzeug) aussteigen();
+      affe.position.set(a.ziel.x + 1.5, a.ziel.y + 0.5, a.ziel.z);
+      fallTempo = 0;
+      mpPanelUmschalten(false);
+      zeigeMeldung(`✨ Zu ${a.daten.n} gebeamt!`, 1.5);
+    }
+
+    // --- Jedes Bild: eigene Daten senden, Mitspieler weich bewegen ---
+    function mehrspielerBewegen(dt) {
+      if (!mp.raum) return;
+      // 10-mal pro Sekunde sagen wir den anderen, wo wir sind und wie wir aussehen
+      if (spielZeit > mp.sendeUm) {
+        mp.sendeUm = spielZeit + 0.1;
+        const f = aktuellesFahrzeug, p = affe.position;
+        mp.zustand.send({
+          n: mp.name, x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), r: +blickRichtung.toFixed(2),
+          t: +Math.hypot(laufV.x, laufV.z).toFixed(1), l: zuletztAmBoden ? 0 : 1, g: spielZeit < selbstLiegtBis ? 1 : 0,
+          f: regenbogen ? 0xff00ff : fell.color.getHex(), k: Object.values(kleider.an), w: auswahl === 1 ? 1 : 0,
+          v: f ? f.typ : null, vx: f ? +f.x.toFixed(2) : 0, vz: f ? +f.z.toFixed(2) : 0, vr: f ? +f.richtung.toFixed(2) : 0,
+        });
+      }
+      // Mitspieler gleiten zu ihrer neuesten Position (sieht flüssig aus, obwohl nur 10 Meldungen pro Sekunde kommen)
+      const weich = 1 - Math.exp(-10 * dt);
+      for (const a of [...mp.andere.values()]) {
+        if (spielZeit - a.zuletzt > 10) { mitspielerEntfernen(a.id); continue; } // 10 s nichts gehört: weg
+        if (!a.gruppe) continue;
+        const d = a.daten, g = a.gruppe;
+        g.position.x += (a.ziel.x - g.position.x) * weich;
+        g.position.y += (a.ziel.y - g.position.y) * weich;
+        g.position.z += (a.ziel.z - g.position.z) * weich;
+        let u = a.ziel.r - g.rotation.y; u = Math.atan2(Math.sin(u), Math.cos(u));
+        g.rotation.y += u * weich;
+        a.pistole.visible = !!d.w && !d.v;
+        if (a.auto) {
+          a.auto.x += (a.ziel.vx - a.auto.x) * weich; a.auto.z += (a.ziel.vz - a.auto.z) * weich;
+          let w = a.ziel.vr - a.auto.richtung; w = Math.atan2(Math.sin(w), Math.cos(w));
+          a.auto.richtung += w * weich;
+          fahrzeugZeigen(a.auto);
+          sitzen(a.teile);
+        } else if (d.g) {                       // liegt am Boden (von Banane getroffen)
+          a.figur.rotation.x = -Math.PI / 2; a.figur.position.y = -0.25;
+        } else {
+          a.figur.rotation.x = 0; a.figur.position.y = 0;
+          a.laufZeit += dt * (d.t > 0.4 ? 4 + d.t * 1.7 : 3);
+          laufAnimation(a.teile, a.laufZeit, d.t > 0.4 ? Math.min(1.1, 0.2 + d.t * 0.1) : 0.1);
+          if (d.l) { a.teile.armL.rotation.z = -2.4; a.teile.armR.rotation.z = 2.4; }
+          if (d.w) a.teile.armR.rotation.set(-Math.PI / 2, 0, 0.1);
+        }
+      }
+    }
+
+    // --- Bananen zwischen Spielern ---
+    function eigeneBananeGeschossen(g) {     // wird beim eigenen Schuss aufgerufen
+      if (mp.schussAktion) mp.schussAktion.send({ x: g.mesh.position.x, y: g.mesh.position.y, z: g.mesh.position.z, vx: g.vx, vy: g.vy, vz: g.vz });
+    }
+    function fremdeBananeFliegt(b) {          // ein Mitspieler hat geschossen: Banane auch bei uns zeigen
+      const m = new THREE.Mesh(bananenForm, bananenMaterial);
+      m.position.set(b.x, b.y, b.z);
+      szene.add(m);
+      geschosse.push({ mesh: m, vx: b.vx, vy: b.vy, vz: b.vz, leben: 2, fremd: true });
+    }
+    // Trifft eine fremde Banane MICH? Dann liege ich 5 Sekunden am Boden.
+    function triffMich(g) {
+      if (!g.fremd || aktuellesFahrzeug || spielZeit < selbstLiegtBis) return false;
+      const q = g.mesh.position, p = affe.position;
+      if (Math.hypot(q.x - p.x, q.z - p.z) < 0.7 && Math.abs(q.y - p.y) < 0.9) {
+        selbstLiegtBis = spielZeit + LIEGEZEIT;
+        zeigeMeldung('🍌 Getroffen! 5 Sekunden am Boden …', 2);
+        return true;
+      }
+      return false;
+    }
+    // Trifft meine Banane einen Mitspieler? (Nur damit sie dort verschwindet – umfallen tut er bei sich selbst.)
+    function triffMitspieler(g) {
+      if (g.fremd) return false;
+      const q = g.mesh.position;
+      for (const a of mp.andere.values()) {
+        if (!a.gruppe || a.daten.v) continue;
+        if (Math.hypot(q.x - a.gruppe.position.x, q.z - a.gruppe.position.z) < 0.7 && Math.abs(q.y - a.gruppe.position.y) < 0.9) {
+          zeigeMeldung(`🍌 ${a.daten.n} getroffen!`, 1.2);
+          return true;
+        }
+      }
+      return false;
+    }
+
     // ================= HANDY-STEUERUNG =================
     // Links: Joystick zum Laufen/Fahren (erscheint da, wo der Daumen hinkommt).
     // Rechts: wischen = herumschauen. Knöpfe rechts unten. Auf die Karte tippen = groß.
