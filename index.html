@@ -439,6 +439,7 @@
 
     // --- Szene, Kamera und Renderer: die "Bühne", das "Auge" und der "Maler" ---
     const szene = new THREE.Scene();
+    const NPC_STAND = [];   // Affen, die an einem festen Ort stehen und reden können (Verkäufer usw.)
     szene.background = new THREE.Color(0x87ceeb); // hellblauer Himmel
 
     const kamera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 300);
@@ -451,7 +452,7 @@
     if (IST_HANDY) document.body.classList.add('handy');
     const E_TASTE = IST_HANDY ? '✋' : 'E'; // so heißt die Aktions-Taste in den Hinweisen
     // Einstellungen (Lautstärke, Grafik, Maus) – die merkt sich der Browser. Der Spielstand wird NICHT gespeichert.
-    const EINST = { laut: 0.8, musik: 0.4, schatten: true, aufloesung: 1, sicht: 'weit', maus: 1, umkehren: false, tageszeit: 'auto' };
+    const EINST = { laut: 0.8, musik: 0.4, schatten: true, aufloesung: 1, sicht: 'weit', maus: 1, umkehren: false, tageszeit: 'auto', stimmen: true };
     try { Object.assign(EINST, JSON.parse(localStorage.getItem('affenEinstellungen') || '{}')); } catch (e) {}
     const einstMerken = () => { try { localStorage.setItem('affenEinstellungen', JSON.stringify(EINST)); } catch (e) {} };
     const aufloesungSetzen = () => renderer.setPixelRatio(Math.min(devicePixelRatio, IST_HANDY ? 1.5 : 2) * EINST.aufloesung); // auf dem Handy etwas sparsamer
@@ -483,6 +484,7 @@
       ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🐾 Tierhandlung', 'rechts neben der Hauptstraße beim Start'], ['🏡 Affen-Siedlung', 'Häuser kaufen und einrichten (rechts vom Start)'], ['🏁 Straßenrennen', 'mit einem Fahrzeug unters Start-Tor fahren'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
       ['🔫 Waffenhändler', 'Bananen-Pistole & Zielfernrohr'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
       ['🚔 Polizei', 'nicht über Rot fahren, nichts Verbotenes tun'], ['🔒 Gefängnis', 'man kann ausbrechen …'],
+      ['💬 Mit Affen reden', 'neben einen Affen stellen und ' + E_TASTE + ' drücken'],
       ['🐆 Nachts: Leopard!', 'renn weg, steig in ein Auto oder flüchte in ein Haus'],
       ['🤫 Geheimversteck', 'irgendwo gibt es eins – nicht auf der Karte!'],
     ]]);
@@ -496,6 +498,7 @@
         <div class="gruppe"><h3>🔊 Ton</h3>
           <div class="einst"><span>Lautstärke</span><input type="range" min="0" max="1" step="0.05" data-e="laut"></div>
           <div class="einst"><span>Musik</span><input type="range" min="0" max="1" step="0.05" data-e="musik"></div>
+          <div class="einst"><span>Affen sprechen laut 🗣️</span><input type="checkbox" data-e="stimmen"></div>
         </div>
         <div class="gruppe"><h3>🖥️ Grafik <small>(langsames Gerät? Hier sparen!)</small></h3>
           <div class="einst"><span>Schatten</span><input type="checkbox" data-e="schatten"></div>
@@ -1378,6 +1381,7 @@
       kassierer.gruppe.position.set(cx + 5, 0.5, fz - vorne * 2.7);
       kassierer.gruppe.rotation.y = vorne > 0 ? 0 : Math.PI; // schaut zur Tür
       szene.add(kassierer.gruppe);
+      NPC_STAND.push({ gruppe: kassierer.gruppe, art: 'kassierer' });
       schildBauen('🍌 SUPERMARKT', 8, 1.4, '#2e7d32', '#ffeb3b', cx, H - 0.9, fz + vorne * 0.2, vorne > 0 ? 0 : Math.PI);
       const laden = {
         x: cx, z: cz, b: B, t: T, vorne,
@@ -1419,6 +1423,7 @@
       angestellter.gruppe.position.set(cx - 4, 0.5, fz - vorne * 5.4);
       angestellter.gruppe.rotation.y = vorne > 0 ? 0 : Math.PI;
       szene.add(angestellter.gruppe);
+      NPC_STAND.push({ gruppe: angestellter.gruppe, art: 'bank' });
       // Der Tresor: eine große runde Stahltür an der Rückwand, davor Goldbarren
       const stahl = new THREE.MeshStandardMaterial({ color: 0x90a4ae, metalness: 0.9, roughness: 0.25 });
       const tresorTuer = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 0.3, 32), stahl);
@@ -1456,7 +1461,7 @@
       const brille = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.1, 0.06), new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.1, metalness: 0.5 }));
       brille.position.set(0, 0.09, 0.3);
       haendler.teile.kopf.add(brille);                                                // cool mit Sonnenbrille
-      szene.add(haendler.gruppe);
+      szene.add(haendler.gruppe); NPC_STAND.push({ gruppe: haendler.gruppe, art: 'haendler' });
       // Bananen an der Wand als Deko
       const bananenDeko = new THREE.MeshStandardMaterial({ color: 0xffe135, roughness: 0.6 });
       for (let i = 0; i < 6; i++) instanz(new THREE.TorusGeometry(0.18, 0.06, 6, 12, Math.PI * 0.9), bananenDeko,
@@ -2816,6 +2821,7 @@
         if (frei.wegenSpieler && auto.tempo < 1 && spielZeit > auto.hupteUm &&
             Math.hypot(auto.x - affe.position.x, auto.z - affe.position.z) < 30) {
           hupen(auto.art === 'bus' || auto.art === 'laster' ? 180 : 330);
+          if (Math.random() < 0.5) npcSagt(auto.gruppe, zufallsSpruch('fahrer'), auto, 3500);
           auto.hupteUm = spielZeit + 3;
         }
         // Gas geben oder bremsen
@@ -2898,6 +2904,7 @@
       if (f.zustand === 'liegt') return;
       f.vorher = f.zustand;
       f.zustand = 'liegt';
+      if (typeof npcSagt === 'function') npcSagt(f.gruppe, zufallsSpruch('aua'), f);
       f.aufstehenUm = spielZeit + dauer;
     }
 
@@ -2905,6 +2912,12 @@
       for (const f of fussgaenger) {
         // Weit weg? Dann nicht zeichnen (spart Arbeit) – bewegen tun sie sich trotzdem
         f.gruppe.visible = (f.x - kamera.position.x) ** 2 + (f.z - kamera.position.z) ** 2 < 85 ** 2;
+        if (f.redetBis > spielZeit && f.zustand !== 'liegt' && f.zustand !== 'einkaufen') {   // bleibt stehen und schaut dich an
+          f.gruppe.rotation.y = Math.atan2(affe.position.x - f.x, affe.position.z - f.z);
+          laufAnimation(f.teile, spielZeit * 2, 0.15);
+          f.gruppe.position.set(f.x, 0.5 * f.groesse, f.z);
+          continue;
+        }
         if (f.zustand === 'liegt') {
           f.figur.rotation.x = -Math.PI / 2;  // liegt auf dem Rücken
           f.gruppe.position.set(f.x, 0.25, f.z);
@@ -2991,6 +3004,7 @@
       polizei.laeufer = affenKlon(0x3b2314, true);
       polizei.laeufer.gruppe.visible = false;
       szene.add(polizei.laeufer.gruppe);
+      NPC_STAND.push({ gruppe: polizei.laeufer.gruppe, art: 'polizei', stimme: 0.8 });
     }
 
     let fahndung = null;       // null = niemand sucht dich, sonst { grund }
@@ -3912,6 +3926,7 @@
       v.gruppe.rotation.y = KLEIDERLADEN.vorne > 0 ? Math.PI : 0;
       for (const id of ['nerd', 'ringel', 'schal']) anheften({ kopf: v.teile.kopf, koerper: v.figur, beinL: v.teile.beinL, beinR: v.teile.beinR }, KLEIDER.find(k => k.id === id));
       szene.add(v.gruppe);
+      NPC_STAND.push({ gruppe: v.gruppe, art: 'kleider' });
     }
 
     // Eine Vorlage ohne Kleider, für die Affen der anderen Mitspieler
@@ -4449,6 +4464,7 @@
       const verkaeufer = affenKlon(0x5d4037);
       verkaeufer.gruppe.position.set(TIERLADEN.x + 1.1, 0.5, TIERLADEN.z); verkaeufer.gruppe.rotation.y = -Math.PI / 2;
       szene.add(verkaeufer.gruppe);
+      NPC_STAND.push({ gruppe: verkaeufer.gruppe, art: 'tierladen' });
       // Ein paar Tiere zum Anschauen auf der Theke
       ['hund', 'katze', 'schwein'].forEach((art, i) => {
         const t = haustierBauen(art); t.gruppe.position.set(TIERLADEN.x, 1, TIERLADEN.z - 1.1 + i * 1.1); t.gruppe.rotation.y = -Math.PI / 2; szene.add(t.gruppe);
@@ -4810,6 +4826,145 @@
       L.gruppe.rotation.y = L.blick;
     }
 
+    // ================= DIE AFFEN REDEN: Sprechblasen und (wenn erlaubt) echte Stimmen =================
+    const SPRUECHE = {
+      hallo: ['Hallo! 👋', 'Na, wie geht\'s?', 'Hi! Schönes Wetter heute, oder?', 'Uh-uh-ah-ah! 🐒', 'Guten Tag!', 'Huhu!'],
+      reden: [
+        'Hast du die Obby schon geschafft? Ich bin immer in die Lava gefallen! 🔥',
+        'Ich geh gleich Bananen kaufen. 🍌', 'Weißt du, warum die Banane krumm ist? Ich auch nicht!',
+        'Nachts bleib ich lieber zu Hause … wegen dem Leoparden! 🐆', 'Hast du schon den Auftrags-Affen beim Start besucht?',
+        'Man sagt, irgendwo gibt es ein Geheimversteck … 🤫', 'Fahr nie über Rot! Die Polizei ist streng. 🚔',
+        'Ich spare auf ein Haus in der Affen-Siedlung. 🏡', 'Beim Straßenrennen bin ich viel zu langsam.',
+        'Mein Lieblingsessen? Bananen-Pizza! 🍕🍌', 'Die Tierhandlung hat einen Mini-Drachen! 🐉',
+        'Kannst du tanzen? Ich kann den Roboter! 🤖', 'Ich war mal im Gefängnis. Die Obby da drin ist echt schwer!',
+        'Ein hohler Baum mit leuchtenden Pilzen? Nie gesehen … 🍄', 'Hey, du hast da was am Fell … ach nee, alles gut! 😄',
+        'Im Kleiderladen gibt es eine coole Sonnenbrille! 😎', 'Ich hab gehört, die Bank hat einen riesigen Tresor … 💰',
+      ],
+      spaet: ['Es wird bald dunkel – ich muss nach Hause!', 'Gleich kommt der Leopard … ich geh lieber heim! 🐆'],
+      gesucht: ['Hilfe! Ein Verbrecher! 😱', 'Ich hab nichts gesehen … 😬', 'Die Polizei sucht dich! Lauf!', 'Bleib mir bloß weg! 🚨'],
+      tanz: ['Coole Moves! 🕺', 'Wow, kannst du tanzen!', 'Ich will auch tanzen! 💃'],
+      tier: ['Oh, ist dein Haustier süß! 😍', 'Darf ich dein Tier streicheln?', 'So ein schönes Haustier!'],
+      schnell: ['Nicht so schnell! 😵', 'Pass doch auf!', 'Wow, was für ein Flitzer! 🏎️'],
+      aua: ['Aua! 😵', 'Hey! 😠', 'Was soll das?!', 'Meine Bananen! 🍌', 'Uff!'],
+      fahrer: ['Weg da! 🚗', 'Mach Platz!', 'Ich hab\'s eilig!', 'Hallo?! Geh von der Straße!', 'Hup hup! 📯'],
+      kassierer: ['Willkommen im Supermarkt! 🍌', 'Frische Bananen im Angebot!', 'Schönen Tag noch!'],
+      bank: ['Willkommen in der Affen-Bank! 🏦', 'Bitte nichts klauen … 😅', 'Der Tresor ist ganz sicher. Glaube ich.'],
+      haendler: ['Psst … brauchst du was? 😎', 'Bananen-Waffen, frisch geladen!', 'Ein Zielfernrohr macht dich zum Profi.'],
+      kleider: ['Willkommen! Probier doch was an! 👕', 'Das steht dir super!', 'Heute ist alles schick!'],
+      tierladen: ['Ein Haustier gefällig? 🐾', 'Der Mini-Drache ist mein Liebling! 🐉', 'Alle Tiere sind ganz lieb!'],
+      auftrag: ['Hey du! Ich hab Arbeit für dich! ❗', 'Brauchst du Punkte? Hol dir einen Auftrag!', 'Jeder Auftrag wird schwerer – schaffst du das?'],
+      polizei: ['Stehen bleiben! Polizei! 👮', 'Halt! Im Namen des Gesetzes!', 'Du bist festgenommen!', 'Keine Bewegung!'],
+      waerter: ['Hier kommt keiner raus! 😤', 'Zurück in die Zelle!', 'Ich hab dich im Blick!'],
+    };
+    const zufallsSpruch = art => { const l = SPRUECHE[art]; return l[Math.floor(Math.random() * l.length)]; };
+    // Laut vorlesen (die Stimme des Browsers – jeder Affe hat seine eigene Tonhöhe)
+    let stimmeDeutsch = null;
+    function sprechen(text, hoehe = 1.5, wichtig = false) {
+      if (!EINST.stimmen || !window.speechSynthesis || EINST.laut <= 0) return;
+      if (speechSynthesis.speaking && !wichtig) return;            // nicht durcheinander reden
+      if (wichtig) speechSynthesis.cancel();
+      stimmeDeutsch ??= speechSynthesis.getVoices().find(v => v.lang?.startsWith('de')) || null;
+      const u = new SpeechSynthesisUtterance(text.replace(/\p{Extended_Pictographic}|️|‍/gu, '').trim());
+      u.lang = 'de-DE'; if (stimmeDeutsch) u.voice = stimmeDeutsch;
+      u.pitch = Math.min(2, hoehe); u.rate = 1.1; u.volume = EINST.laut;
+      speechSynthesis.speak(u);
+    }
+    // Ein Affe sagt etwas: Sprechblase über dem Kopf, und laut, wenn er nah genug ist
+    function npcSagt(gruppe, text, wer = {}, dauer = 4500, wichtig = false) {
+      if (!gruppe || !gruppe.visible) return;
+      const pos = gruppe.getWorldPosition(new THREE.Vector3());
+      const abstand = pos.distanceTo(affe.position);
+      if (abstand > 30) return;
+      sprechblase(gruppe, text, dauer);
+      wer.stimme ??= 1.1 + Math.random() * 0.8;
+      if (abstand < 12) sprechen(text, wer.stimme, wichtig);
+    }
+    const NAMEN_NPC = ['Bruno', 'Lotte', 'Kiki', 'Momo', 'Fritz', 'Paula', 'Bobo', 'Mia', 'Tarzan', 'Coco', 'Lulu', 'Henri', 'Fips', 'Nala'];
+    function naechsterFussgaenger(p, max) {
+      let bester = null, ab = max;
+      for (const f of fussgaenger) {
+        if (f.zustand === 'liegt' || f.zustand === 'einkaufen' || !f.gruppe.visible) continue;
+        const d = Math.hypot(f.x - p.x, f.z - p.z);
+        if (d < ab) { ab = d; bester = f; }
+      }
+      return bester;
+    }
+    function naechsterStand(p, max) {
+      let bester = null, ab = max;
+      for (const n of NPC_STAND) {
+        if (!n.gruppe.visible || n.art === 'polizei') continue;
+        const q = n.gruppe.getWorldPosition(_npcPos);
+        const d = Math.hypot(q.x - p.x, q.z - p.z);
+        if (d < ab && Math.abs(q.y - p.y) < 2) { ab = d; bester = n; }
+      }
+      return bester;
+    }
+    const _npcPos = new THREE.Vector3();
+    // Was sagt ein Fußgänger, wenn man ihn anspricht? Kommt drauf an, was gerade los ist!
+    function gespraechsSpruch() {
+      if (fahndung) return zufallsSpruch('gesucht');
+      if (tanz && Math.random() < 0.7) return zufallsSpruch('tanz');
+      if (meinTier && Math.random() < 0.35) return zufallsSpruch('tier');
+      if (stunde >= 18.5 && stunde < 20 && Math.random() < 0.5) return zufallsSpruch('spaet');
+      return Math.random() < 0.25 ? zufallsSpruch('hallo') : zufallsSpruch('reden');
+    }
+    function npcAnsprechen(p) {
+      const f = naechsterFussgaenger(p, 2.4);
+      if (f) {
+        f.name ??= NAMEN_NPC[Math.floor(Math.random() * NAMEN_NPC.length)];
+        f.redetBis = spielZeit + 4.5;
+        npcSagt(f.gruppe, gespraechsSpruch(), f, 4500, true);
+        return true;
+      }
+      const n = naechsterStand(p, 3.2);
+      if (n) {
+        if (n.art === 'auftrag' && nachtAktiv) return false;
+        npcSagt(n.gruppe, zufallsSpruch(n.art), n, 4500, true);
+        return true;
+      }
+      return false;
+    }
+    function redeHinweis(p) {
+      const f = naechsterFussgaenger(p, 2.4);
+      if (f) { f.name ??= NAMEN_NPC[Math.floor(Math.random() * NAMEN_NPC.length)]; return `<b>💬 ${E_TASTE}: mit ${f.name} reden</b>`; }
+      const n = naechsterStand(p, 3.2);
+      if (n && !(n.art === 'auftrag')) return `<b>💬 ${E_TASTE}: reden</b>`;
+      return null;
+    }
+    // Von selbst: ab und zu sagt ein Affe in der Nähe etwas
+    let naechsterSpruchUm = 5, letzteBegruessung = new Map();
+    function npcGespraeche() {
+      const p = affe.position;
+      // Verkäufer begrüßen dich, wenn du reinkommst (höchstens alle 30 s)
+      for (const n of NPC_STAND) {
+        if (!n.gruppe.visible || aktuellesFahrzeug) continue;
+        const q = n.gruppe.getWorldPosition(_npcPos);
+        const d = Math.hypot(q.x - p.x, q.z - p.z);
+        const max = n.art === 'polizei' ? 14 : 4.5;
+        if (d < max && Math.abs(q.y - p.y) < 2 && spielZeit - (letzteBegruessung.get(n) ?? -99) > (n.art === 'polizei' ? 6 : 30)) {
+          if (n.art === 'auftrag' && auftrag?.m) continue;
+          letzteBegruessung.set(n, spielZeit);
+          npcSagt(n.gruppe, zufallsSpruch(n.art), n, 4000);
+        }
+      }
+      // Wärter im Gefängnis
+      if (imGefaengnis && spielZeit > naechsterSpruchUm && Math.hypot(waerter.x - p.x, waerter.z - p.z) < 12) {
+        naechsterSpruchUm = spielZeit + 7;
+        npcSagt(waerter.gruppe, zufallsSpruch('waerter'), waerter);
+      }
+      if (spielZeit < naechsterSpruchUm) return;
+      naechsterSpruchUm = spielZeit + 3 + Math.random() * 3;
+      const f = naechsterFussgaenger(aktuellesFahrzeug ? { x: aktuellesFahrzeug.x, z: aktuellesFahrzeug.z } : p, 14);
+      if (!f || Math.random() < 0.4) return;
+      let art = null;
+      if (fahndung) art = 'gesucht';
+      else if (tanz) art = 'tanz';
+      else if (aktuellesFahrzeug && Math.abs(aktuellesFahrzeug.tempo) > 12) art = 'schnell';
+      else if (meinTier && Math.random() < 0.3) art = 'tier';
+      else art = Math.random() < 0.6 ? 'hallo' : 'reden';
+      npcSagt(f.gruppe, zufallsSpruch(art), f);
+    }
+
     // ================= MISSIONEN: der Auftrags-Affe gibt dir Aufgaben =================
     // Jede geschaffte Mission macht die nächste etwas schwerer (weniger Zeit, mehr zu tun) – aber auch die Belohnung größer.
     const AUFTRAGGEBER = { x: -6, z: 7 };
@@ -4817,6 +4972,7 @@
     auftraggeber.gruppe.position.set(AUFTRAGGEBER.x, 0.5, AUFTRAGGEBER.z);
     auftraggeber.gruppe.rotation.y = Math.PI * 0.8;
     szene.add(auftraggeber.gruppe);
+    NPC_STAND.push({ gruppe: auftraggeber.gruppe, art: 'auftrag' });
     bloecke.push({ x: AUFTRAGGEBER.x, z: AUFTRAGGEBER.z, b: 0.8, t: 0.8, unten: 0, oben: 1.2, art: 'block' });
     let auftragSchild = null;
     function auftragSchildSetzen(text) {
@@ -5034,7 +5190,7 @@
         if (mitfahrt) mitfahrtEnde();                                   // beim Freund aussteigen
         else if (!aktuellesFahrzeug && (auftragAktion(p) || hausAktion(p) || graben(p) || tresorKnacken(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
         else if (aktuellesFahrzeug) aussteigen();
-        else if (!imGefaengnis) { const mf = mitfahrKandidat(p); if (mf) mitfahrtStarten(mf); else { const f = naechstesFahrzeug(p); if (f) einsteigen(f); } }
+        else if (!imGefaengnis) { const mf = mitfahrKandidat(p); if (mf) mitfahrtStarten(mf); else { const f = naechstesFahrzeug(p); if (f) einsteigen(f); else npcAnsprechen(p); } }
       }
 
       let dx = 0, dz = 0, amBoden = true, unter = { block: null };
@@ -5209,6 +5365,9 @@
         } else if (nah) {
           fahrInfo.innerHTML = `<b>Drücke ${E_TASTE} zum Einsteigen: ${nah.emoji} ${nah.name}</b>`;
           fahrInfo.classList.add('offen');
+        } else if (redeHinweis(p)) {
+          fahrInfo.innerHTML = redeHinweis(p);
+          fahrInfo.classList.add('offen');
         } else {
           fahrInfo.classList.remove('offen');
         }
@@ -5251,6 +5410,7 @@
       // Die Sonne (oder nachts der Mond) folgt dem Affen, damit es überall Schatten gibt
       mitfahrtAktualisieren();
       leopardBewegen(dt);
+      npcGespraeche();
       tagNacht(dt, p);
       auftragAktualisieren(dt, aktuellesFahrzeug || p);
       haeuserAktualisieren(p);
@@ -5663,7 +5823,7 @@
       setTimeout(() => zeile.classList.add('alt'), 12000);                    // nach 12 s ausblenden
     }
     // Sprechblase über dem Kopf eines Affen
-    function sprechblase(gruppe, text) {
+    function sprechblase(gruppe, text, dauer = 6000) {
       if (!gruppe) return;
       if (gruppe.userData.blase) gruppe.remove(gruppe.userData.blase);
       const lw = document.createElement('canvas');
@@ -5687,7 +5847,7 @@
       blase.renderOrder = 11;
       gruppe.add(blase);
       gruppe.userData.blase = blase;
-      setTimeout(() => { if (gruppe.userData.blase === blase) { gruppe.remove(blase); gruppe.userData.blase = null; tex.dispose(); } }, 6000);
+      setTimeout(() => { if (gruppe.userData.blase === blase) { gruppe.remove(blase); gruppe.userData.blase = null; tex.dispose(); } }, dauer);
     }
     function chatSenden() {
       const text = chatText.value.trim().slice(0, 80);
