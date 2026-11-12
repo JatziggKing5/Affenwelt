@@ -3620,14 +3620,13 @@
     }
     // ================= MEHRSPIELER =================
     // Freunde spielen zusammen in einem "Raum". Wer den Raum-Code kennt, kommt hinein.
-    // Die Browser verbinden sich direkt miteinander (WebRTC, mit der Bibliothek Trystero) – ohne eigenen Server.
+    // Die Nachrichten laufen verschlüsselt über öffentliche MQTT-Server – ohne eigenen Server und ohne Konto.
     // Jeder sieht die anderen als Affen (Fellfarbe, Kleider, Pistole, Auto). Bananen treffen auch Mitspieler.
     // Autos, Fußgänger und Polizei sind bei jedem Spieler eigene (die werden nicht geteilt).
     const AFFEN_NAMEN = ['Bananen-Boss', 'Kokos-König', 'Lianen-Lisa', 'Turbo-Tarzan', 'Mango-Max', 'Ninja-Nuss', 'Chili-Charly',
       'Dschungel-Dino', 'Kiwi-Kalle', 'Papaya-Paula', 'Rakete-Rudi', 'Banane-Bella', 'Wuschel-Willi', 'Zappel-Zoe', 'Grinse-Gustav', 'Hüpf-Hanna'];
-    const APP_ID = 'jatziggking5-mein-spiel-affen'; // eindeutiger Name unseres Spiels
     const mp = {
-      raum: null, code: null, zustand: null, schussAktion: null, trefferAktion: null,
+      raum: null, code: null, schluessel: null,
       name: AFFEN_NAMEN[Math.floor(Math.random() * AFFEN_NAMEN.length)],
       andere: new Map(),   // userId -> { daten, gruppe, figur, teile, ziel: {x,y,z,r}, ... }
       sendeUm: 0,
@@ -3645,6 +3644,7 @@
           `<button class="mpSpieler" data-id="${a.id}">🐒 ${a.daten?.n || '…'} <small>(hinbeamen)</small></button>`).join('') || '<p>Noch niemand da – gib deinen Freunden den Code!</p>';
         mpPanel.innerHTML = `<h2>👥 Mehrspieler</h2>
           <p>Raum-Code für deine Freunde:</p><div class="mpCode">AFFE-${mp.code}</div>
+          <p class="mpStatus">${mpVerbunden() ? `🟢 Verbunden (${mpVerbunden()}/2 Server)` : '🟡 Verbinde …'} · ${mp.andere.size ? `${mp.andere.size} Freund${mp.andere.size > 1 ? 'e' : ''} da` : 'warte auf Freunde …'}</p>
           <p>Du heißt: <b>${mp.name}</b></p>
           <div class="mpListe">${liste}</div>
           <button class="mpBreit" data-tun="verlassen">🚪 Raum verlassen</button>
@@ -3687,15 +3687,72 @@
     addEventListener('keydown', e => { if (e.code === 'KeyP' && !e.repeat) mpPanelUmschalten(); });
 
     // --- Raum betreten und verlassen ---
+    // Die Nachrichten laufen über zwei öffentliche MQTT-Server (wie ein Briefkasten im Internet).
+    // Das klappt mit WLAN und mit mobilen Daten. Alles ist mit dem Raum-Code verschlüsselt –
+    // wer den Code nicht kennt, sieht nur Zeichensalat.
+    const MQTT_SERVER = ['wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081/mqtt'];
+    const meineId = Math.random().toString(36).slice(2, 10);
+    let nachrichtNr = 0;
+    const gesehen = new Map(); // absender -> letzte Nummer (jede Nachricht kommt über beide Server, wir nehmen sie nur einmal)
+    async function schluesselAusCode(code) {
+      const roh = await crypto.subtle.importKey('raw', new TextEncoder().encode('affen-' + code), 'PBKDF2', false, ['deriveKey', 'deriveBits']);
+      const salz = new TextEncoder().encode('jatziggking5-mein-spiel');
+      const schluessel = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salz, iterations: 100000, hash: 'SHA-256' }, roh, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+      const themaBits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: new TextEncoder().encode('thema'), iterations: 1000, hash: 'SHA-256' }, roh, 128);
+      const thema = 'jk5-affenspiel/' + [...new Uint8Array(themaBits)].map(b => b.toString(16).padStart(2, '0')).join('');
+      return { schluessel, thema };
+    }
+    async function verpacken(objekt) {
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const inhalt = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, mp.schluessel, new TextEncoder().encode(JSON.stringify(objekt))));
+      const paket = new Uint8Array(12 + inhalt.length);
+      paket.set(iv); paket.set(inhalt, 12);
+      return paket;
+    }
+    async function auspacken(paket) {
+      const daten = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: paket.slice(0, 12) }, mp.schluessel, paket.slice(12));
+      return JSON.parse(new TextDecoder().decode(daten));
+    }
+    // Eine Nachricht an alle im Raum schicken (typ: 'affe' = wo bin ich, 'banane' = Schuss, 'weg' = ich gehe)
+    async function mpSenden(typ, daten) {
+      if (!mp.raum) return;
+      const paket = await verpacken({ i: meineId, s: ++nachrichtNr, t: typ, d: daten });
+      for (const c of mp.raum.verbindungen) if (c.connected) c.publish(mp.raum.thema, paket, { qos: 0 });
+    }
+    async function mpEmpfangen(paket) {
+      let n;
+      try { n = await auspacken(new Uint8Array(paket)); } catch (e) { return; } // nicht entschlüsselbar: nicht aus unserem Raum
+      if (!n || n.i === meineId) return;
+      if ((gesehen.get(n.i) ?? 0) >= n.s && n.t !== 'weg') return; // schon über den anderen Server bekommen
+      gesehen.set(n.i, n.s);
+      if (n.t === 'affe' && typeof n.d?.x === 'number') {
+        if (!mp.andere.has(n.i)) mp.sendeUm = 0;          // ein Neuer: sofort unsere Daten schicken
+        mitspielerAktualisieren(n.i, n.d);
+      }
+      if (n.t === 'banane' && typeof n.d?.x === 'number') fremdeBananeFliegt(n.d);
+      if (n.t === 'weg') mitspielerEntfernen(n.i);
+    }
     async function raumBeitreten(code) {
       if (mp.raum) raumVerlassen();
       codeEingabe = '';
       mp.code = code;
       mpPanel.innerHTML = '<h2>👥 Verbinde …</h2><p>Einen Moment!</p>';
       try {
-        const { joinRoom } = await import('https://cdn.jsdelivr.net/npm/trystero@0.26.0/+esm');
-        // Der Code ist gleichzeitig das Passwort: Wer ihn nicht kennt, kann den Raum nicht finden.
-        mp.raum = joinRoom({ appId: APP_ID, password: 'affen-' + code }, 'raum-' + code);
+        const modul = await import('https://cdn.jsdelivr.net/npm/mqtt@5.16.0/dist/mqtt.esm.js');
+        const mqtt = modul.default || modul;
+        const { schluessel, thema } = await schluesselAusCode(code);
+        mp.schluessel = schluessel;
+        const abschied = await verpacken({ i: meineId, s: 1e12, t: 'weg', d: {} }); // wird geschickt, falls die Verbindung abreißt
+        const verbindungen = MQTT_SERVER.map(url => {
+          const c = mqtt.connect(url, { clientId: 'affe-' + meineId + '-' + Math.random().toString(36).slice(2, 6),
+            reconnectPeriod: 3000, connectTimeout: 8000, will: { topic: thema, payload: abschied, qos: 0 } });
+          c.on('connect', () => { c.subscribe(thema); mp.sendeUm = 0; mpPanelZeigen(); });
+          c.on('message', (_, paket) => mpEmpfangen(paket));
+          c.on('error', e => console.warn('MQTT', url, e.message));
+          c.on('close', () => mpPanelZeigen());
+          return c;
+        });
+        mp.raum = { thema, verbindungen };
       } catch (fehler) {
         console.warn('Mehrspieler geht nicht:', fehler);
         mp.raum = null; mp.code = null;
@@ -3703,28 +3760,23 @@
         mpPanelZeigen();
         return;
       }
-      // Zwei Arten von Nachrichten: "affe" (wo bin ich, wie sehe ich aus – 10× pro Sekunde) und "banane" (ein Schuss)
-      const absender = info => typeof info === 'string' ? info : info?.peerId ?? info?.userId;
-      mp.zustand = mp.raum.makeAction('affe');
-      mp.schussAktion = mp.raum.makeAction('banane');
-      // je nach Version ist "onMessage" eine Funktion oder eine Einstellung, der man etwas zuweist
-      const wenn = (ding, name, fn) => typeof ding[name] === 'function' ? ding[name](fn) : (ding[name] = fn);
-      wenn(mp.zustand, 'onMessage', (daten, info) => { if (daten && typeof daten.x === 'number') mitspielerAktualisieren(absender(info), daten); });
-      wenn(mp.schussAktion, 'onMessage', g => { if (g && typeof g.x === 'number') fremdeBananeFliegt(g); });
-      wenn(mp.raum, 'onPeerLeave', info => mitspielerEntfernen(absender(info)));
-      wenn(mp.raum, 'onPeerJoin', () => { mp.sendeUm = 0; }); // ein Neuer: sofort unsere Daten schicken
       zeigeMeldung(`👥 Raum AFFE-${code} – gib den Code deinen Freunden!`, 3);
       mpPanelZeigen();
       mpLeisteZeigen();
     }
     function raumVerlassen() {
-      try { mp.raum?.leave(); } catch (e) {}
+      if (mp.raum) {
+        const r = mp.raum;
+        mpSenden('weg', {}).finally(() => setTimeout(() => r.verbindungen.forEach(c => { try { c.end(true); } catch (e) {} }), 300));
+      }
       for (const id of [...mp.andere.keys()]) mitspielerEntfernen(id);
-      mp.raum = null; mp.code = null; mp.zustand = null; mp.schussAktion = null;
+      mp.raum = null; mp.code = null;
       zeigeMeldung('🚪 Raum verlassen', 1.5);
       mpPanelZeigen();
       mpLeisteZeigen();
     }
+    // Wie viele Server-Verbindungen stehen gerade? (für die Anzeige)
+    const mpVerbunden = () => mp.raum ? mp.raum.verbindungen.filter(c => c.connected).length : 0;
     function mpLeisteZeigen() {
       mpLeiste.classList.toggle('offen', !!mp.raum);
       if (mp.raum) mpLeiste.textContent = `👥 AFFE-${mp.code} · ${mp.andere.size + 1} Spieler`;
@@ -3807,7 +3859,7 @@
       if (spielZeit > mp.sendeUm) {
         mp.sendeUm = spielZeit + 0.1;
         const f = aktuellesFahrzeug, p = affe.position;
-        mp.zustand.send({
+        mpSenden('affe', {
           n: mp.name, x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), r: +blickRichtung.toFixed(2),
           t: +Math.hypot(laufV.x, laufV.z).toFixed(1), l: zuletztAmBoden ? 0 : 1, g: spielZeit < selbstLiegtBis ? 1 : 0,
           f: regenbogen ? 0xff00ff : fell.color.getHex(), k: Object.values(kleider.an), w: auswahl === 1 ? 1 : 0,
@@ -3846,7 +3898,7 @@
 
     // --- Bananen zwischen Spielern ---
     function eigeneBananeGeschossen(g) {     // wird beim eigenen Schuss aufgerufen
-      if (mp.schussAktion) mp.schussAktion.send({ x: g.mesh.position.x, y: g.mesh.position.y, z: g.mesh.position.z, vx: g.vx, vy: g.vy, vz: g.vz });
+      mpSenden('banane', { x: g.mesh.position.x, y: g.mesh.position.y, z: g.mesh.position.z, vx: g.vx, vy: g.vy, vz: g.vz });
     }
     function fremdeBananeFliegt(b) {          // ein Mitspieler hat geschossen: Banane auch bei uns zeigen
       const m = new THREE.Mesh(bananenForm, bananenMaterial);
