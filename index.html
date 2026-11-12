@@ -38,6 +38,15 @@
       font-size: 10px; white-space: nowrap; opacity: 0; transition: opacity 0.2s;
     }
     #farben button:hover span { opacity: 1; }
+    #fahrinfo {
+      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+      max-width: calc(100vw - 32px); box-sizing: border-box;
+      padding: 10px 18px; background: rgba(0, 0, 0, 0.7); color: #fff;
+      border-radius: 12px; text-align: center; display: none; pointer-events: none;
+    }
+    #fahrinfo.offen { display: block; }
+    #fahrinfo b { font-size: 20px; }
+    #fahrinfo small { display: block; margin-top: 4px; font-size: 12px; opacity: 0.8; }
     #meldung {
       position: fixed; top: 35%; left: 50%; transform: translate(-50%, -50%);
       color: #fff; font-size: 40px; font-weight: bold; text-align: center;
@@ -56,13 +65,14 @@
 <body>
   <div id="punkte"></div>
   <div id="meldung"></div>
+  <div id="fahrinfo"></div>
   <div id="kabine">
     <h2>👕 Umkleidekabine</h2>
     <p>Klick auf eine Farbe für das Fell deines Affen:</p>
     <div id="farben"></div>
     <p class="klein">Zum Verlassen einfach rauslaufen.</p>
   </div>
-  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera drehen · Leertaste: springen (2× = Doppelsprung) · Obby: mit W nach hinten über den Rand der Wiese!</div>
+  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera drehen · Leertaste: springen (2× = Doppelsprung) · Obby: mit W nach hinten über den Rand der Wiese! · Garage mit Fahrzeugen: an der Kreuzung, E = einsteigen</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -430,6 +440,7 @@
       { x: KABINE.x, z: KABINE.z, r: 4 },           // Umkleidekabine
       { x: 0, z: 0, r: 4 },                         // Startplatz
       { x: 0, z: 50, r: 9 },                        // Platz an der Kreuzung
+      { x: 16, z: 62, r: 13 },                      // Garage
     ];
     const baumOrte = [];
     let versuche = 0;
@@ -611,7 +622,9 @@
 
     // Prüft: Steht ein fester Block im Weg? (Lava hält dich nicht auf – sie ist tödlich)
     function stoesstAn(px, py, pz) {
-      return bloecke.some(o => o.art !== 'lava' && ueberlappt(o, px, py, pz));
+      return bloecke.some(o => o.art !== 'lava' && ueberlappt(o, px, py, pz)) ||
+        // geparkte Fahrzeuge sind auch im Weg (außer man steht schon oben drauf)
+        fahrzeuge.some(f => f !== aktuellesFahrzeug && py - 0.5 < f.hoehe - 0.05 && punktInFahrzeug(f, px, pz, 0.45));
     }
 
     // Was ist unter dem Affen? Gibt Höhe und Block zurück (oder -Unendlich = Abgrund)
@@ -625,6 +638,12 @@
         const drueber = Math.abs(px - o.x) < (o.b + 1) / 2 - 0.001 &&
                         Math.abs(pz - o.z) < (o.t + 1) / 2 - 0.001;
         if (drueber && py - 0.5 >= o.oben - 0.05 && o.oben > hoehe) { hoehe = o.oben; block = o; }
+      }
+      // Man kann auch auf Fahrzeuge draufspringen
+      for (const f of fahrzeuge) {
+        if (f !== aktuellesFahrzeug && punktInFahrzeug(f, px, pz, 0.45) && py - 0.5 >= f.hoehe - 0.05 && f.hoehe > hoehe) {
+          hoehe = f.hoehe; block = null;
+        }
       }
       return { hoehe, block };
     }
@@ -707,6 +726,7 @@
     addEventListener('keydown', (e) => {
       tasten[e.code] = true;
       if (e.code === 'Space' && !e.repeat) sprungGedrueckt = true; // nur neues Drücken zählt, nicht Gedrückthalten
+      if (e.code === 'KeyE' && !e.repeat) eGedrueckt = true;       // E = ein- oder aussteigen
       if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault(); // Seite nicht scrollen
     });
     addEventListener('keyup', (e) => { tasten[e.code] = false; });
@@ -725,11 +745,324 @@
     const DREH_TEMPO = 2;        // wie schnell sich die Kamera dreht
     let kameraWinkel = 0;        // 0 = Kamera schaut von hinten
     let kameraNeigung = 0.5;     // wie schräg von oben die Kamera schaut
+    let kameraAbstand = KAMERA_ABSTAND; // beim Fahren geht die Kamera etwas weiter weg
+
+    // ================= GARAGE & FAHRZEUGE =================
+    // Die Garage steht rechts neben der Kreuzung. Das große Tor zeigt zur Querstraße.
+    const GARAGE = { x: 16, z: 62 };
+    const gx = GARAGE.x, gz = GARAGE.z;
+    const GARAGEN_FARBE = 0xbcaaa4;
+    neuerBlock(gx,        gz + 4.85, 16,  0.3, 0, 4,   'block', GARAGEN_FARBE); // Rückwand
+    neuerBlock(gx - 7.85, gz,        0.3, 10,  0, 4,   'block', GARAGEN_FARBE); // linke Wand
+    neuerBlock(gx + 7.85, gz,        0.3, 10,  0, 4,   'block', GARAGEN_FARBE); // rechte Wand
+    neuerBlock(gx,        gz,        16.6, 10.6, 4, 4.3, 'block', 0x6d4c41);    // Dach
+    flach(new THREE.MeshStandardMaterial({ color: 0x9e9e9e }), gx, gz, 15.4, 9.7, 0.012); // Betonboden
+    flach(asphalt, gx, gz - 7, 15, 4.2, 0.011);                                            // Einfahrt zur Straße
+    for (const lx of [-4.6, -1.5, 1.6, 4.6]) flach(linie, gx + lx, gz + 0.5, 0.1, 6, 0.03); // Parklinien
+    // Schild "GARAGE" über dem Tor
+    {
+      const lw = document.createElement('canvas');
+      lw.width = 512; lw.height = 128;
+      const pi = lw.getContext('2d');
+      pi.fillStyle = '#263238'; pi.fillRect(0, 0, 512, 128);
+      pi.fillStyle = '#ffca28'; pi.font = 'bold 84px sans-serif';
+      pi.textAlign = 'center'; pi.textBaseline = 'middle';
+      pi.fillText('🏎 GARAGE', 256, 68);
+      const tex = new THREE.CanvasTexture(lw);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const garagenSchild = new THREE.Mesh(new THREE.PlaneGeometry(6, 1.5), new THREE.MeshBasicMaterial({ map: tex }));
+      garagenSchild.position.set(gx, 4.9, gz - 5.35);
+      garagenSchild.rotation.y = Math.PI; // schaut zur Straße
+      szene.add(garagenSchild);
+    }
+
+    // --- Bausteine für Fahrzeuge ---
+    const reifen = new THREE.MeshStandardMaterial({ color: 0x212121, roughness: 0.9 });
+    const felge  = new THREE.MeshStandardMaterial({ color: 0xcfd8dc, metalness: 0.6, roughness: 0.3 });
+    const glas   = new THREE.MeshStandardMaterial({ color: 0x90caf9, transparent: true, opacity: 0.5 });
+    const chrom  = new THREE.MeshStandardMaterial({ color: 0xeceff1, metalness: 0.8, roughness: 0.2 });
+    const vorderLicht = new THREE.MeshStandardMaterial({ color: 0xffffe0, emissive: 0xffffaa, emissiveIntensity: 1.2 });
+    const ruecklicht  = new THREE.MeshStandardMaterial({ color: 0xff1744, emissive: 0xaa0000 });
+    const dunkel = new THREE.MeshStandardMaterial({ color: 0x263238, roughness: 0.7 });
+
+    function kiste(eltern, b, h, l, material, x, y, z) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(b, h, l), material);
+      m.position.set(x, y, z);
+      m.castShadow = true; m.receiveShadow = true;
+      eltern.add(m);
+      return m;
+    }
+    // Rad: Lenk-Halter (dreht nach links/rechts) > Dreh-Halter (rollt) > Reifen + Felge
+    function rad(f, r, breite, x, y, z, vorne) {
+      const lenkHalter = new THREE.Group();
+      lenkHalter.position.set(x, y, z);
+      f.karosserie.add(lenkHalter);
+      const drehHalter = new THREE.Group();
+      lenkHalter.add(drehHalter);
+      const reifenMesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, breite, 18), reifen);
+      reifenMesh.rotation.z = Math.PI / 2;
+      reifenMesh.castShadow = true;
+      drehHalter.add(reifenMesh);
+      const felgenMesh = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.55, r * 0.55, breite + 0.02, 6), felge);
+      felgenMesh.rotation.z = Math.PI / 2;
+      drehHalter.add(felgenMesh);
+      f.raeder.push({ lenkHalter, drehHalter, r, vorne });
+    }
+    function lichter(f, b, y, vorneZ, hintenZ) {
+      for (const s of [-1, 1]) {
+        kiste(f.karosserie, 0.3, 0.15, 0.06, vorderLicht, s * b, y, vorneZ);
+        kiste(f.karosserie, 0.3, 0.12, 0.06, ruecklicht, s * b, y, hintenZ);
+      }
+    }
+
+    // --- Die Fahrzeuge ---
+    // maxTempo in Meter pro Sekunde (× 3,6 = km/h), beschl = wie schnell es schneller wird,
+    // lenk = wie scharf es um die Kurve fährt, sitz = wo der Affe sitzt
+    const FAHRZEUG_TYPEN = {
+      auto:    { name: 'Cabrio',      emoji: '🚗', maxTempo: 17, beschl: 9,  lenk: 1.8, breite: 1.9, laenge: 3.8, hoehe: 1.2, sitz: [0, 1.0, -0.3],  hupe: 440 },
+      sport:   { name: 'Sportwagen',  emoji: '🏎️', maxTempo: 28, beschl: 14, lenk: 2.0, breite: 1.9, laenge: 4.1, hoehe: 1.0, sitz: [0, 0.85, -0.4], hupe: 660 },
+      monster: { name: 'Monstertruck',emoji: '🛻', maxTempo: 14, beschl: 8,  lenk: 1.5, breite: 2.7, laenge: 4.2, hoehe: 2.3, sitz: [0, 2.15, 0.1],  hupe: 200 },
+      motorrad:{ name: 'Motorrad',    emoji: '🏍️', maxTempo: 24, beschl: 15, lenk: 2.6, breite: 0.8, laenge: 2.1, hoehe: 1.1, sitz: [0, 1.15, -0.25], hupe: 880 },
+      kart:    { name: 'Go-Kart',     emoji: '🏁', maxTempo: 19, beschl: 18, lenk: 3.0, breite: 1.3, laenge: 2.0, hoehe: 0.6, sitz: [0, 0.65, -0.25], hupe: 1100 },
+    };
+
+    function bauen(typ, karosserie) {
+      if (typ === 'auto') {                           // rotes Cabrio
+        const lack = new THREE.MeshStandardMaterial({ color: 0xe53935, metalness: 0.3, roughness: 0.4 });
+        kiste(karosserie, 1.8, 0.55, 3.7, lack, 0, 0.6, 0);
+        kiste(karosserie, 1.8, 0.25, 1.2, lack, 0, 0.98, 1.0);        // Motorhaube etwas höher
+        kiste(karosserie, 1.8, 0.35, 0.9, lack, 0, 1.03, -1.35);      // Heck
+        kiste(karosserie, 1.0, 0.5, 0.25, dunkel, 0, 1.1, -0.85);     // Rückenlehne
+        const scheibe = kiste(karosserie, 1.6, 0.45, 0.06, glas, 0, 1.3, 0.38);
+        scheibe.rotation.x = -0.4;
+        kiste(karosserie, 1.84, 0.12, 0.1, chrom, 0, 0.45, 1.86);     // Stoßstange
+      } else if (typ === 'sport') {                   // blauer Sportwagen mit Streifen und Spoiler
+        const lack = new THREE.MeshStandardMaterial({ color: 0x1565c0, metalness: 0.5, roughness: 0.25 });
+        const weissLack = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        kiste(karosserie, 1.9, 0.45, 4.0, lack, 0, 0.5, 0);
+        const nase = kiste(karosserie, 1.9, 0.2, 1.3, lack, 0, 0.8, 1.2);
+        nase.rotation.x = 0.12;
+        kiste(karosserie, 0.45, 0.02, 4.02, weissLack, 0, 0.735, 0);  // Rennstreifen
+        kiste(karosserie, 1.0, 0.45, 0.25, dunkel, 0, 0.95, -0.95);   // Rückenlehne
+        const scheibe = kiste(karosserie, 1.6, 0.35, 0.06, glas, 0, 1.0, 0.35);
+        scheibe.rotation.x = -0.6;
+        for (const s of [-1, 1]) kiste(karosserie, 0.08, 0.35, 0.08, dunkel, s * 0.7, 0.9, -1.8);
+        kiste(karosserie, 1.9, 0.06, 0.45, dunkel, 0, 1.08, -1.85);   // Spoiler
+      } else if (typ === 'monster') {                 // grüner Monstertruck mit Riesenrädern
+        const lack = new THREE.MeshStandardMaterial({ color: 0x43a047, roughness: 0.5 });
+        kiste(karosserie, 2.0, 0.5, 3.8, lack, 0, 1.45, 0);
+        kiste(karosserie, 2.0, 0.4, 1.2, lack, 0, 1.9, 1.3);          // Motorhaube
+        kiste(karosserie, 0.2, 0.5, 1.6, lack, -0.9, 1.95, -1.1);     // Ladefläche Seiten
+        kiste(karosserie, 0.2, 0.5, 1.6, lack, 0.9, 1.95, -1.1);
+        kiste(karosserie, 1.0, 0.6, 0.25, dunkel, 0, 2.0, -0.35);     // Sitzlehne
+        const buegel = kiste(karosserie, 2.0, 0.12, 0.12, chrom, 0, 2.9, -0.4); // Überrollbügel
+        for (const s of [-1, 1]) kiste(karosserie, 0.12, 1.0, 0.12, chrom, s * 0.95, 2.4, -0.4);
+        kiste(karosserie, 1.4, 0.15, 0.15, chrom, 0, 2.4, 1.95);      // Scheinwerfer-Bügel
+        buegel.castShadow = true;
+      } else if (typ === 'motorrad') {                // orange-schwarzes Motorrad
+        const lack = new THREE.MeshStandardMaterial({ color: 0xff6d00, metalness: 0.4, roughness: 0.3 });
+        kiste(karosserie, 0.25, 0.3, 1.3, dunkel, 0, 0.6, 0);         // Rahmen
+        kiste(karosserie, 0.4, 0.28, 0.6, lack, 0, 0.88, 0.25);       // Tank
+        kiste(karosserie, 0.32, 0.12, 0.7, dunkel, 0, 0.82, -0.35);   // Sitz
+        kiste(karosserie, 0.3, 0.25, 0.4, lack, 0, 0.75, -0.75);      // Heck
+        const gabel = kiste(karosserie, 0.08, 0.7, 0.08, chrom, 0, 0.75, 0.75);
+        gabel.rotation.x = 0.35;
+        kiste(karosserie, 0.9, 0.06, 0.06, chrom, 0, 1.12, 0.62);     // Lenker
+        kiste(karosserie, 0.22, 0.16, 0.08, vorderLicht, 0, 0.98, 0.85);
+        kiste(karosserie, 0.16, 0.1, 0.05, ruecklicht, 0, 0.82, -0.97);
+        kiste(karosserie, 0.12, 0.12, 0.6, chrom, 0.2, 0.42, -0.45);  // Auspuff
+      } else if (typ === 'kart') {                    // gelbes Go-Kart
+        const lack = new THREE.MeshStandardMaterial({ color: 0xfdd835, roughness: 0.4 });
+        kiste(karosserie, 1.1, 0.12, 1.9, dunkel, 0, 0.18, 0);        // Bodenplatte
+        kiste(karosserie, 0.9, 0.25, 0.5, lack, 0, 0.3, 0.8);         // Front
+        kiste(karosserie, 0.6, 0.45, 0.2, lack, 0, 0.45, -0.55);      // Sitzlehne
+        kiste(karosserie, 0.6, 0.3, 0.35, dunkel, 0, 0.35, -0.85);    // Motor
+        const lenkrad = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.03, 8, 16), dunkel);
+        lenkrad.position.set(0, 0.62, 0.35); lenkrad.rotation.x = -0.6;
+        karosserie.add(lenkrad);
+        kiste(karosserie, 1.4, 0.1, 0.12, lack, 0, 0.25, 1.0);        // Stoßstange vorne
+      }
+    }
+
+    const fahrzeuge = [];
+    function neuesFahrzeug(typ, x, z, richtung) {
+      const f = { ...FAHRZEUG_TYPEN[typ], typ, x, z, richtung, tempo: 0, lenkung: 0, raeder: [] };
+      f.gruppe = new THREE.Group();
+      f.karosserie = new THREE.Group(); // darin ist alles, was sich (beim Motorrad) zur Seite neigt
+      f.gruppe.add(f.karosserie);
+      szene.add(f.gruppe);
+      bauen(typ, f.karosserie);
+      if (typ === 'auto')     { for (const s of [-1, 1]) { rad(f, 0.38, 0.3, s * 0.9, 0.38, 1.2, true); rad(f, 0.38, 0.3, s * 0.9, 0.38, -1.2, false); } lichter(f, 0.6, 0.65, 1.86, -1.86); }
+      if (typ === 'sport')    { for (const s of [-1, 1]) { rad(f, 0.36, 0.32, s * 0.95, 0.36, 1.3, true); rad(f, 0.4, 0.38, s * 0.95, 0.4, -1.3, false); } lichter(f, 0.65, 0.55, 2.01, -2.01); }
+      if (typ === 'monster')  { for (const s of [-1, 1]) { rad(f, 0.8, 0.65, s * 1.2, 0.8, 1.35, true); rad(f, 0.8, 0.65, s * 1.2, 0.8, -1.35, false); } lichter(f, 0.6, 1.5, 1.91, -1.91); }
+      if (typ === 'motorrad') { rad(f, 0.36, 0.16, 0, 0.36, 0.8, true); rad(f, 0.36, 0.2, 0, 0.36, -0.8, false); }
+      if (typ === 'kart')     { for (const s of [-1, 1]) { rad(f, 0.22, 0.22, s * 0.65, 0.22, 0.7, true); rad(f, 0.25, 0.28, s * 0.65, 0.25, -0.7, false); } }
+      f.gruppe.traverse(m => { if (m.isMesh) m.castShadow = true; });
+      fahrzeugZeigen(f);
+      fahrzeuge.push(f);
+      return f;
+    }
+    function fahrzeugZeigen(f) {
+      f.gruppe.position.set(f.x, 0, f.z);
+      f.gruppe.rotation.y = f.richtung;
+    }
+
+    // Alle Fahrzeuge stehen in der Garage, mit der Nase zum Tor (Richtung = π heißt: schaut nach -z)
+    neuesFahrzeug('auto',     gx - 6.0, gz + 0.5, Math.PI);
+    neuesFahrzeug('sport',    gx - 2.9, gz + 0.5, Math.PI);
+    neuesFahrzeug('monster',  gx + 0.5, gz + 0.5, Math.PI);
+    neuesFahrzeug('motorrad', gx + 3.4, gz + 0.5, Math.PI);
+    neuesFahrzeug('kart',     gx + 5.9, gz + 0.5, Math.PI);
+
+    // Liegt ein Punkt (mit Abstand r) in einem Fahrzeug? Rechnet in die Sicht des Fahrzeugs um.
+    function punktInFahrzeug(f, px, pz, r) {
+      const s = Math.sin(f.richtung), c = Math.cos(f.richtung);
+      const dx = px - f.x, dz = pz - f.z;
+      const vorne = dx * s + dz * c;   // wie weit vorne/hinten
+      const seitlich = dx * c - dz * s; // wie weit links/rechts
+      return Math.abs(vorne) < f.laenge / 2 + r && Math.abs(seitlich) < f.breite / 2 + r;
+    }
+    // Punkte entlang der Mittellinie des Fahrzeugs (für Zusammenstöße)
+    function fahrzeugPunkte(f, x, z, richtung) {
+      const s = Math.sin(richtung), c = Math.cos(richtung);
+      const halb = f.breite / 2, strecke = f.laenge / 2 - halb;
+      const anzahl = Math.max(1, Math.ceil(f.laenge / f.breite));
+      const punkte = [];
+      for (let i = 0; i <= anzahl; i++) {
+        const t = -strecke + (2 * strecke * i) / anzahl;
+        punkte.push([x + s * t, z + c * t]);
+      }
+      return punkte;
+    }
+    // Würde das Fahrzeug an dieser Stelle irgendwo anstoßen?
+    function fahrzeugStoesst(f, x, z, richtung) {
+      const halb = f.breite / 2;
+      for (const [px, pz] of fahrzeugPunkte(f, x, z, richtung)) {
+        if (px < WIESE.x1 + halb || px > WIESE.x2 - halb || pz < WIESE.z1 + halb || pz > WIESE.z2 - halb) return true;
+        for (const o of bloecke) {
+          if (o.art === 'lava' || o.unten > f.hoehe || o.oben < 0.1) continue;
+          if (Math.abs(px - o.x) < o.b / 2 + halb && Math.abs(pz - o.z) < o.t / 2 + halb) return true;
+        }
+        for (const g of fahrzeuge) if (g !== f && punktInFahrzeug(g, px, pz, halb)) return true;
+      }
+      return false;
+    }
+
+    // --- Hupe: ein kurzer Ton, gebaut mit der Web-Audio-Technik des Browsers ---
+    let tonMaschine = null;
+    function hupen(hoehe) {
+      try {
+        tonMaschine ??= new AudioContext();
+        const jetzt = tonMaschine.currentTime;
+        const lautstaerke = tonMaschine.createGain();
+        lautstaerke.gain.setValueAtTime(0.0001, jetzt);
+        lautstaerke.gain.exponentialRampToValueAtTime(0.15, jetzt + 0.02);
+        lautstaerke.gain.exponentialRampToValueAtTime(0.0001, jetzt + 0.4);
+        lautstaerke.connect(tonMaschine.destination);
+        for (const faktor of [1, 1.26]) { // zwei Töne zusammen klingen wie eine Hupe
+          const ton = tonMaschine.createOscillator();
+          ton.type = 'square';
+          ton.frequency.value = hoehe * faktor;
+          ton.connect(lautstaerke);
+          ton.start(jetzt);
+          ton.stop(jetzt + 0.42);
+        }
+      } catch (e) { /* kein Ton möglich – macht nichts */ }
+    }
+
+    let aktuellesFahrzeug = null;   // in welchem Fahrzeug der Affe gerade sitzt (null = zu Fuß)
+    let eGedrueckt = false;
+    const fahrInfo = document.getElementById('fahrinfo');
+
+    // Welches Fahrzeug ist nah genug zum Einsteigen?
+    function naechstesFahrzeug(p) {
+      let bestes = null, besterAbstand = Infinity;
+      for (const f of fahrzeuge) {
+        const abstand = Math.hypot(p.x - f.x, p.z - f.z) - f.laenge / 2;
+        if (abstand < 1.3 && abstand < besterAbstand) { bestes = f; besterAbstand = abstand; }
+      }
+      return bestes;
+    }
+
+    function einsteigen(f) {
+      aktuellesFahrzeug = f;
+      f.tempo = 0;
+      fallTempo = 0;
+      hupen(f.hupe);
+      zeigeMeldung(`${f.emoji} ${f.name}!`, 1.2);
+    }
+
+    function aussteigen() {
+      const f = aktuellesFahrzeug;
+      const s = Math.sin(f.richtung), c = Math.cos(f.richtung);
+      // Plätze rund ums Fahrzeug ausprobieren: links, rechts, hinten, vorne – sonst aufs Dach
+      const versuche = [
+        [ f.breite / 2 + 0.8, 0], [-(f.breite / 2 + 0.8), 0],
+        [0, -(f.laenge / 2 + 0.8)], [0, f.laenge / 2 + 0.8],
+      ];
+      aktuellesFahrzeug = null;
+      for (const [seitlich, vorne] of versuche) {
+        const x = f.x + s * vorne + c * seitlich, z = f.z + c * vorne - s * seitlich;
+        if (!stoesstAn(x, 0.5, z) && bodenUnter(x, 0.5, z).hoehe === 0) {
+          affe.position.set(x, 0.5, z);
+          f.tempo = 0;
+          return;
+        }
+      }
+      affe.position.set(f.x, f.hoehe + 0.6, f.z); // kein Platz: oben drauf
+      f.tempo = 0;
+    }
+
+    // Ein Bild lang fahren
+    function fahren(f, dt) {
+      const gas = (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0);
+      const lenkRichtung = (tasten.KeyA ? 1 : 0) - (tasten.KeyD ? 1 : 0); // A = links, D = rechts
+
+      // Gas geben, bremsen, rückwärts fahren
+      if (gas > 0) f.tempo += (f.tempo < 0 ? 25 : f.beschl) * dt;
+      else if (gas < 0) f.tempo -= (f.tempo > 0 ? 25 : f.beschl * 0.6) * dt;
+      else f.tempo -= Math.sign(f.tempo) * Math.min(Math.abs(f.tempo), 6 * dt); // ausrollen
+      f.tempo = THREE.MathUtils.clamp(f.tempo, -f.maxTempo * 0.35, f.maxTempo);
+
+      // Lenken geht nur, wenn das Fahrzeug rollt (rückwärts lenkt es andersherum, wie echt)
+      f.lenkung += (lenkRichtung - f.lenkung) * Math.min(1, 8 * dt);
+      const neueRichtung = f.richtung + f.lenkung * f.lenk * dt * THREE.MathUtils.clamp(f.tempo / 5, -1, 1);
+      const nx = f.x + Math.sin(neueRichtung) * f.tempo * dt;
+      const nz = f.z + Math.cos(neueRichtung) * f.tempo * dt;
+      if (fahrzeugStoesst(f, nx, nz, neueRichtung)) {
+        if (Math.abs(f.tempo) > 6) zeigeMeldung('💥 Bumm!', 0.8);
+        f.tempo *= -0.3; // abprallen
+      } else {
+        f.x = nx; f.z = nz; f.richtung = neueRichtung;
+      }
+      fahrzeugZeigen(f);
+
+      // Räder rollen und vorne lenken
+      for (const r of f.raeder) {
+        r.drehHalter.rotation.x += (f.tempo * dt) / r.r;
+        if (r.vorne) r.lenkHalter.rotation.y = f.lenkung * 0.45;
+      }
+      // Motorrad legt sich in die Kurve
+      if (f.typ === 'motorrad') {
+        f.karosserie.rotation.z = -f.lenkung * THREE.MathUtils.clamp(f.tempo / f.maxTempo, 0, 1) * 0.45;
+      }
+      // Monstertruck wippt ein bisschen
+      if (f.typ === 'monster') f.karosserie.position.y = Math.sin(spielZeit * 12) * 0.03 * Math.min(1, Math.abs(f.tempo) / 4);
+
+      // Affe sitzt auf dem Sitz
+      const [sx, sy, sz] = f.sitz;
+      const s = Math.sin(f.richtung), c = Math.cos(f.richtung);
+      affe.position.set(f.x + s * sz + c * sx, sy + f.karosserie.position.y, f.z + c * sz - s * sx);
+      affe.rotation.y = f.richtung;
+      affe.rotation.z = f.karosserie.rotation.z; // mit dem Motorrad mitneigen
+      blickRichtung = f.richtung;
+    }
 
     // --- Spiel-Schleife: läuft ca. 60 Mal pro Sekunde ---
     const uhr = new THREE.Clock();
     function spielSchleife() {
       const dt = Math.min(uhr.getDelta(), 0.05); // Zeit seit dem letzten Bild
+      spielZeit += dt;
 
       // Kamera drehen mit den Pfeiltasten
       if (tasten.ArrowLeft)  kameraWinkel += DREH_TEMPO * dt; // Blick nach links drehen
@@ -738,48 +1071,118 @@
       if (tasten.ArrowDown)  kameraNeigung += DREH_TEMPO * dt; // mehr von oben schauen (Blick nach unten)
       kameraNeigung = THREE.MathUtils.clamp(kameraNeigung, 0.1, 1.4); // nicht unter den Boden, nicht ganz senkrecht
 
-      // Bewegen mit W A S D – immer so, wie die Kamera gerade schaut
       const p = affe.position;
+      plattformenBewegen(spielZeit); // fahrende Plattformen der Obby
 
-      // Fahrende Plattformen bewegen – und den Affen mitnehmen, wenn er darauf steht
-      plattformenBewegen(spielZeit);
-      if (stehtAufLetztes?.bewegung) {
-        if (!stoesstAn(p.x + stehtAufLetztes.dx, p.y, p.z)) p.x += stehtAufLetztes.dx;
-        if (!stoesstAn(p.x, p.y, p.z + stehtAufLetztes.dz)) p.z += stehtAufLetztes.dz;
+      // E-Taste: einsteigen oder aussteigen
+      if (eGedrueckt) {
+        eGedrueckt = false;
+        if (aktuellesFahrzeug) aussteigen();
+        else { const f = naechstesFahrzeug(p); if (f) einsteigen(f); }
       }
 
-      const vor  = (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0); // W = nach vorne, S = nach hinten
-      const seite = (tasten.KeyD ? 1 : 0) - (tasten.KeyA ? 1 : 0); // D = nach rechts, A = nach links
-      const sin = Math.sin(kameraWinkel), cos = Math.cos(kameraWinkel);
-      const dx = (-sin * vor + cos * seite) * TEMPO * dt;
-      const dz = (-cos * vor - sin * seite) * TEMPO * dt;
+      let dx = 0, dz = 0, amBoden = true, unter = { block: null };
 
-      // Nur bewegen, wenn dort kein Hindernis im Weg ist
-      if (!stoesstAn(p.x + dx, p.y, p.z)) p.x += dx;
-      if (!stoesstAn(p.x, p.y, p.z + dz)) p.z += dz;
-
-      // Wo ist unter dem Affen fester Boden? (Gras, Block – oder Abgrund)
-      const unter = bodenUnter(p.x, p.y, p.z);
-      const standHoehe = unter.hoehe + 0.5;
-
-      // Springen: am Boden immer, in der Luft noch einmal (Doppelsprung)
-      const amBoden = p.y <= standHoehe + 0.001 && fallTempo <= 0;
-      if (amBoden) sprungZaehler = 0; // gelandet: Sprünge wieder auffüllen
-      if (sprungGedrueckt) {
-        if (amBoden) {
-          fallTempo = SPRUNGKRAFT; sprungZaehler = 1;           // erster Sprung
-        } else if (sprungZaehler < MAX_SPRUENGE) {
-          fallTempo = SPRUNGKRAFT; sprungZaehler = MAX_SPRUENGE; // zweiter Sprung in der Luft
+      if (aktuellesFahrzeug) {
+        // ===== FAHREN =====
+        const f = aktuellesFahrzeug;
+        if (sprungGedrueckt) { hupen(f.hupe); sprungGedrueckt = false; } // Leertaste = hupen
+        fahren(f, dt);
+        // Kamera dreht sich langsam hinter das Fahrzeug, sobald es fährt
+        if (Math.abs(f.tempo) > 1 && !tasten.ArrowLeft && !tasten.ArrowRight) {
+          let unterschied = (f.richtung + Math.PI) - kameraWinkel;
+          unterschied = Math.atan2(Math.sin(unterschied), Math.cos(unterschied));
+          kameraWinkel += unterschied * Math.min(1, 2.5 * dt);
         }
-        sprungGedrueckt = false;
+        kameraAbstand += ((f.typ === 'monster' ? 14 : 12) - kameraAbstand) * Math.min(1, 3 * dt);
+        // Arme nach vorne ans Lenkrad, Beine nach vorne (sitzen)
+        armLinks.rotation.set(-1.2, 0, -0.2); armRechts.rotation.set(-1.2, 0, 0.2);
+        beinLinks.rotation.x = -1.4; beinRechts.rotation.x = -1.4;
+        kopf.rotation.z = Math.sin(spielZeit * 3) * 0.05;
+        figur.position.y = 0;
+        const kmh = Math.round(Math.abs(f.tempo) * 3.6);
+        fahrInfo.innerHTML = `<b>${f.emoji} ${f.name} · ${kmh} km/h</b>` +
+          `<small>W Gas · S Bremse/Rückwärts · A/D lenken · Leertaste hupen · E aussteigen</small>`;
+        fahrInfo.classList.add('offen');
+      } else {
+        // ===== LAUFEN =====
+        affe.rotation.z = 0;
+        kameraAbstand += (KAMERA_ABSTAND - kameraAbstand) * Math.min(1, 3 * dt);
+
+        // Fahrende Plattformen nehmen den Affen mit, wenn er darauf steht
+        if (stehtAufLetztes?.bewegung) {
+          if (!stoesstAn(p.x + stehtAufLetztes.dx, p.y, p.z)) p.x += stehtAufLetztes.dx;
+          if (!stoesstAn(p.x, p.y, p.z + stehtAufLetztes.dz)) p.z += stehtAufLetztes.dz;
+        }
+
+        // Bewegen mit W A S D – immer so, wie die Kamera gerade schaut
+        const vor   = (tasten.KeyW ? 1 : 0) - (tasten.KeyS ? 1 : 0); // W = nach vorne, S = nach hinten
+        const seite = (tasten.KeyD ? 1 : 0) - (tasten.KeyA ? 1 : 0); // D = nach rechts, A = nach links
+        const sin = Math.sin(kameraWinkel), cos = Math.cos(kameraWinkel);
+        dx = (-sin * vor + cos * seite) * TEMPO * dt;
+        dz = (-cos * vor - sin * seite) * TEMPO * dt;
+
+        // Nur bewegen, wenn dort kein Hindernis im Weg ist
+        if (!stoesstAn(p.x + dx, p.y, p.z)) p.x += dx;
+        if (!stoesstAn(p.x, p.y, p.z + dz)) p.z += dz;
+
+        // Wo ist unter dem Affen fester Boden? (Gras, Block, Fahrzeug – oder Abgrund)
+        unter = bodenUnter(p.x, p.y, p.z);
+        const standHoehe = unter.hoehe + 0.5;
+
+        // Springen: am Boden immer, in der Luft noch einmal (Doppelsprung)
+        amBoden = p.y <= standHoehe + 0.001 && fallTempo <= 0;
+        if (amBoden) sprungZaehler = 0; // gelandet: Sprünge wieder auffüllen
+        if (sprungGedrueckt) {
+          if (amBoden) {
+            fallTempo = SPRUNGKRAFT; sprungZaehler = 1;           // erster Sprung
+          } else if (sprungZaehler < MAX_SPRUENGE) {
+            fallTempo = SPRUNGKRAFT; sprungZaehler = MAX_SPRUENGE; // zweiter Sprung in der Luft
+          }
+          sprungGedrueckt = false;
+        }
+
+        // Schwerkraft zieht ihn wieder herunter, bis er auf etwas landet
+        fallTempo -= SCHWERKRAFT * dt;
+        p.y += fallTempo * dt;
+        if (p.y < standHoehe) { p.y = standHoehe; fallTempo = 0; }
+
+        // Affe dreht sich in die Laufrichtung (sanft, nicht ruckartig)
+        const laeuft = dx !== 0 || dz !== 0;
+        if (laeuft) {
+          const ziel = Math.atan2(dx, dz);
+          let unterschied = ziel - blickRichtung;
+          unterschied = Math.atan2(Math.sin(unterschied), Math.cos(unterschied)); // kürzester Weg herum
+          blickRichtung += unterschied * Math.min(1, 12 * dt);
+        }
+        affe.rotation.y = blickRichtung;
+
+        // Lustiges Wackeln: beim Laufen schwingen Arme und Beine, der Kopf wackelt
+        laufZeit += dt * (laeuft ? 14 : 3);
+        const schwung = laeuft ? 0.8 : 0.1;
+        armLinks.rotation.x  =  Math.sin(laufZeit) * schwung;
+        armRechts.rotation.x = -Math.sin(laufZeit) * schwung;
+        armLinks.rotation.y = 0; armRechts.rotation.y = 0;
+        beinLinks.rotation.x  = -Math.sin(laufZeit) * schwung * 0.7;
+        beinRechts.rotation.x =  Math.sin(laufZeit) * schwung * 0.7;
+        kopf.rotation.z = Math.sin(laufZeit * 0.5) * (laeuft ? 0.15 : 0.08);
+        figur.position.y = amBoden && laeuft ? Math.abs(Math.sin(laufZeit)) * 0.06 : 0; // hüpft beim Laufen
+        // In der Luft: Arme hoch wie "Juhuu!"
+        if (!amBoden) {
+          armLinks.rotation.z = -2.4; armRechts.rotation.z = 2.4;
+        } else {
+          armLinks.rotation.z = -0.35; armRechts.rotation.z = 0.35;
+        }
+
+        // Hinweis, wenn ein Fahrzeug in der Nähe ist
+        const nah = naechstesFahrzeug(p);
+        if (nah) {
+          fahrInfo.innerHTML = `<b>Drücke E zum Einsteigen: ${nah.emoji} ${nah.name}</b>`;
+          fahrInfo.classList.add('offen');
+        } else {
+          fahrInfo.classList.remove('offen');
+        }
       }
-
-      // Schwerkraft zieht ihn wieder herunter, bis er auf etwas landet
-      fallTempo -= SCHWERKRAFT * dt;
-      p.y += fallTempo * dt;
-      if (p.y < standHoehe) { p.y = standHoehe; fallTempo = 0; }
-
-      spielZeit += dt;
 
       // --- Obby-Regeln ---
       if (p.y < -15) neuStart('Runtergefallen! 😵');   // in den Abgrund gefallen
@@ -811,37 +1214,12 @@
       sonne.position.set(p.x + 10, p.y + 20, p.z + 10);
       sonne.target.position.copy(p);
 
-      // Münzen drehen sich, werden eingesammelt und kommen nach 7 Sekunden wieder
-
-      // Affe dreht sich in die Laufrichtung (sanft, nicht ruckartig)
-      const laeuft = dx !== 0 || dz !== 0;
-
-      // Umkleidekabine: Menü zeigen, solange der Affe drin steht
-      kabinenMenue.classList.toggle('offen', inKabine(p));
+      // Umkleidekabine: Menü zeigen, solange der Affe (zu Fuß) drin steht
+      kabinenMenue.classList.toggle('offen', !aktuellesFahrzeug && inKabine(p));
       if (regenbogen) fell.color.setHSL((spielZeit * 0.2) % 1, 0.8, 0.45);
-      if (laeuft) {
-        const ziel = Math.atan2(dx, dz);
-        let unterschied = ziel - blickRichtung;
-        unterschied = Math.atan2(Math.sin(unterschied), Math.cos(unterschied)); // kürzester Weg herum
-        blickRichtung += unterschied * Math.min(1, 12 * dt);
-      }
-      affe.rotation.y = blickRichtung;
 
-      // Lustiges Wackeln: beim Laufen schwingen Arme und Beine, der Kopf wackelt
-      laufZeit += dt * (laeuft ? 14 : 3);
-      const schwung = laeuft ? 0.8 : 0.1;
-      armLinks.rotation.x  =  Math.sin(laufZeit) * schwung;
-      armRechts.rotation.x = -Math.sin(laufZeit) * schwung;
-      beinLinks.rotation.x  = -Math.sin(laufZeit) * schwung * 0.7;
-      beinRechts.rotation.x =  Math.sin(laufZeit) * schwung * 0.7;
-      kopf.rotation.z = Math.sin(laufZeit * 0.5) * (laeuft ? 0.15 : 0.08);
-      figur.position.y = amBoden && laeuft ? Math.abs(Math.sin(laufZeit)) * 0.06 : 0; // hüpft beim Laufen
-      // In der Luft: Arme hoch wie "Juhuu!"
-      if (!amBoden) {
-        armLinks.rotation.z = -2.4; armRechts.rotation.z = 2.4;
-      } else {
-        armLinks.rotation.z = -0.35; armRechts.rotation.z = 0.35;
-      }
+      // Münzen drehen sich, werden eingesammelt und kommen nach 7 Sekunden wieder
+      const sammelAbstand = aktuellesFahrzeug ? aktuellesFahrzeug.laenge / 2 + 0.4 : 1.1;
       for (const muenze of muenzen) {
         if (!muenze.visible) {
           // Unsichtbare Münze: ist ihre Wartezeit vorbei?
@@ -849,7 +1227,10 @@
           continue;
         }
         muenze.rotation.z += 3 * dt; // drehen
-        if (muenze.position.distanceTo(p) < 1.1) {
+        const abstand = aktuellesFahrzeug
+          ? Math.hypot(muenze.position.x - aktuellesFahrzeug.x, muenze.position.z - aktuellesFahrzeug.z) + (muenze.position.y > 3 ? 99 : 0)
+          : muenze.position.distanceTo(p);
+        if (abstand < sammelAbstand) {
           muenze.visible = false;  // Münze verschwindet (nur versteckt)
           muenze.userData.kommtWiederUm = spielZeit + WIEDERKOMMEN_NACH;
           punkte += PUNKTE_PRO_MUENZE;
@@ -858,10 +1239,10 @@
       }
 
       // Kamera kreist um den Affen: Winkel = rundherum, Neigung = wie hoch von oben
-      const flach = Math.cos(kameraNeigung) * KAMERA_ABSTAND;
+      const flach = Math.cos(kameraNeigung) * kameraAbstand;
       kamera.position.set(
         p.x + Math.sin(kameraWinkel) * flach,
-        p.y + Math.sin(kameraNeigung) * KAMERA_ABSTAND,
+        p.y + Math.sin(kameraNeigung) * kameraAbstand,
         p.z + Math.cos(kameraWinkel) * flach
       );
       kamera.lookAt(p);
