@@ -147,10 +147,10 @@
       const dt = Math.min(uhr.getDelta(), 0.05); // Zeit seit dem letzten Bild
 
       // Kamera drehen mit den Pfeiltasten
-      if (tasten.ArrowLeft)  kameraWinkel -= DREH_TEMPO * dt; // Kamera nach links drehen
-      if (tasten.ArrowRight) kameraWinkel += DREH_TEMPO * dt; // Kamera nach rechts drehen
-      if (tasten.ArrowUp)    kameraNeigung += DREH_TEMPO * dt; // mehr von oben schauen
-      if (tasten.ArrowDown)  kameraNeigung -= DREH_TEMPO * dt; // flacher schauen
+      if (tasten.ArrowLeft)  kameraWinkel += DREH_TEMPO * dt; // Blick nach links drehen
+      if (tasten.ArrowRight) kameraWinkel -= DREH_TEMPO * dt; // Blick nach rechts drehen
+      if (tasten.ArrowUp)    kameraNeigung -= DREH_TEMPO * dt; // flacher schauen (Blick nach oben)
+      if (tasten.ArrowDown)  kameraNeigung += DREH_TEMPO * dt; // mehr von oben schauen (Blick nach unten)
       kameraNeigung = THREE.MathUtils.clamp(kameraNeigung, 0.1, 1.4); // nicht unter den Boden, nicht ganz senkrecht
 
       // Bewegen mit W A S D – immer so, wie die Kamera gerade schaut
