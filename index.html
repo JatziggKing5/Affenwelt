@@ -294,6 +294,19 @@
       padding: 14px 16px; background: rgba(40, 10, 10, 0.9); color: #fff; border-radius: 14px; display: none;
     }
     #haendler.offen { display: block; }
+    #tierladen {
+      position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); z-index: 5;
+      width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 200px); overflow-y: auto; box-sizing: border-box;
+      padding: 14px 16px; background: rgba(10, 50, 40, 0.92); color: #fff; border-radius: 14px; display: none;
+    }
+    #tierladen.offen { display: block; }
+    #tierladen h2 { margin: 0 0 4px; font-size: 22px; text-align: center; }
+    #tierladen p { margin: 4px 0 8px; font-size: 13px; text-align: center; }
+    #tierladen .ware { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid rgba(255,255,255,0.15); }
+    #tierladen .ware small { opacity: 0.75; font-size: 11px; }
+    #tierladen button { background: #ffd600; border: none; border-radius: 8px; padding: 8px 12px; font-weight: bold; cursor: pointer; white-space: nowrap; }
+    #tierladen button.hab { background: #66bb6a; color: #fff; }
+    body.handy #tierladen { bottom: auto; top: 12px; max-height: 55vh; }
     #haendler h2 { margin: 0 0 4px; font-size: 22px; text-align: center; }
     #haendler p { margin: 4px 0 10px; font-size: 13px; text-align: center; }
     #haendler p.klein { font-size: 11px; opacity: 0.7; margin-top: 10px; }
@@ -366,6 +379,7 @@
     <p class="klein">Zum Verlassen einfach rauslaufen</p>
   </div>
   <div id="zielfernrohr"></div>
+  <div id="tierladen"><h2>🐾 Tierhandlung</h2><p>Ein Haustier läuft (oder fliegt) dir überall hinterher. Bezahlt wird mit Punkten.</p><div class="waren"></div></div>
   <div id="haendler">
     <h2>🍌 Bananen-Waffen</h2>
     <p>Bezahlt wird mit deinen Punkten.</p>
@@ -458,7 +472,7 @@
       ['👥 Mehrspieler', [['Raum öffnen / beitreten', k('P')], ['Chat schreiben', k('T') + ' oder ' + k('Enter')], ['Funkgerät', k('V') + ' halten']]],
     ];
     HILFE.push(['🗺️ Zum Entdecken', [
-      ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🏁 Straßenrennen', 'mit einem Fahrzeug unters Start-Tor fahren'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
+      ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🐾 Tierhandlung', 'rechts neben der Hauptstraße beim Start'], ['🏁 Straßenrennen', 'mit einem Fahrzeug unters Start-Tor fahren'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
       ['🔫 Waffenhändler', 'Bananen-Pistole & Zielfernrohr'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
       ['🚔 Polizei', 'nicht über Rot fahren, nichts Verbotenes tun'], ['🔒 Gefängnis', 'man kann ausbrechen …'],
       ['🤫 Geheimversteck', 'irgendwo gibt es eins – nicht auf der Karte!'],
@@ -4302,6 +4316,149 @@
     const _fensterLicht = new THREE.Color(0xffb84d);
     const uhrAnzeige = document.getElementById('uhr');
 
+    // ================= HAUSTIERE =================
+    const TIERE = [
+      { art: 'schildkroete', emoji: '🐢', name: 'Schildkröte', preis: 80,  text: 'langsam, aber treu' },
+      { art: 'schwein',      emoji: '🐷', name: 'Schweinchen', preis: 120, text: 'grunzt und hüpft' },
+      { art: 'hund',         emoji: '🐶', name: 'Hund',        preis: 150, text: 'wedelt mit dem Schwanz' },
+      { art: 'katze',        emoji: '🐱', name: 'Katze',       preis: 150, text: 'schleicht dir nach' },
+      { art: 'papagei',      emoji: '🦜', name: 'Papagei',     preis: 250, text: 'fliegt über deinem Kopf' },
+      { art: 'miniaffe',     emoji: '🐒', name: 'Mini-Affe',   preis: 300, text: 'tanzt mit dir mit!' },
+      { art: 'drache',       emoji: '🐉', name: 'Mini-Drache', preis: 800, text: 'fliegt und leuchtet' },
+    ];
+    const tierMat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7 });
+    const tierKugel = new THREE.SphereGeometry(1, 14, 10), tierBox = new THREE.BoxGeometry(1, 1, 1), tierKegel = new THREE.ConeGeometry(1, 1, 10), tierRohr = new THREE.CylinderGeometry(1, 1, 1, 8);
+    function tierTeil(form, mat, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0) {
+      const m = new THREE.Mesh(form, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.rotation.set(rx, ry, rz); m.castShadow = true; return m;
+    }
+    function haustierBauen(art) {
+      const g = new THREE.Group(), k = new THREE.Group();   // k = Körper (wird animiert)
+      g.add(k);
+      const auge = tierMat(0x111111), weiss = tierMat(0xffffff);
+      const augen = (y, z, ab, gr = 0.05) => { for (const s of [-1, 1]) k.add(tierTeil(tierKugel, auge, s * ab, y, z, gr, gr, gr)); };
+      const beine = (mat, h, ab, vorn, hinten) => { const b = []; for (const [x, z] of [[-ab, vorn], [ab, vorn], [-ab, hinten], [ab, hinten]]) { const m = tierTeil(tierRohr, mat, x, h / 2, z, 0.06, h, 0.06); k.add(m); b.push(m); } return b; };
+      let schwanz = null, beinTeile = [], fliegt = false, fluegel = [];
+      if (art === 'hund' || art === 'katze') {
+        const fell = tierMat(art === 'hund' ? 0xa1662f : 0x9e9e9e);
+        k.add(tierTeil(tierKugel, fell, 0, 0.38, 0, 0.22, 0.2, 0.36));
+        k.add(tierTeil(tierKugel, fell, 0, 0.6, 0.32, 0.17, 0.16, 0.17));
+        if (art === 'hund') { k.add(tierTeil(tierKugel, fell, 0, 0.56, 0.47, 0.08, 0.07, 0.1)); k.add(tierTeil(tierKugel, auge, 0, 0.58, 0.56, 0.03, 0.03, 0.03));
+          for (const s of [-1, 1]) k.add(tierTeil(tierKugel, tierMat(0x6d3d14), s * 0.15, 0.62, 0.3, 0.05, 0.12, 0.08, 0, 0, s * 0.3)); }
+        else { for (const s of [-1, 1]) k.add(tierTeil(tierKegel, fell, s * 0.1, 0.78, 0.3, 0.06, 0.12, 0.05)); }
+        augen(0.64, 0.46, 0.07);
+        beinTeile = beine(fell, 0.25, 0.12, 0.2, -0.22);
+        schwanz = tierTeil(tierRohr, fell, 0, 0.5, -0.38, 0.035, art === 'katze' ? 0.45 : 0.3, 0.035, -0.7);
+        k.add(schwanz);
+      } else if (art === 'schwein') {
+        const rosa = tierMat(0xf8a5c2);
+        k.add(tierTeil(tierKugel, rosa, 0, 0.32, 0, 0.26, 0.22, 0.32));
+        k.add(tierTeil(tierRohr, tierMat(0xf78fb3), 0, 0.36, 0.33, 0.08, 0.06, 0.08, Math.PI / 2));
+        for (const s of [-1, 1]) k.add(tierTeil(tierKegel, rosa, s * 0.12, 0.52, 0.18, 0.06, 0.08, 0.04, 0.3));
+        augen(0.44, 0.27, 0.09, 0.035);
+        beinTeile = beine(rosa, 0.14, 0.13, 0.15, -0.15);
+        schwanz = tierTeil(new THREE.TorusGeometry(0.05, 0.015, 6, 12, Math.PI * 1.6), rosa, 0, 0.38, -0.33, 1, 1, 1); k.add(schwanz);
+      } else if (art === 'schildkroete') {
+        k.add(tierTeil(tierKugel, tierMat(0x2e7d32), 0, 0.12, 0, 0.3, 0.2, 0.36));
+        k.add(tierTeil(tierKugel, tierMat(0x8bc34a), 0, 0.14, 0.4, 0.1, 0.09, 0.12));
+        augen(0.18, 0.48, 0.05, 0.025);
+        for (const [x, z] of [[-0.22, 0.2], [0.22, 0.2], [-0.22, -0.2], [0.22, -0.2]]) { const m = tierTeil(tierKugel, tierMat(0x8bc34a), x, 0.05, z, 0.08, 0.05, 0.1); k.add(m); beinTeile.push(m); }
+      } else if (art === 'papagei' || art === 'drache') {
+        fliegt = true;
+        const farbe = art === 'papagei' ? 0xe53935 : 0x7e57c2;
+        const koerper = tierMat(farbe);
+        if (art === 'drache') { koerper.emissive.setHex(0x4a148c); koerper.emissiveIntensity = 0.6; }
+        k.add(tierTeil(tierKugel, koerper, 0, 0, 0, 0.16, 0.18, 0.24));
+        k.add(tierTeil(tierKugel, koerper, 0, 0.14, 0.2, 0.12, 0.12, 0.12));
+        k.add(tierTeil(tierKegel, tierMat(art === 'papagei' ? 0xfdd835 : 0xffab00), 0, 0.12, 0.34, 0.04, 0.1, 0.04, Math.PI / 2));
+        augen(0.18, 0.3, 0.06, 0.025);
+        if (art === 'drache') { for (const s of [-1, 1]) k.add(tierTeil(tierKegel, tierMat(0xffd54f), s * 0.06, 0.28, 0.16, 0.025, 0.1, 0.025)); }
+        for (const s of [-1, 1]) {
+          const f = new THREE.Group(); f.position.set(s * 0.12, 0.04, 0);
+          f.add(tierTeil(art === 'papagei' ? tierKugel : tierKegel, tierMat(art === 'papagei' ? 0x1e88e5 : 0x9575cd), s * 0.2, 0, 0, 0.22, 0.03, 0.14, 0, 0, s * Math.PI / 2 * (art === 'drache' ? 1 : 0)));
+          k.add(f); fluegel.push(f);
+        }
+        schwanz = tierTeil(tierKegel, tierMat(art === 'papagei' ? 0x43a047 : farbe), 0, -0.02, -0.32, 0.06, 0.3, 0.04, -Math.PI / 2 - 0.3); k.add(schwanz);
+      } else if (art === 'miniaffe') {
+        const a = affenKlon(0xc68642);
+        a.gruppe.scale.setScalar(0.45);
+        k.add(a.gruppe);
+        g.userData.affe = a;
+      }
+      return { art, gruppe: g, koerper: k, schwanz, beinTeile, fliegt, fluegel, x: 0, z: 0, y: 0, laufZeit: 0, blick: 0 };
+    }
+    // Das Tier läuft hinter dem Besitzer her: p = Position des Besitzers, r = seine Blickrichtung
+    function haustierBewegen(t, p, r, dt, tanzt) {
+      if (!t) return;
+      if (!t.gruppe.parent) { szene.add(t.gruppe); t.x = p.x - Math.sin(r) * 2; t.z = p.z - Math.cos(r) * 2; t.y = p.y; }
+      const zx = p.x - Math.sin(r) * 1.6 + Math.cos(r) * 0.9, zz = p.z - Math.cos(r) * 1.6 - Math.sin(r) * 0.9;
+      let dx = zx - t.x, dz = zz - t.z;
+      const weit = Math.hypot(dx, dz);
+      if (weit > 30) { t.x = zx; t.z = zz; dx = dz = 0; }               // zu weit weg: hinterher-"beamen"
+      const tempo = Math.min(weit * 3, t.art === 'schildkroete' ? 7 : 14);
+      const laeuft = weit > 0.35;
+      if (laeuft) { t.x += dx / weit * tempo * dt; t.z += dz / weit * tempo * dt; t.blick = Math.atan2(dx, dz); }
+      else t.blick += (Math.atan2(p.x - t.x, p.z - t.z) - t.blick) * 0; // stehen bleiben
+      t.laufZeit += dt * (laeuft ? 6 + tempo : 2);
+      const zielY = t.fliegt ? p.y + 1.6 + Math.sin(spielZeit * 2) * 0.2 : (typeof bodenUnter === 'function' ? bodenUnter(t.x, Math.max(p.y, 0) + 1.5, t.z).hoehe : 0);
+      t.y += (zielY - t.y) * Math.min(1, 8 * dt);
+      t.gruppe.position.set(t.x, t.y, t.z);
+      let u = t.blick - t.gruppe.rotation.y; u = Math.atan2(Math.sin(u), Math.cos(u));
+      t.gruppe.rotation.y += u * Math.min(1, 10 * dt);
+      const k = t.koerper;
+      k.rotation.set(0, 0, 0); k.position.y = 0;
+      if (tanzt) {                                                    // Besitzer tanzt: Tier tanzt mit!
+        k.rotation.y = spielZeit * 6; k.position.y = Math.abs(Math.sin(spielZeit * 7)) * 0.25;
+        if (t.gruppe.userData.affe) { const a = t.gruppe.userData.affe; tanzPose({ armL: a.teile.armL, armR: a.teile.armR, beinL: a.teile.beinL, beinR: a.teile.beinR, kopf: a.teile.kopf, figur: a.figur }, TAENZE[6], spielZeit); }
+      } else if (t.fliegt) {
+        k.rotation.x = laeuft ? 0.25 : 0;
+      } else {
+        k.position.y = laeuft ? Math.abs(Math.sin(t.laufZeit)) * 0.06 : 0;
+        t.beinTeile.forEach((b, i) => { b.rotation.x = laeuft ? Math.sin(t.laufZeit + (i % 3 ? Math.PI : 0)) * 0.6 : 0; });
+        if (t.gruppe.userData.affe) laufAnimation(t.gruppe.userData.affe.teile, t.laufZeit, laeuft ? 0.8 : 0.1);
+      }
+      if (t.schwanz && !t.fliegt) t.schwanz.rotation.y = Math.sin(spielZeit * (t.art === 'hund' ? 14 : 4)) * 0.5;   // Schwanz wedeln
+      for (const [i, f] of t.fluegel.entries()) f.rotation.z = Math.sin(spielZeit * (t.art === 'papagei' ? 22 : 9)) * 0.7 * (i ? -1 : 1);
+    }
+    let meinTier = null;
+    // Die Tierhandlung: ein kleiner Stand neben der Hauptstraße
+    const TIERLADEN = { x: 11, z: 13 };
+    (() => {
+      const holz = tierMat(0x8d6e63);
+      const theke = new THREE.Mesh(tierBox, holz); theke.position.set(TIERLADEN.x, 0.5, TIERLADEN.z); theke.scale.set(1.2, 1, 3.4); theke.castShadow = true; szene.add(theke);
+      for (const sz of [-1, 1]) { const m = new THREE.Mesh(tierBox, holz); m.position.set(TIERLADEN.x + 0.4, 1.6, TIERLADEN.z + sz * 1.6); m.scale.set(0.15, 3.2, 0.15); szene.add(m); }
+      const dach = new THREE.Mesh(tierBox, tierMat(0x26a69a)); dach.position.set(TIERLADEN.x, 3.25, TIERLADEN.z); dach.scale.set(2.2, 0.2, 4); szene.add(dach);
+      schildBauen('🐾 HAUSTIERE', 3.4, 0.7, '#00695c', '#fff', TIERLADEN.x - 1.12, 2.7, TIERLADEN.z, -Math.PI / 2);
+      bloecke.push({ x: TIERLADEN.x, z: TIERLADEN.z, b: 1.2, t: 3.4, unten: 0, oben: 1, art: 'block' });
+      const verkaeufer = affenKlon(0x5d4037);
+      verkaeufer.gruppe.position.set(TIERLADEN.x + 1.1, 0.5, TIERLADEN.z); verkaeufer.gruppe.rotation.y = -Math.PI / 2;
+      szene.add(verkaeufer.gruppe);
+      // Ein paar Tiere zum Anschauen auf der Theke
+      ['hund', 'katze', 'schwein'].forEach((art, i) => {
+        const t = haustierBauen(art); t.gruppe.position.set(TIERLADEN.x, 1, TIERLADEN.z - 1.1 + i * 1.1); t.gruppe.rotation.y = -Math.PI / 2; szene.add(t.gruppe);
+      });
+    })();
+    const tierladenMenue = document.getElementById('tierladen');
+    function tierladenZeigen() {
+      tierladenMenue.querySelector('.waren').innerHTML = TIERE.map(t =>
+        `<div class="ware"><span>${t.emoji} ${t.name}<br><small>${t.text}</small></span><button data-tier="${t.art}" class="${meinTier?.art === t.art ? 'hab' : ''}">${meinTier?.art === t.art ? '✓ Deins' : t.preis + ' Punkte'}</button></div>`).join('');
+      for (const b of tierladenMenue.querySelectorAll('button')) {
+        b.addEventListener('mousedown', e => { e.preventDefault(); e.stopPropagation(); });
+        b.addEventListener('pointerdown', e => e.stopPropagation());
+        b.addEventListener('click', () => tierKaufen(b.dataset.tier));
+      }
+    }
+    function tierKaufen(art) {
+      const t = TIERE.find(t => t.art === art);
+      if (meinTier?.art === art) return;
+      if (punkte < t.preis) { klang('fehler'); zeigeMeldung(`Zu wenig Punkte! ${t.emoji} kostet ${t.preis}`, 2); return; }
+      punkte -= t.preis; punkteZeigen(); klang('kasse');
+      if (meinTier) szene.remove(meinTier.gruppe);
+      meinTier = haustierBauen(art);
+      zeigeMeldung(`${t.emoji} Dein neues Haustier: ${t.name}!`, 2.5);
+      tierladenZeigen();
+    }
+    tierladenZeigen();
+
     // ================= MISSIONEN: der Auftrags-Affe gibt dir Aufgaben =================
     // Jede geschaffte Mission macht die nächste etwas schwerer (weniger Zeit, mehr zu tun) – aber auch die Belohnung größer.
     const AUFTRAGGEBER = { x: -6, z: 7 };
@@ -4703,6 +4860,8 @@
       // Die Sonne (oder nachts der Mond) folgt dem Affen, damit es überall Schatten gibt
       tagNacht(dt, p);
       auftragAktualisieren(dt, aktuellesFahrzeug || p);
+      haustierBewegen(meinTier, aktuellesFahrzeug || p, blickRichtung, dt, !!tanz);
+      tierladenMenue.classList.toggle('offen', !aktuellesFahrzeug && Math.hypot(p.x - TIERLADEN.x + 1.5, p.z - TIERLADEN.z) < 3.2);
       rennenAktualisieren(dt);
 
       // Umkleidekabine: Menü zeigen, solange der Affe (zu Fuß) drin steht
@@ -5048,6 +5207,10 @@
         a.autoTyp = daten.v || null;
         if (a.autoTyp) a.auto = neuesFahrzeug(a.autoTyp, daten.vx, daten.vz, daten.vr, true);
       }
+      if ((daten.h || null) !== (a.tier?.art || null)) {          // anderes Haustier?
+        if (a.tier) szene.remove(a.tier.gruppe);
+        a.tier = daten.h && TIERE.some(t => t.art === daten.h) ? haustierBauen(daten.h) : null;
+      }
       a.daten = daten;
       a.zuletzt = spielZeit; // wann zuletzt etwas kam
       a.ziel = { x: daten.x, y: daten.y, z: daten.z, r: daten.r, vx: daten.vx, vz: daten.vz, vr: daten.vr };
@@ -5059,6 +5222,7 @@
       if (!a) return;
       if (a.gruppe) szene.remove(a.gruppe);
       if (a.auto) szene.remove(a.auto.gruppe);
+      if (a.tier) szene.remove(a.tier.gruppe);
       mp.andere.delete(id);
       zeigeMeldung(`👋 ${a.daten?.n || 'Ein Affe'} ist gegangen`, 1.5);
       mpLeisteZeigen();
@@ -5271,7 +5435,7 @@
           n: mp.name, x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), r: +blickRichtung.toFixed(2),
           t: +Math.hypot(laufV.x, laufV.z).toFixed(1), l: zuletztAmBoden ? 0 : 1, g: spielZeit < selbstLiegtBis ? 1 : 0,
           f: regenbogen ? 0xff00ff : fell.color.getHex(), k: Object.values(kleider.an), w: WAFFEN_NR.includes(auswahl) ? 1 : 0,
-          tz: tanz ? TAENZE.indexOf(tanz) + 1 : 0,
+          tz: tanz ? TAENZE.indexOf(tanz) + 1 : 0, h: meinTier ? meinTier.art : null,
           v: f ? f.typ : null, vx: f ? +f.x.toFixed(2) : 0, vz: f ? +f.z.toFixed(2) : 0, vr: f ? +f.richtung.toFixed(2) : 0,
         });
       }
@@ -5287,6 +5451,7 @@
         let u = a.ziel.r - g.rotation.y; u = Math.atan2(Math.sin(u), Math.cos(u));
         g.rotation.y += u * weich;
         a.pistole.visible = !!d.w && !d.v;
+        haustierBewegen(a.tier, a.auto ? { x: a.auto.x, y: 0.5, z: a.auto.z } : g.position, g.rotation.y, dt, !!d.tz);
         if (a.auto) {
           a.auto.x += (a.ziel.vx - a.auto.x) * weich; a.auto.z += (a.ziel.vz - a.auto.z) * weich;
           let w = a.ziel.vr - a.auto.richtung; w = Math.atan2(Math.sin(w), Math.cos(w));
