@@ -958,7 +958,7 @@
     // ================= GEFÄNGNIS =================
     // Ein Hof mit hoher Mauer, in der Mitte eine Zelle. In der Rückwand der Zelle ist eine lockere Stelle …
     const GEF = { x: -135, z: 20 };
-    const MAUER_HOCH = 3.2;
+    const MAUER_HOCH = 7;   // so hoch, dass man nur über die Gefängnis-Obby rauskommt
     const mauerGrau = 0x9e9e9e, zellenGrau = 0x757575;
     neuerBlock(GEF.x, GEF.z - 13, 26.4, 0.4, 0, MAUER_HOCH, 'block', mauerGrau); // Süden
     neuerBlock(GEF.x, GEF.z + 13, 26.4, 0.4, 0, MAUER_HOCH, 'block', mauerGrau); // Norden (Tor-Seite)
@@ -992,13 +992,28 @@
     for (let x = -2.0; x <= 2.0; x += 0.33) instanz(stabForm, gitterMaterial, zx + x, 2, zz + 2.4, 1.4, 4, 1.4);
     neuerBlock(zx + 1.5, zz + 0.2, 1.1, 2.2, 0, 0.5, 'block', 0x5d4037);     // Bett
     instanz(einheitsKiste, new THREE.MeshStandardMaterial({ color: 0xeceff1 }), zx + 1.5, 0.55, zz - 0.5, 1.0, 0.1, 0.6); // Kissen
-    // Kisten im Hof (Südwest-Ecke) – ein Weg über die Mauer …
-    neuerBlock(GEF.x - 10.6, GEF.z - 11.4, 1.4, 1.4, 0, 1.0, 'block', 0x8d6e63);  // kleine Kiste (normaler Sprung)
-    neuerBlock(GEF.x - 12.1, GEF.z - 11.4, 1.4, 1.4, 0, 1.9, 'block', 0x795548);  // große Kiste, dann Doppelsprung über die Mauer
+    // --- Gefängnis-Obby: der einzige Weg über die 7 m hohe Mauer ---
+    // Startet gleich hinter dem Loch, führt an der Westmauer entlang nach oben. Darunter ist Lava!
+    // [x, z, breite, tiefe, höhe der Oberseite]
+    const GEF_OBBY = [
+      [GEF.x - 3.6,  GEF.z - 10.7, 1.4, 1.4, 1.0],   // 1. Kiste
+      [GEF.x - 6.8,  GEF.z - 10.7, 1.2, 1.2, 2.0],   // 2. höher
+      [GEF.x - 10.3, GEF.z - 10.7, 1.1, 1.1, 3.0],   // 3. Ecke
+      [GEF.x - 11.3, GEF.z - 6.0,  0.6, 4.4, 3.4],   // 4. schmaler Balken
+      [GEF.x - 11.3, GEF.z - 0.8,  1.2, 1.2, 4.4],   // 5.
+      [GEF.x - 11.3, GEF.z + 7.0,  1.0, 1.0, 5.8],   // 7. (nach der fahrenden Plattform – warte, bis sie nah ist!)
+      [GEF.x - 8.6,  GEF.z + 10.6, 1.0, 1.0, 6.6],   // 8. letzte Plattform – dann auf die Mauer!
+    ];
+    for (const [x, z, b, t, oben] of GEF_OBBY) neuerBlock(x, z, b, t, oben - 0.4, oben, 'block', 0x8d6e63);
+    // 6. fahrende Plattform (fährt vor und zurück) – wird unten bei den fahrenden Plattformen angemeldet
+    const gefFahrend = neuerBlock(GEF.x - 11.0, GEF.z + 3.5, 1.4, 1.4, 4.4, 4.8, 'block', 0xab47bc);
+    Object.assign(gefFahrend, { bewegung: { achse: 'z', weite: 1.2, tempo: 1.3 }, startX: gefFahrend.x, startZ: gefFahrend.z });
+    // Lava unter der Obby: wer reinfällt, muss zurück in die Zelle
+    const gefLava = neuerBlock(GEF.x - 11.1, GEF.z + 1, 3.4, 20.8, 0, 0.1, 'lava');
     // Runde, die der Wärter im Hof abläuft
     const WAERTER_RUNDE = [
-      { x: GEF.x - 9, z: GEF.z - 9.6 }, { x: GEF.x + 9, z: GEF.z - 9.6 },
-      { x: GEF.x + 9, z: GEF.z + 9 }, { x: GEF.x - 9, z: GEF.z + 9 },
+      { x: GEF.x - 6, z: GEF.z - 9.6 }, { x: GEF.x + 7, z: GEF.z - 9.6 },
+      { x: GEF.x + 7, z: GEF.z + 9 }, { x: GEF.x - 6, z: GEF.z + 9 },
     ];
 
     // --- Stadt: Häuser in Reihen zwischen den Straßen ---
@@ -1177,7 +1192,7 @@
       [ 0, -198,  1.5, 1.5, 11.5],
       [ 0, -205,  6,   6,  12.0, 'ziel'],         // ZIEL
     ];
-    const fahrendeBloecke = [];
+    const fahrendeBloecke = [gefFahrend]; // die fahrende Plattform der Gefängnis-Obby ist auch dabei
     for (const [x, z, b, t, oben, art, bewegung] of obby) {
       const block = neuerBlock(x, z, b, t, oben - D, oben, art ?? 'block', 0xb0bec5);
       if (bewegung) {
@@ -2161,13 +2176,26 @@
       zeigeMeldung('🚨 ' + grund + ' Die Polizei kommt!', 3);
     }
 
+    // Nach dem Ausbruch: Ein Polizist rennt dir vom Gefängnistor aus hinterher (2,5 Sekunden später, etwas langsamer als du).
+    // Bist du mehr als 30 m weg, hört er auf zu suchen.
+    function ausbruchFahndung() {
+      imGefaengnis = false;
+      zeigeMeldung('🏃 Ausgebrochen! Lauf weg – ab 30 m bist du sicher!', 3);
+      straftatPause = spielZeit + 3;
+      fahndung = { grund: 'Aus dem Gefängnis ausgebrochen!', entkommenAb: 30, zuFuss: true };
+      Object.assign(polizei, { aktiv: true, zustand: 'rennen', x: GEF.x, z: GEF.z + 16, richtung: 0, tempo: 0, entkommen: 0, losUm: spielZeit + 2.5 });
+      polizei.gruppe.visible = false; // das Polizeiauto wartet unsichtbar am Tor
+      polizei.laeufer.x = GEF.x; polizei.laeufer.z = GEF.z + 14.5;
+      polizei.laeufer.gruppe.visible = true;
+      sireneAn();
+    }
     function polizeiStarten() {
       const p = affe.position;
       // Startpunkt: eine Kreuzung, die nicht zu nah und nicht zu weit weg ist
       const knoten = [...knotenListe.values()].sort((a, b) =>
         Math.abs(Math.hypot(a.x - p.x, a.z - p.z) - 90) - Math.abs(Math.hypot(b.x - p.x, b.z - p.z) - 90));
       const start = knoten.find(k => Math.hypot(k.x - p.x, k.z - p.z) > 45) || knoten[0];
-      Object.assign(polizei, { aktiv: true, x: start.x, z: start.z, tempo: 0, zustand: 'fahren', punkte: [], planUm: 0, entkommen: 0 });
+      Object.assign(polizei, { aktiv: true, x: start.x, z: start.z, tempo: 0, zustand: 'fahren', punkte: [], planUm: 0, entkommen: 0, losUm: 0 });
       polizei.richtung = Math.atan2(p.x - start.x, p.z - start.z);
       polizei.gruppe.visible = true;
       polizei.laeufer.gruppe.visible = false;
@@ -2257,11 +2285,11 @@
         if (polizei.zustand === 'rennen' && !ziel.imAuto && abstand < 1.2) { verhaften(); return; }
         if (polizei.zustand === 'rennen' && ziel.imAuto) polizei.zustand = 'zurueck'; // Spieler fährt weg → zurück zum Auto
         if (polizei.zustand === 'zurueck' && abstand < 1.8) {
-          polizei.zustand = 'fahren'; l.gruppe.visible = false;
+          polizei.zustand = 'fahren'; l.gruppe.visible = false; polizei.gruppe.visible = true;
         } else {
           // Hinrennen und Hindernissen ausweichen
           const wunsch = Math.atan2(hin.x - l.x, hin.z - l.z);
-          const schritt = (fahndung && fahndung.stark ? 7.6 : 7) * dt;
+          const schritt = (spielZeit < (polizei.losUm || 0) ? 0 : fahndung && fahndung.zuFuss ? 4.5 : fahndung && fahndung.stark ? 7.6 : 7) * dt;
           for (const versatz of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8]) {
             const w = wunsch + versatz, nx = l.x + Math.sin(w) * schritt, nz = l.z + Math.cos(w) * schritt;
             if (frei(nx, nz)) { l.x = nx; l.z = nz; l.richtung = w; break; }
@@ -2277,20 +2305,21 @@
       for (const r of polizei.raeder) r.halter.rotation.x += (polizei.tempo * dt) / r.r;
 
       // Sirene: je näher, desto lauter
-      const nah = Math.min(Math.hypot(ziel.x - polizei.x, ziel.z - polizei.z),
+      const nah = Math.min(polizei.gruppe.visible ? Math.hypot(ziel.x - polizei.x, ziel.z - polizei.z) : Infinity,
         polizei.laeufer.gruppe.visible ? Math.hypot(ziel.x - polizei.laeufer.x, ziel.z - polizei.laeufer.z) : Infinity);
       if (sirene) {
         sirene.osz.frequency.value = Math.floor(spielZeit * 1.6) % 2 ? 587 : 440;
         sirene.laut.gain.value = 0.07 * THREE.MathUtils.clamp(1 - nah / 160, 0.05, 1);
       }
       // Weit genug weg? Dann bist du entkommen!
-      polizei.entkommen = nah > 90 ? polizei.entkommen + dt : 0;
+      const entkommenAb = (fahndung && fahndung.entkommenAb) || 90;
+      polizei.entkommen = nah > entkommenAb ? polizei.entkommen + dt : 0;
       if (polizei.entkommen > 2.5) {
         polizeiBeenden();
         zeigeMeldung('😎 Entkommen! Die Polizei gibt auf.', 3);
         return;
       }
-      fahndungsAnzeige.innerHTML = `🚨 FAHNDUNG: ${fahndung.grund} <small>Polizei ${Math.round(nah)} m · ab 90 m bist du entkommen</small>`;
+      fahndungsAnzeige.innerHTML = `🚨 FAHNDUNG: ${fahndung.grund} <small>Polizei ${Math.round(nah)} m · ab ${entkommenAb} m bist du entkommen</small>`;
       fahndungsAnzeige.classList.add('offen');
     }
 
@@ -2349,7 +2378,7 @@
       if (waerterLiegt) {
         waerter.gruppe.position.set(waerter.x, 0.25, waerter.z);
         if (imGefaengnis && !aktuellesFahrzeug && !imGefaengnisHof(p) && p.y < 3) {
-          imGefaengnis = false; zeigeMeldung('🏃 Ausgebrochen!', 2); straftatPause = 0; straftat('Aus dem Gefängnis ausgebrochen!');
+          ausbruchFahndung();
         }
         return;
       }
@@ -2376,10 +2405,7 @@
       }
       // Über die Mauer raus? Ausgebrochen!
       if (!imGefaengnisHof(p) && p.y < 3) {
-        imGefaengnis = false;
-        zeigeMeldung('🏃 Ausgebrochen!', 2);
-        straftatPause = 0;
-        straftat('Aus dem Gefängnis ausgebrochen!');
+        ausbruchFahndung();
       }
     }
 
@@ -2864,7 +2890,7 @@
         if (imGefaengnis && imGefaengnisHof(p)) {
           const loch = !bloecke.includes(lockereStelle);
           const amStein = Math.hypot(p.x - lockereStelle.x, p.z - lockereStelle.z) < 1.9;
-          fahrInfo.innerHTML = loch ? '<b>🕳️ Durchs Loch – und dann über die Mauer!</b><small>Achte auf den Wärter. Die Kisten in der Ecke helfen …</small>'
+          fahrInfo.innerHTML = loch ? '<b>🕳️ Durchs Loch – dann die Gefängnis-Obby hoch bis auf die Mauer!</b><small>Achte auf den Wärter. Nicht in die Lava fallen!</small>'
             : amStein ? `<b>⛏️ E drücken zum Graben (${grabZaehler}/${GRAB_NOETIG})</b>`
             : '<b>🔒 Du bist im Gefängnis!</b><small>Tipp: Ein Stück der Rückwand sieht locker aus …</small>';
           fahrInfo.classList.add('offen');
@@ -2882,7 +2908,10 @@
 
       // --- Obby-Regeln ---
       if (p.y < -15) neuStart('Runtergefallen! 😵');   // in den Abgrund gefallen
-      if (inLava(p.x, p.y, p.z)) neuStart('Lava! 🔥');  // Lava berührt
+      if (inLava(p.x, p.y, p.z)) {                      // Lava berührt
+        if (imGefaengnis) inDieZelle('🔥 Lava! Zurück in die Zelle!');
+        else neuStart('Lava! 🔥');
+      }
       const stehtAuf = amBoden ? unter.block : null;
       stehtAufLetztes = stehtAuf; // fürs nächste Bild merken (fahrende Plattformen)
       if (stehtAuf?.art === 'checkpoint' && stehtAuf !== letzterCheckpoint) {
