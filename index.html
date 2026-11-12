@@ -15,6 +15,35 @@
     }
     #hilfe.neu { animation: wackeln 1.2s ease-in-out infinite; background: #ffd600; color: #000; }
     @keyframes wackeln { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+    /* --- Fernbedienung für Codes --- */
+    #fbKnopf {
+      position: fixed; top: 12px; left: 118px; z-index: 6; padding: 8px 12px; border-radius: 10px; cursor: pointer;
+      background: rgba(0,0,0,0.55); color: #fff; font-size: 15px; font-weight: bold; border: 2px solid rgba(255,255,255,0.5);
+    }
+    #fernbedienung {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 31; display: none;
+      width: 220px; padding: 16px 16px 20px; border-radius: 36px 36px 44px 44px;
+      background: linear-gradient(160deg, #3a3f47, #1b1e23); box-shadow: 0 10px 30px rgba(0,0,0,0.6), inset 0 2px 0 rgba(255,255,255,0.15);
+      color: #fff; text-align: center;
+    }
+    #fernbedienung.offen { display: block; }
+    #fernbedienung .led { width: 10px; height: 10px; border-radius: 50%; background: #e53935; margin: 0 auto 8px; box-shadow: 0 0 8px #e53935; }
+    #fernbedienung .led.an { background: #76ff03; box-shadow: 0 0 10px #76ff03; }
+    #fernbedienung .anzeige {
+      background: #9ccc65; color: #1b3a00; font-family: monospace; font-size: 28px; font-weight: bold; letter-spacing: 6px;
+      border-radius: 8px; padding: 8px 0; margin-bottom: 4px; box-shadow: inset 0 2px 6px rgba(0,0,0,0.5); min-height: 34px;
+    }
+    #fernbedienung .text { font-size: 11px; min-height: 30px; opacity: 0.85; margin-bottom: 8px; }
+    #fernbedienung .tasten { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    #fernbedienung button {
+      height: 46px; border-radius: 50%; border: none; cursor: pointer; font-size: 20px; font-weight: bold;
+      background: linear-gradient(#5b616b, #3b4048); color: #fff; box-shadow: 0 3px 0 #111;
+    }
+    #fernbedienung button:active { transform: translateY(2px); box-shadow: 0 1px 0 #111; }
+    #fernbedienung button.ok { background: linear-gradient(#66bb6a, #2e7d32); }
+    #fernbedienung button.weg { background: linear-gradient(#ef5350, #b71c1c); }
+    #fernbedienung .zu { position: absolute; top: 10px; right: 14px; width: 28px; height: 28px; font-size: 14px; box-shadow: none; }
+    #fernbedienung .marke { font-size: 10px; opacity: 0.5; margin-top: 12px; letter-spacing: 2px; }
     /* --- Menü: Hilfe + Einstellungen --- */
     #menue {
       position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center;
@@ -424,6 +453,20 @@
     <p class="klein">Zum Verlassen einfach rauslaufen.</p>
   </div>
   <button id="hilfe">❓ Hilfe</button>
+  <button id="fbKnopf" title="Fernbedienung (C)">📟</button>
+  <div id="fernbedienung">
+    <button class="zu" title="Zu (Esc)">✕</button>
+    <div class="led"></div>
+    <div class="anzeige"></div>
+    <div class="text">Gib einen Code ein</div>
+    <div class="tasten">
+      <button data-z="1">1</button><button data-z="2">2</button><button data-z="3">3</button>
+      <button data-z="4">4</button><button data-z="5">5</button><button data-z="6">6</button>
+      <button data-z="7">7</button><button data-z="8">8</button><button data-z="9">9</button>
+      <button data-z="weg" class="weg">⌫</button><button data-z="0">0</button><button data-z="ok" class="ok">OK</button>
+    </div>
+    <div class="marke">AFFEN-TV · CODE 3000</div>
+  </div>
   <div id="uhr"></div>
   <div id="auftrag"><b></b><small></small><div class="balken"><div></div></div></div>
   <div id="menue"><div class="fenster">
@@ -485,6 +528,7 @@
       ['🔫 Waffenhändler', 'Bananen-Pistole & Zielfernrohr'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
       ['🚔 Polizei', 'nicht über Rot fahren, nichts Verbotenes tun'], ['🔒 Gefängnis', 'man kann ausbrechen …'],
       ['💬 Mit Affen reden', 'neben einen Affen stellen und ' + E_TASTE + ' drücken'],
+      ['📟 Fernbedienung', 'Codes eingeben' + (IST_HANDY ? '' : ' mit ' + k('C'))],
       ['🐆 Nachts: Leopard!', 'renn weg, steig in ein Auto oder flüchte in ein Haus'],
       ['🤫 Geheimversteck', 'irgendwo gibt es eins – nicht auf der Karte!'],
     ]]);
@@ -1983,9 +2027,54 @@
     let punkte = 0;
     const punkteAnzeige = document.getElementById('punkte');
     function punkteZeigen() {
-      punkteAnzeige.textContent = `🪙 ${punkte} Punkte`;
+      punkteAnzeige.textContent = `🪙 ${Number.isFinite(punkte) ? punkte : '∞'} Punkte`;
     }
     punkteZeigen();
+
+    // --- Fernbedienung: Codes eingeben (C oder 📟) ---
+    // Neue Codes einfach in CODES dazuschreiben: '1234': () => { … was passieren soll … }
+    const CODES = {
+      '9909': () => {
+        if (!Number.isFinite(punkte)) return '💰 Unendlich Geld ist schon an!';
+        punkte = Infinity; punkteZeigen();
+        return '💰 UNENDLICH GELD! Kauf dir alles, was du willst!';
+      },
+    };
+    const fb = document.getElementById('fernbedienung'), fbAnzeige = fb.querySelector('.anzeige'), fbText = fb.querySelector('.text'), fbLed = fb.querySelector('.led');
+    let fbCode = '';
+    function fbZeigen() { fbAnzeige.textContent = fbCode.padEnd(4, '_'); }
+    function fbAuf() {
+      fb.classList.add('offen'); fbCode = ''; fbZeigen();
+      fbText.textContent = 'Gib einen Code ein'; fbLed.classList.remove('an');
+      for (const t in tasten) tasten[t] = false;
+    }
+    const fbZu = () => fb.classList.remove('offen');
+    function fbTaste(z) {
+      klang('tick');
+      if (z === 'weg') fbCode = fbCode.slice(0, -1);
+      else if (z === 'ok') {
+        const aktion = CODES[fbCode];
+        if (aktion) { const text = aktion(); fbText.textContent = text; fbLed.classList.add('an'); klang('erfolg'); zeigeMeldung(text, 3); }
+        else { fbText.textContent = fbCode.length < 4 ? 'Der Code hat 4 Ziffern' : '❌ Falscher Code!'; fbLed.classList.remove('an'); klang('fehler'); }
+        fbCode = '';
+      } else if (fbCode.length < 4) fbCode += z;
+      fbZeigen();
+    }
+    for (const b of fb.querySelectorAll('[data-z]')) b.addEventListener('click', () => fbTaste(b.dataset.z));
+    fb.querySelector('.zu').addEventListener('click', fbZu);
+    for (const ev of ['pointerdown', 'mousedown', 'touchstart']) for (const el of [fb, document.getElementById('fbKnopf')]) el.addEventListener(ev, e => e.stopPropagation());
+    document.getElementById('fbKnopf').addEventListener('click', e => { e.stopPropagation(); fb.classList.contains('offen') ? fbZu() : fbAuf(); });
+    // Tastatur: solange die Fernbedienung offen ist, gehen Ziffern an sie (nicht an die Waffen)
+    addEventListener('keydown', e => {
+      if (!fb.classList.contains('offen')) { if (e.code === 'KeyC' && !e.repeat && document.activeElement?.tagName !== 'INPUT') fbAuf(); return; }
+      const ziffer = /^(Digit|Numpad)(\d)$/.exec(e.code);
+      if (ziffer) fbTaste(ziffer[2]);
+      else if (e.code === 'Backspace') fbTaste('weg');
+      else if (e.code === 'Enter' || e.code === 'NumpadEnter') fbTaste('ok');
+      else if (e.code === 'Escape' || e.code === 'KeyC') fbZu();
+      else return;
+      e.preventDefault(); e.stopImmediatePropagation();
+    }, true);
 
     // --- Tasten merken: welche Taste ist gerade gedrückt? ---
     const tasten = {};
@@ -4602,7 +4691,7 @@
       const g = GRUNDSTUECKE.find(g => anDerTuer(g, p) && !g.besitzer);
       if (!g) return false;
       if (meinHaus()) { zeigeMeldung('Du hast schon ein Haus! 🏡', 2); return true; }
-      if (punkte < HAUS_PREIS) { klang('fehler'); zeigeMeldung(`Das Haus kostet ${HAUS_PREIS} Punkte – du hast ${punkte}.`, 2.5); return true; }
+      if (punkte < HAUS_PREIS) { klang('fehler'); zeigeMeldung(`Das Haus kostet ${HAUS_PREIS} Punkte – du hast ${Number.isFinite(punkte) ? punkte : '∞'}.`, 2.5); return true; }
       punkte -= HAUS_PREIS; punkteZeigen(); klang('erfolg');
       hausBesitzerSetzen(g, 'ich');
       zeigeMeldung('🏡 Glückwunsch! Das Haus gehört dir! Geh rein und richte es ein.', 3.5);
@@ -4760,7 +4849,7 @@
       waehlen(0); inventarZeigen();
       selbstLiegtBis = spielZeit + 2.5;
       klang('knurren');
-      zeigeMeldung(`🐆 Der Leopard hat dich erwischt! ${verlust} Punkte und alle Waffen sind weg!`, 4);
+      zeigeMeldung(`🐆 Der Leopard hat dich erwischt! ${Number.isFinite(verlust) ? verlust : 'Dein unendliches Geld'} Punkte und alle Waffen sind weg!`.replace('Geld Punkte', 'Geld'), 4);
       leopard.zustand = 'flucht'; leopard.bis = spielZeit + 12;     // er rennt mit der Beute davon
     }
     function leopardGetroffen(q) {
