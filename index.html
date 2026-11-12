@@ -20,7 +20,7 @@
   </script>
 </head>
 <body>
-  <div id="hilfe">Pfeiltasten: bewegen · W: nach vorne · Leertaste: springen</div>
+  <div id="hilfe">Pfeiltasten: bewegen · W: nach vorne · S: nach hinten · Leertaste: springen</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -146,7 +146,7 @@
       if (tasten.ArrowLeft)  dx -= TEMPO * dt;
       if (tasten.ArrowRight) dx += TEMPO * dt;
       if (tasten.ArrowUp || tasten.KeyW) dz -= TEMPO * dt; // Pfeil hoch oder W = nach vorne
-      if (tasten.ArrowDown)  dz += TEMPO * dt;
+      if (tasten.ArrowDown || tasten.KeyS) dz += TEMPO * dt; // Pfeil runter oder S = nach hinten
 
       // Nur bewegen, wenn dort kein Hindernis im Weg ist
       const neuX = THREE.MathUtils.clamp(p.x + dx, -RAND, RAND);
