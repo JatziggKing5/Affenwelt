@@ -44,6 +44,10 @@
       box-shadow: 0 2px 10px rgba(0,0,0,0.4); pointer-events: none;
     }
     @media (max-width: 500px) { #karte { width: 110px; height: 110px; } }
+    #karte.gross {
+      top: 50%; left: 50%; right: auto; transform: translate(-50%, -50%);
+      width: min(92vw, 92vh); height: min(92vw, 92vh); z-index: 20; border-width: 4px;
+    }
     #kleider {
       position: fixed; top: 12px; left: 12px; z-index: 10; width: min(380px, calc(100vw - 24px)); max-height: calc(100vh - 130px);
       box-sizing: border-box; overflow-y: auto; padding: 12px 14px; border-radius: 14px;
@@ -174,7 +178,7 @@
     <div id="farben"></div>
     <p class="klein">Zum Verlassen einfach rauslaufen.</p>
   </div>
-  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1/2: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · Jetpack: Leertaste halten · 🚔 Nicht über Rot fahren!</div>
+  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 1/2: Waffe wählen · Linksklick: schießen · Rechtsklick halten: zielen / Kamera drehen · Jetpack: Leertaste halten · M: Karte · 🚔 Nicht über Rot fahren!</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -1439,6 +1443,8 @@
       if (e.code === 'Digit1' && !e.repeat) waehlen(1);            // 1 = Bananen-Pistole
       if (e.code === 'Digit2' && !e.repeat) waehlen(2);            // 2 = Rauchbombe
       if (e.code === 'KeyZ' && !e.repeat) zielfernrohrBenutzen(!zielModus); // Z = zielen an/aus (für Trackpads)
+      if (e.code === 'KeyM' && !e.repeat) karteUmschalten();         // M = große Karte
+      if (e.code === 'Escape' && karteGross) karteUmschalten(false);
       if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault(); // Seite nicht scrollen
     });
     addEventListener('keyup', (e) => { tasten[e.code] = false; });
@@ -3042,51 +3048,83 @@
       });
     }
 
-    // ================= MINI-KARTE =================
+    // ================= KARTE (klein oben rechts, mit M ganz groß) =================
     const karte = document.getElementById('karte');
     const kartenPinsel = karte.getContext('2d');
-    const KARTE_GROESSE = karte.width;
-    const massstab = KARTE_GROESSE / (WIESE.x2 - WIESE.x1);
+    let karteGross = false;
+    let KARTE_GROESSE = karte.width, massstab = 1;
     const kx2 = x => (x - WIESE.x1) * massstab;
-    const kz2 = z => (WIESE.z2 - z) * massstab;
-    // Der Hintergrund (Wiese, Straßen, Häuser) wird nur einmal gemalt
+    const kz2 = z => (z - WIESE.z1) * massstab; // oben auf der Karte = die Richtung, in die du am Start schaust (−z)
+    // Der Hintergrund (Wiese, Straßen, Häuser) wird nur gemalt, wenn sich die Größe ändert
     const kartenHintergrund = document.createElement('canvas');
-    kartenHintergrund.width = kartenHintergrund.height = KARTE_GROESSE;
-    {
+    const ORTE = () => [ // Beschriftungen auf der großen Karte
+      { name: '🏁 Start', x: 0, z: 2 }, { name: '🧗 Obby ↑', x: 18, z: -12 }, { name: '🏎 Garage', x: GARAGE.x, z: GARAGE.z },
+      { name: '👕 Umkleide', x: KABINE.x, z: KABINE.z }, { name: '🏦 Bank', x: BANK.x, z: BANK.z }, { name: '🍌 Waffen', x: HAENDLER.x, z: HAENDLER.z },
+      { name: '👗 Affen-Mode', x: KLEIDERLADEN.x, z: KLEIDERLADEN.z }, { name: '🔒 Gefängnis', x: GEF.x, z: GEF.z },
+      ...LAEDEN.map(l => ({ name: '🛒 Supermarkt', x: l.x, z: l.z })),
+    ];
+    function karteVorbereiten(groesse) {
+      KARTE_GROESSE = groesse;
+      karte.width = karte.height = groesse;
+      massstab = groesse / (WIESE.x2 - WIESE.x1);
+      kartenHintergrund.width = kartenHintergrund.height = groesse;
       const p = kartenHintergrund.getContext('2d');
-      p.fillStyle = '#2e7d32'; p.fillRect(0, 0, KARTE_GROESSE, KARTE_GROESSE);
-      p.fillStyle = '#9ccc65'; p.fillRect(kx2(SPIELPLATZ.x1), kz2(SPIELPLATZ.z2), (SPIELPLATZ.x2 - SPIELPLATZ.x1) * massstab, (SPIELPLATZ.z2 - SPIELPLATZ.z1) * massstab);
-      p.fillStyle = '#555';
-      for (const s of STRASSEN) p.fillRect(kx2(s.x1), kz2(s.z2), Math.max(1.5, (s.x2 - s.x1) * massstab), Math.max(1.5, (s.z2 - s.z1) * massstab));
-      p.fillStyle = '#d7ccc8';
-      for (const h of haeuser) p.fillRect(kx2(h.x - h.b / 2), kz2(h.z + h.t / 2), h.b * massstab, h.t * massstab);
-      p.fillStyle = '#ffca28'; p.fillRect(kx2(GARAGE.x - 8), kz2(GARAGE.z + 5), 16 * massstab, 10 * massstab);
-      p.fillStyle = '#f48fb1'; p.fillRect(kx2(KABINE.x - 1.6), kz2(KABINE.z + 1.6), 3.2 * massstab + 1, 3.2 * massstab + 1);
-      p.fillStyle = '#ff9800'; // Supermärkte
-      for (const l of LAEDEN) p.fillRect(kx2(l.x - l.b / 2), kz2(l.z + l.t / 2), l.b * massstab, l.t * massstab);
-      p.fillStyle = '#ffd54f'; p.fillRect(kx2(BANK.x - BANK.b / 2), kz2(BANK.z + BANK.t / 2), BANK.b * massstab, BANK.t * massstab); // Bank
-      p.fillStyle = '#d32f2f'; p.fillRect(kx2(HAENDLER.x - 4), kz2(HAENDLER.z + 3), 8 * massstab + 1, 6 * massstab + 1);            // Waffenhändler
-      p.fillStyle = '#ec407a'; p.fillRect(kx2(KLEIDERLADEN.x - 8), kz2(KLEIDERLADEN.z + 6), 16 * massstab, 12 * massstab);         // Kleiderladen
-      p.fillStyle = '#37474f'; p.strokeStyle = '#ffffff'; p.lineWidth = 1; // Gefängnis
-      p.fillRect(kx2(GEF.x - 13), kz2(GEF.z + 13), 26 * massstab, 26 * massstab);
-      p.strokeRect(kx2(GEF.x - 13), kz2(GEF.z + 13), 26 * massstab, 26 * massstab);
+      const rechteck = (farbe, x, z, b, t) => { p.fillStyle = farbe; p.fillRect(kx2(x - b / 2), kz2(z - t / 2), Math.max(1, b * massstab), Math.max(1, t * massstab)); };
+      p.fillStyle = '#2e7d32'; p.fillRect(0, 0, groesse, groesse);
+      rechteck('#9ccc65', (SPIELPLATZ.x1 + SPIELPLATZ.x2) / 2, (SPIELPLATZ.z1 + SPIELPLATZ.z2) / 2, SPIELPLATZ.x2 - SPIELPLATZ.x1, SPIELPLATZ.z2 - SPIELPLATZ.z1);
+      for (const s of STRASSEN) rechteck('#555', (s.x1 + s.x2) / 2, (s.z1 + s.z2) / 2, Math.max(1.5 / massstab, s.x2 - s.x1), Math.max(1.5 / massstab, s.z2 - s.z1));
+      for (const h of haeuser) rechteck('#d7ccc8', h.x, h.z, h.b, h.t);
+      rechteck('#ffca28', GARAGE.x, GARAGE.z, 16, 10);
+      rechteck('#f48fb1', KABINE.x, KABINE.z, 3.2 + 1 / massstab, 3.2 + 1 / massstab);
+      for (const l of LAEDEN) rechteck('#ff9800', l.x, l.z, l.b, l.t);
+      rechteck('#ffd54f', BANK.x, BANK.z, BANK.b, BANK.t);
+      rechteck('#d32f2f', HAENDLER.x, HAENDLER.z, 8 + 1 / massstab, 6 + 1 / massstab);
+      rechteck('#ec407a', KLEIDERLADEN.x, KLEIDERLADEN.z, 16, 12);
+      rechteck('#37474f', GEF.x, GEF.z, 26, 26);
+      p.strokeStyle = '#ffffff'; p.lineWidth = 1;
+      p.strokeRect(kx2(GEF.x - 13), kz2(GEF.z - 13), 26 * massstab, 26 * massstab);
+      if (groesse > 300) { // große Karte: Namen dazuschreiben
+        p.font = `bold ${Math.round(groesse / 55)}px sans-serif`;
+        p.textAlign = 'center'; p.textBaseline = 'middle';
+        for (const o of ORTE()) {
+          const x = kx2(o.x), y = kz2(o.z) - groesse / 45;
+          p.lineWidth = 4; p.strokeStyle = 'rgba(0,0,0,0.75)'; p.strokeText(o.name, x, y);
+          p.fillStyle = '#ffffff'; p.fillText(o.name, x, y);
+        }
+      }
+    }
+    karteVorbereiten(karte.width);
+    // M = Karte groß/klein (Esc macht sie auch wieder klein)
+    function karteUmschalten(gross = !karteGross) {
+      karteGross = gross;
+      karte.classList.toggle('gross', karteGross);
+      karteVorbereiten(karteGross ? 900 : 180);
     }
     function karteMalen(blick) {
+      const punkt = karteGross ? 3 : 1.5; // auf der großen Karte sind die Punkte größer
       kartenPinsel.drawImage(kartenHintergrund, 0, 0);
+      if (karteGross) { // Münzen als kleine gelbe Punkte
+        kartenPinsel.fillStyle = '#ffeb3b';
+        for (const m of muenzen) if (m.visible) kartenPinsel.fillRect(kx2(m.position.x) - 1.5, kz2(m.position.z) - 1.5, 3, 3);
+        kartenPinsel.fillStyle = '#ffffff';
+        for (const f of fussgaenger) kartenPinsel.fillRect(kx2(f.x) - 1, kz2(f.z) - 1, 2, 2);
+      }
       for (const a of verkehr) { // Autos als kleine Punkte
         kartenPinsel.fillStyle = '#' + a.farbe.toString(16).padStart(6, '0');
-        kartenPinsel.fillRect(kx2(a.x) - 1.5, kz2(a.z) - 1.5, 3, 3);
+        kartenPinsel.fillRect(kx2(a.x) - punkt, kz2(a.z) - punkt, punkt * 2, punkt * 2);
       }
       // Polizei: blinkender Punkt
       if (polizei.aktiv) {
+        const px = polizei.gruppe.visible ? polizei.x : polizei.laeufer.x, pz = polizei.gruppe.visible ? polizei.z : polizei.laeufer.z;
         kartenPinsel.fillStyle = Math.floor(spielZeit * 4) % 2 ? '#2979ff' : '#ff1744';
-        kartenPinsel.beginPath(); kartenPinsel.arc(kx2(polizei.x), kz2(polizei.z), 4.5, 0, Math.PI * 2); kartenPinsel.fill();
+        kartenPinsel.beginPath(); kartenPinsel.arc(kx2(px), kz2(pz), punkt * 3, 0, Math.PI * 2); kartenPinsel.fill();
       }
       // Der Affe (oder sein Fahrzeug) als Pfeil
-      const x = kx2(affe.position.x), y = kz2(affe.position.z);
+      const x = kx2(affe.position.x), y = kz2(affe.position.z), g = karteGross ? 2.2 : 1;
       kartenPinsel.save();
       kartenPinsel.translate(x, y);
-      kartenPinsel.rotate(blick);
+      kartenPinsel.rotate(Math.PI - blick); // Pfeil zeigt in Blickrichtung
+      kartenPinsel.scale(g, g);
       kartenPinsel.fillStyle = '#ff1744'; kartenPinsel.strokeStyle = '#fff'; kartenPinsel.lineWidth = 1.5;
       kartenPinsel.beginPath(); kartenPinsel.moveTo(0, -7); kartenPinsel.lineTo(5, 5); kartenPinsel.lineTo(-5, 5); kartenPinsel.closePath();
       kartenPinsel.fill(); kartenPinsel.stroke();
