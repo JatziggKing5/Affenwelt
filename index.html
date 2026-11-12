@@ -299,7 +299,14 @@
       width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 200px); overflow-y: auto; box-sizing: border-box;
       padding: 14px 16px; background: rgba(10, 50, 40, 0.92); color: #fff; border-radius: 14px; display: none;
     }
-    #tierladen.offen { display: block; }
+    #tierladen.offen, #einrichten.offen { display: block; }
+    #einrichten { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); z-index: 5; width: min(440px, calc(100vw - 32px)); max-height: calc(100vh - 200px); overflow-y: auto; box-sizing: border-box; padding: 14px 16px; background: rgba(60, 35, 10, 0.93); color: #fff; border-radius: 14px; display: none; }
+    #einrichten h2 { margin: 0 0 4px; font-size: 20px; text-align: center; }
+    #einrichten p { margin: 4px 0 8px; font-size: 12px; text-align: center; opacity: 0.85; }
+    #einrichten .waren { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+    #einrichten button { background: #ffd600; border: none; border-radius: 8px; padding: 7px 6px; font-weight: bold; cursor: pointer; font-size: 13px; }
+    #einrichten button.zurueck { background: #ef5350; color: #fff; width: 100%; margin-top: 8px; }
+    body.handy #einrichten { bottom: auto; top: 12px; max-height: 50vh; }
     #tierladen h2 { margin: 0 0 4px; font-size: 22px; text-align: center; }
     #tierladen p { margin: 4px 0 8px; font-size: 13px; text-align: center; }
     #tierladen .ware { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid rgba(255,255,255,0.15); }
@@ -379,6 +386,7 @@
     <p class="klein">Zum Verlassen einfach rauslaufen</p>
   </div>
   <div id="zielfernrohr"></div>
+  <div id="einrichten"><h2>🛠️ Haus einrichten</h2><p>Das Möbelstück kommt dorthin, wo du stehst (vor dich). Du kannst auf Sofa, Bett und Trampolin springen!</p><div class="waren"></div><button class="zurueck">↩️ Letztes Teil zurückgeben (halber Preis zurück)</button></div>
   <div id="tierladen"><h2>🐾 Tierhandlung</h2><p>Ein Haustier läuft (oder fliegt) dir überall hinterher. Bezahlt wird mit Punkten.</p><div class="waren"></div></div>
   <div id="haendler">
     <h2>🍌 Bananen-Waffen</h2>
@@ -472,7 +480,7 @@
       ['👥 Mehrspieler', [['Raum öffnen / beitreten', k('P')], ['Chat schreiben', k('T') + ' oder ' + k('Enter')], ['Funkgerät', k('V') + ' halten']]],
     ];
     HILFE.push(['🗺️ Zum Entdecken', [
-      ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🐾 Tierhandlung', 'rechts neben der Hauptstraße beim Start'], ['🏁 Straßenrennen', 'mit einem Fahrzeug unters Start-Tor fahren'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
+      ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🐾 Tierhandlung', 'rechts neben der Hauptstraße beim Start'], ['🏡 Affen-Siedlung', 'Häuser kaufen und einrichten (rechts vom Start)'], ['🏁 Straßenrennen', 'mit einem Fahrzeug unters Start-Tor fahren'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
       ['🔫 Waffenhändler', 'Bananen-Pistole & Zielfernrohr'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
       ['🚔 Polizei', 'nicht über Rot fahren, nichts Verbotenes tun'], ['🔒 Gefängnis', 'man kann ausbrechen …'],
       ['🤫 Geheimversteck', 'irgendwo gibt es eins – nicht auf der Karte!'],
@@ -1462,6 +1470,9 @@
     const GEHEIM_BAUM = { x: -60, z: 40 };           // das Loch im Stamm zeigt zur Straße (+z)
     const GEHEIM = { x: 600, z: 600, b: 30, t: 20, h: 6 };
     freiHalten.push({ x: GEHEIM_BAUM.x, z: GEHEIM_BAUM.z, r: 5 });
+    // Affen-Siedlung: drei Häuser zum Kaufen (hier sollen keine Bäume wachsen)
+    const GRUNDSTUECKE = [30, 48, 66].map((x, nr) => ({ nr, x, z: 30 }));
+    for (const g of GRUNDSTUECKE) freiHalten.push({ x: g.x, z: g.z + 2, r: 10 });
     {
       const { x: bx, z: bz } = GEHEIM_BAUM;
       const rinde = new THREE.MeshStandardMaterial({ color: 0x4e342e, roughness: 1 });
@@ -4459,6 +4470,192 @@
     }
     tierladenZeigen();
 
+    // ================= EIGENES HAUS: kaufen und einrichten =================
+    const HAUS_PREIS = 1000, HAUS_B = 12, HAUS_T = 10, HAUS_H = 4;
+    const hausWand = tierMat(0xfff8e1), hausBoden = tierMat(0xbc8f5a), hausDach = tierMat(0xc62828), tuerHolz = tierMat(0x6d4c41);
+    function hausSchild(g, text) {
+      if (g.schild) szene.remove(g.schild);
+      g.schild = namensSchild(text);
+      g.schild.position.set(g.x, HAUS_H + 2.6, g.z + HAUS_T / 2);
+      g.schild.scale.set(4.4, 1.1, 1);
+      szene.add(g.schild);
+    }
+    for (const g of GRUNDSTUECKE) {
+      const { x, z } = g, B = HAUS_B, T = HAUS_T, H = HAUS_H;
+      const boden = new THREE.Mesh(tierBox, hausBoden); boden.position.set(x, 0.02, z); boden.scale.set(B, 0.04, T); boden.receiveShadow = true; szene.add(boden);
+      const wand = (wx, wz, b, t) => {
+        const m = new THREE.Mesh(tierBox, hausWand); m.position.set(wx, H / 2, wz); m.scale.set(b, H, t); m.castShadow = true; m.receiveShadow = true; szene.add(m);
+        bloecke.push({ x: wx, z: wz, b, t, unten: 0, oben: H, art: 'block' });
+      };
+      wand(x - B / 2, z, 0.3, T); wand(x + B / 2, z, 0.3, T); wand(x, z - T / 2, B, 0.3);
+      wand(x - B / 4 - 0.6, z + T / 2, B / 2 - 1.2, 0.3); wand(x + B / 4 + 0.6, z + T / 2, B / 2 - 1.2, 0.3);   // vorne mit Tür-Loch (2,4 m)
+      const ueberTuer = new THREE.Mesh(tierBox, hausWand); ueberTuer.position.set(x, H - 0.6, z + T / 2); ueberTuer.scale.set(2.4, 1.2, 0.3); szene.add(ueberTuer);
+      for (const sx of [-1, 1]) { const f = new THREE.Mesh(tierBox, fensterMaterial); f.position.set(x + sx * B / 4, 2.2, z + T / 2 + 0.17); f.scale.set(1.6, 1.2, 0.05); szene.add(f); }
+      // Dach: eine Pyramide (wird ausgeblendet, wenn man drin ist, damit man von oben hineinsieht)
+      g.dach = new THREE.Mesh(new THREE.ConeGeometry(Math.hypot(B, T) / 2 + 0.6, 3, 4, 1).rotateY(Math.PI / 4), hausDach);
+      g.dach.scale.set(1, 1, T / B); g.dach.position.set(x, H + 1.5, z); g.dach.castShadow = true; szene.add(g.dach);
+      // Tür: zu, solange das Haus nicht dir (oder einem Freund) gehört
+      g.tuer = new THREE.Mesh(tierBox, tuerHolz); g.tuer.position.set(x, 1.4, z + T / 2); g.tuer.scale.set(2.4, 2.8, 0.15); szene.add(g.tuer);
+      g.tuerBlock = { x, z: z + T / 2, b: 2.4, t: 0.3, unten: 0, oben: 2.8, art: 'block' };
+      bloecke.push(g.tuerBlock);
+      // Einrichten-Tafel an der Rückwand
+      g.tafel = schildBauen('🛠️ EINRICHTEN', 2.4, 0.6, '#5d4037', '#ffeb3b', x, 2.4, z - T / 2 + 0.17, 0);
+      g.tafel.visible = false;
+      g.besitzer = null; g.moebel = [];
+      hausSchild(g, `🏡 ZU VERKAUFEN · ${HAUS_PREIS}`);
+    }
+    // --- Möbel ---
+    const MOEBEL = [
+      { typ: 'stuhl',  emoji: '🪑', name: 'Stuhl',        preis: 20,  b: 0.6, t: 0.6, h: 0.5 },
+      { typ: 'pflanze',emoji: '🪴', name: 'Pflanze',      preis: 25,  b: 0.6, t: 0.6, h: 1.2 },
+      { typ: 'lampe',  emoji: '💡', name: 'Lampe',        preis: 30,  b: 0.4, t: 0.4, h: 1.7 },
+      { typ: 'teppich',emoji: '🟣', name: 'Teppich',      preis: 35,  b: 0, t: 0, h: 0 },
+      { typ: 'tisch',  emoji: '🍽️', name: 'Tisch',        preis: 40,  b: 1.4, t: 0.9, h: 0.8 },
+      { typ: 'sofa',   emoji: '🛋️', name: 'Sofa',         preis: 60,  b: 2.2, t: 0.9, h: 0.55 },
+      { typ: 'bett',   emoji: '🛏️', name: 'Bett',         preis: 80,  b: 1.4, t: 2.2, h: 0.6 },
+      { typ: 'kuehl',  emoji: '🧊', name: 'Bananen-Kühlschrank', preis: 90, b: 0.8, t: 0.7, h: 1.8 },
+      { typ: 'tv',     emoji: '📺', name: 'Fernseher',    preis: 120, b: 1.6, t: 0.4, h: 1.5 },
+      { typ: 'aquarium',emoji:'🐠', name: 'Aquarium',     preis: 150, b: 1.6, t: 0.6, h: 1.4 },
+      { typ: 'trampolin',emoji:'🤸', name: 'Trampolin',   preis: 180, b: 2.0, t: 2.0, h: 0.5 },
+      { typ: 'disco',  emoji: '🪩', name: 'Discokugel',   preis: 200, b: 0, t: 0, h: 0 },
+      { typ: 'statue', emoji: '🏆', name: 'Goldene Affen-Statue', preis: 500, b: 0.9, t: 0.9, h: 1.0 },
+    ];
+    const moebelFarbe = { sofa: 0xd32f2f, bett: 0x1e88e5, tisch: 0x8d6e63, stuhl: 0xa1887f };
+    function moebelBauen(typ) {
+      const g = new THREE.Group(), m = c => tierMat(c);
+      const box = (mat, x, y, z, b, h, t) => g.add(tierTeil(tierBox, mat, x, y, z, b, h, t));
+      switch (typ) {
+        case 'sofa': { const c = m(moebelFarbe.sofa); box(c, 0, 0.25, 0, 2.2, 0.5, 0.9); box(c, 0, 0.65, -0.35, 2.2, 0.8, 0.2); box(c, -1.0, 0.45, 0, 0.2, 0.5, 0.9); box(c, 1.0, 0.45, 0, 0.2, 0.5, 0.9); break; }
+        case 'bett': { box(m(0x6d4c41), 0, 0.2, 0, 1.4, 0.4, 2.2); box(m(0xffffff), 0, 0.48, 0.05, 1.3, 0.16, 2.0); box(m(moebelFarbe.bett), 0, 0.58, 0.3, 1.32, 0.06, 1.4); box(m(0xffffff), 0, 0.62, -0.8, 0.9, 0.14, 0.4); box(m(0x6d4c41), 0, 0.6, -1.08, 1.4, 1.2, 0.08); break; }
+        case 'tisch': { const c = m(moebelFarbe.tisch); box(c, 0, 0.76, 0, 1.4, 0.08, 0.9); for (const [x, z] of [[-0.6, -0.35], [0.6, -0.35], [-0.6, 0.35], [0.6, 0.35]]) box(c, x, 0.36, z, 0.08, 0.72, 0.08); box(m(0xffeb3b), 0, 0.86, 0, 0.12, 0.12, 0.3); break; }
+        case 'stuhl': { const c = m(moebelFarbe.stuhl); box(c, 0, 0.45, 0, 0.5, 0.06, 0.5); box(c, 0, 0.75, -0.22, 0.5, 0.6, 0.06); for (const [x, z] of [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]]) box(c, x, 0.22, z, 0.05, 0.45, 0.05); break; }
+        case 'tv': { box(m(0x37474f), 0, 0.3, 0, 1.2, 0.6, 0.4); box(m(0x111111), 0, 1.1, 0, 1.6, 0.95, 0.08); const bild = tierMat(0x29b6f6); bild.emissive.setHex(0x0288d1); bild.emissiveIntensity = 1; box(bild, 0, 1.1, 0.045, 1.45, 0.82, 0.02); g.userData.bild = bild; break; }
+        case 'lampe': { box(m(0x424242), 0, 0.03, 0, 0.4, 0.06, 0.4); box(m(0x424242), 0, 0.8, 0, 0.05, 1.6, 0.05); const l = tierMat(0xfff59d); l.emissive.setHex(0xffeb3b); l.emissiveIntensity = 1.2; g.add(tierTeil(tierKegel, l, 0, 1.65, 0, 0.3, 0.35, 0.3)); break; }
+        case 'pflanze': { g.add(tierTeil(tierRohr, m(0xbf360c), 0, 0.2, 0, 0.22, 0.4, 0.22)); g.add(tierTeil(tierKugel, m(0x2e7d32), 0, 0.75, 0, 0.35, 0.45, 0.35)); g.add(tierTeil(tierKugel, m(0x43a047), 0.12, 1.0, 0.05, 0.22, 0.25, 0.22)); break; }
+        case 'teppich': { g.add(tierTeil(tierRohr, m(0x8e24aa), 0, 0.03, 0, 1.4, 0.03, 1.0)); g.add(tierTeil(tierRohr, m(0xffd600), 0, 0.035, 0, 0.9, 0.03, 0.6)); break; }
+        case 'kuehl': { box(m(0xeceff1), 0, 0.9, 0, 0.8, 1.8, 0.7); box(m(0x90a4ae), 0, 1.2, 0.36, 0.78, 0.02, 0.02); box(m(0x9e9e9e), 0.3, 0.8, 0.37, 0.04, 0.4, 0.04); g.add(tierTeil(new THREE.TorusGeometry(0.15, 0.05, 6, 10, Math.PI), m(0xfdd835), 0, 1.5, 0.37, 1, 1, 1)); break; }
+        case 'aquarium': { box(m(0x37474f), 0, 0.35, 0, 1.6, 0.7, 0.6); const glas = new THREE.MeshStandardMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.45 }); box(glas, 0, 1.0, 0, 1.5, 0.6, 0.5);
+          g.userData.fische = [0xff7043, 0xffeb3b, 0xe91e63].map((c, i) => { const f = tierTeil(tierKugel, m(c), 0, 0.95 + i * 0.12, 0, 0.09, 0.06, 0.05); g.add(f); return f; }); break; }
+        case 'trampolin': { g.add(tierTeil(tierRohr, m(0x1565c0), 0, 0.45, 0, 1.0, 0.08, 1.0)); g.add(tierTeil(tierRohr, m(0x212121), 0, 0.48, 0, 0.88, 0.04, 0.88)); for (let i = 0; i < 4; i++) { const w = i * Math.PI / 2 + 0.78; g.add(tierTeil(tierRohr, m(0x9e9e9e), Math.cos(w) * 0.9, 0.22, Math.sin(w) * 0.9, 0.04, 0.45, 0.04)); } break; }
+        case 'disco': { const k = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.15, emissive: 0x6a1b9a, emissiveIntensity: 0.4 }); g.add(tierTeil(new THREE.IcosahedronGeometry(1, 1), k, 0, 3.2, 0, 0.45, 0.45, 0.45)); box(m(0x9e9e9e), 0, 3.75, 0, 0.03, 0.5, 0.03); g.userData.disco = k;
+          const kreis = new THREE.Mesh(new THREE.CircleGeometry(2.5, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false })); kreis.position.y = 0.06; g.add(kreis); g.userData.kreis = kreis; break; }
+        case 'statue': { box(m(0x5d4037), 0, 0.25, 0, 0.9, 0.5, 0.9); const a = affenKlon(0xffd700); a.gruppe.traverse(o => { if (o.isMesh) { o.material = new THREE.MeshStandardMaterial({ color: 0xffd54f, metalness: 0.9, roughness: 0.25 }); } }); a.gruppe.position.y = 1.0; a.gruppe.scale.setScalar(0.8); a.teile.armL.rotation.z = -2.4; a.teile.armR.rotation.z = 2.4; g.add(a.gruppe); break; }
+      }
+      return g;
+    }
+    function moebelHinstellen(haus, typ, x, z, r) {
+      const art = MOEBEL.find(m => m.typ === typ);
+      if (!art) return;
+      const mesh = moebelBauen(typ);
+      mesh.position.set(x, 0.04, z); mesh.rotation.y = r;
+      szene.add(mesh);
+      let block = null;
+      if (art.b > 0) {
+        const quer = Math.abs(Math.sin(r)) > 0.5;
+        block = { x, z, b: quer ? art.t : art.b, t: quer ? art.b : art.t, unten: 0, oben: art.h, art: 'block', trampolin: typ === 'trampolin' };
+        bloecke.push(block);
+      }
+      haus.moebel.push({ typ, x, z, r, mesh, block });
+    }
+    function moebelWeg(haus, eintrag) {
+      szene.remove(eintrag.mesh);
+      if (eintrag.block) { const i = bloecke.indexOf(eintrag.block); if (i >= 0) bloecke.splice(i, 1); }
+      haus.moebel.splice(haus.moebel.indexOf(eintrag), 1);
+    }
+    const meinHaus = () => GRUNDSTUECKE.find(g => g.besitzer === 'ich');
+    const imHaus = (g, p) => Math.abs(p.x - g.x) < HAUS_B / 2 - 0.2 && Math.abs(p.z - g.z) < HAUS_T / 2 - 0.2 && p.y < HAUS_H;
+    const anDerTuer = (g, p) => Math.abs(p.x - g.x) < 1.6 && Math.abs(p.z - (g.z + HAUS_T / 2 + 1)) < 1.4;
+    const anDerTafel = (g, p) => Math.hypot(p.x - g.x, p.z - (g.z - HAUS_T / 2 + 1)) < 2;
+    function hausBesitzerSetzen(g, besitzer, name) {
+      g.besitzer = besitzer;
+      const offen = !!besitzer;
+      g.tuer.visible = !offen;
+      const i = bloecke.indexOf(g.tuerBlock);
+      if (offen && i >= 0) bloecke.splice(i, 1);
+      if (!offen && i < 0) bloecke.push(g.tuerBlock);
+      g.tafel.visible = besitzer === 'ich';
+      hausSchild(g, besitzer === 'ich' ? '🏡 Dein Haus' : besitzer ? `🏡 Haus von ${name}` : `🏡 ZU VERKAUFEN · ${HAUS_PREIS}`);
+    }
+    function hausAktion(p) {
+      const g = GRUNDSTUECKE.find(g => anDerTuer(g, p) && !g.besitzer);
+      if (!g) return false;
+      if (meinHaus()) { zeigeMeldung('Du hast schon ein Haus! 🏡', 2); return true; }
+      if (punkte < HAUS_PREIS) { klang('fehler'); zeigeMeldung(`Das Haus kostet ${HAUS_PREIS} Punkte – du hast ${punkte}.`, 2.5); return true; }
+      punkte -= HAUS_PREIS; punkteZeigen(); klang('erfolg');
+      hausBesitzerSetzen(g, 'ich');
+      zeigeMeldung('🏡 Glückwunsch! Das Haus gehört dir! Geh rein und richte es ein.', 3.5);
+      hausSenden();
+      return true;
+    }
+    function hausHinweis(p) {
+      const g = GRUNDSTUECKE.find(g => anDerTuer(g, p) && !g.besitzer);
+      if (g) return meinHaus() ? '<b>🏡 Zu verkaufen</b><small>Du hast schon ein Haus.</small>'
+        : `<b>🏡 ${E_TASTE}: Haus kaufen für ${HAUS_PREIS} Punkte</b><small>Mit eigenem Einrichten: Sofa, Trampolin, Discokugel …</small>`;
+      return null;
+    }
+    // Einrichten-Menü
+    const einrichtenMenue = document.getElementById('einrichten');
+    einrichtenMenue.querySelector('.waren').innerHTML = MOEBEL.map(m => `<button data-typ="${m.typ}">${m.emoji} ${m.name}<br><small>${m.preis} Punkte</small></button>`).join('');
+    for (const b of einrichtenMenue.querySelectorAll('button')) {
+      b.addEventListener('mousedown', e => { e.preventDefault(); e.stopPropagation(); });
+      b.addEventListener('pointerdown', e => e.stopPropagation());
+    }
+    for (const b of einrichtenMenue.querySelectorAll('[data-typ]')) b.addEventListener('click', () => moebelKaufen(b.dataset.typ));
+    einrichtenMenue.querySelector('.zurueck').addEventListener('click', () => {
+      const g = meinHaus();
+      if (!g || !g.moebel.length) return;
+      const letztes = g.moebel[g.moebel.length - 1];
+      punkte += Math.floor(MOEBEL.find(m => m.typ === letztes.typ).preis / 2); punkteZeigen();
+      moebelWeg(g, letztes); klang('plopp'); hausSenden();
+    });
+    function moebelKaufen(typ) {
+      const g = meinHaus(), art = MOEBEL.find(m => m.typ === typ);
+      if (!g) return;
+      if (g.moebel.length >= 30) { zeigeMeldung('Das Haus ist voll! (30 Teile)', 2); return; }
+      if (punkte < art.preis) { klang('fehler'); zeigeMeldung(`Zu wenig Punkte für ${art.emoji} ${art.name}`, 2); return; }
+      // vor den Affen stellen, aber im Haus bleiben
+      const p = affe.position, r = Math.round(blickRichtung / (Math.PI / 2)) * (Math.PI / 2);
+      const rand = 0.4 + Math.max(art.b, art.t) / 2;
+      const x = THREE.MathUtils.clamp(p.x + Math.sin(blickRichtung) * 1.8, g.x - HAUS_B / 2 + rand, g.x + HAUS_B / 2 - rand);
+      const z = THREE.MathUtils.clamp(p.z + Math.cos(blickRichtung) * 1.8, g.z - HAUS_T / 2 + rand, g.z + HAUS_T / 2 - rand);
+      punkte -= art.preis; punkteZeigen(); klang('kasse');
+      moebelHinstellen(g, typ, +x.toFixed(2), +z.toFixed(2), r + Math.PI);
+      hausSenden();
+    }
+    function haeuserAktualisieren(p) {
+      for (const g of GRUNDSTUECKE) {
+        g.dach.visible = !imHaus(g, p);                          // drin: Dach weg, damit man von oben hineinsieht
+        if (g.schild) g.schild.visible = g.dach.visible;
+        for (const m of g.moebel) {                               // kleine Animationen
+          if (m.mesh.userData.disco) { m.mesh.children[0].rotation.y += 0.02; m.mesh.userData.kreis.material.color.setHSL((spielZeit * 0.3) % 1, 1, 0.5); }
+          if (m.mesh.userData.fische) m.mesh.userData.fische.forEach((f, i) => { f.position.x = Math.sin(spielZeit * (0.8 + i * 0.3) + i) * 0.6; f.rotation.y = Math.cos(spielZeit * (0.8 + i * 0.3) + i) > 0 ? 0 : Math.PI; });
+          if (m.mesh.userData.bild) m.mesh.userData.bild.emissive.setHSL((spielZeit * 0.1) % 1, 0.7, 0.4);
+        }
+      }
+      const g = meinHaus();
+      einrichtenMenue.classList.toggle('offen', !!g && !aktuellesFahrzeug && anDerTafel(g, p));
+    }
+    // Mehrspieler: dein Haus und deine Möbel an die anderen schicken (dann können sie dich besuchen)
+    function hausDaten() { const g = meinHaus(); return g ? { nr: g.nr, m: g.moebel.map(m => [m.typ, +(m.x - g.x).toFixed(2), +(m.z - g.z).toFixed(2), +m.r.toFixed(2)]) } : null; }
+    function hausSenden() { if (mp.raum) mpSenden('haus', hausDaten() || { nr: -1 }); }
+    setInterval(() => { if (mp.raum && meinHaus()) hausSenden(); }, 5000);
+    function fremdesHaus(id, d) {
+      const a = mp.andere.get(id);
+      // altes Haus dieses Spielers freigeben
+      for (const g of GRUNDSTUECKE) if (g.besitzer === id && g.nr !== d.nr) { while (g.moebel.length) moebelWeg(g, g.moebel[0]); hausBesitzerSetzen(g, null); g.moebelText = ''; }
+      const g = GRUNDSTUECKE[d.nr];
+      if (!g || g.besitzer === 'ich' || !Array.isArray(d.m)) return;
+      if (g.besitzer !== id) hausBesitzerSetzen(g, id, a?.daten?.n || 'Affe');
+      const text = JSON.stringify(d.m);
+      if (text === g.moebelText) return;
+      g.moebelText = text;
+      while (g.moebel.length) moebelWeg(g, g.moebel[0]);
+      for (const [typ, dx, dz, r] of d.m.slice(0, 30)) if (typeof dx === 'number' && typeof dz === 'number') moebelHinstellen(g, typ, g.x + THREE.MathUtils.clamp(dx, -6, 6), g.z + THREE.MathUtils.clamp(dz, -5, 5), +r || 0);
+    }
+    function fremdesHausWeg(id) {
+      for (const g of GRUNDSTUECKE) if (g.besitzer === id) { while (g.moebel.length) moebelWeg(g, g.moebel[0]); hausBesitzerSetzen(g, null); g.moebelText = ''; }
+    }
+
     // ================= MISSIONEN: der Auftrags-Affe gibt dir Aufgaben =================
     // Jede geschaffte Mission macht die nächste etwas schwerer (weniger Zeit, mehr zu tun) – aber auch die Belohnung größer.
     const AUFTRAGGEBER = { x: -6, z: 7 };
@@ -4648,7 +4845,7 @@
       // E-Taste: einsteigen oder aussteigen
       if (eGedrueckt) {
         eGedrueckt = false;
-        if (!aktuellesFahrzeug && (auftragAktion(p) || graben(p) || tresorKnacken(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
+        if (!aktuellesFahrzeug && (auftragAktion(p) || hausAktion(p) || graben(p) || tresorKnacken(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
         else if (aktuellesFahrzeug) aussteigen();
         else if (!imGefaengnis) { const f = naechstesFahrzeug(p); if (f) einsteigen(f); }
       }
@@ -4738,6 +4935,7 @@
         amBoden = p.y <= standHoehe + 0.001 && fallTempo <= 0;
         zuletztAmBoden = amBoden;
         if (amBoden) { sprungZaehler = 0; zuletztAufBodenUm = spielZeit; } // gelandet: Sprünge wieder auffüllen
+        if (amBoden && unter.block?.trampolin) { fallTempo = SPRUNGKRAFT * 1.9; amBoden = false; klang('sprung2'); } // Trampolin: hoch hinaus!
         // Faire Sprünge: Leertaste gilt noch 0,15 s ("zu früh gedrückt"), und kurz nach der Kante darf man noch abspringen
         const sprungGewuenscht = spielZeit - sprungGedruecktUm < 0.15;
         const darfAbspringen = amBoden || (sprungZaehler === 0 && spielZeit - zuletztAufBodenUm < 0.12);
@@ -4805,6 +5003,9 @@
             : amStein ? `<b>⛏️ ${E_TASTE} drücken zum Graben (${grabZaehler}/${GRAB_NOETIG})</b>`
             : '<b>🔒 Du bist im Gefängnis!</b><small>Tipp: Ein Stück der Rückwand sieht locker aus …</small>';
           fahrInfo.classList.add('offen');
+        } else if (hausHinweis(p)) {
+          fahrInfo.innerHTML = hausHinweis(p);
+          fahrInfo.classList.add('offen');
         } else if (auftragHinweis(p)) {
           fahrInfo.innerHTML = auftragHinweis(p);
           fahrInfo.classList.add('offen');
@@ -4860,6 +5061,7 @@
       // Die Sonne (oder nachts der Mond) folgt dem Affen, damit es überall Schatten gibt
       tagNacht(dt, p);
       auftragAktualisieren(dt, aktuellesFahrzeug || p);
+      haeuserAktualisieren(p);
       haustierBewegen(meinTier, aktuellesFahrzeug || p, blickRichtung, dt, !!tanz);
       tierladenMenue.classList.toggle('offen', !aktuellesFahrzeug && Math.hypot(p.x - TIERLADEN.x + 1.5, p.z - TIERLADEN.z) < 3.2);
       rennenAktualisieren(dt);
@@ -5098,11 +5300,12 @@
       if ((gesehen.get(n.i) ?? 0) >= n.s && n.t !== 'weg') return; // schon über den anderen Server bekommen
       gesehen.set(n.i, n.s);
       if (n.t === 'affe' && typeof n.d?.x === 'number') {
-        if (!mp.andere.has(n.i)) mp.sendeUm = 0;          // ein Neuer: sofort unsere Daten schicken
+        if (!mp.andere.has(n.i)) { mp.sendeUm = 0; setTimeout(hausSenden, 500); }   // ein Neuer: sofort unsere Daten schicken
         mitspielerAktualisieren(n.i, n.d);
       }
       if (n.t === 'banane' && typeof n.d?.x === 'number') fremdeBananeFliegt(n.d);
       if (n.t === 'weg') mitspielerEntfernen(n.i);
+      if (n.t === 'haus' && typeof n.d?.nr === 'number') { if (n.d.nr < 0) fremdesHausWeg(n.i); else fremdesHaus(n.i, n.d); }
       if (n.t === 'chat' && typeof n.d?.m === 'string') chatEmpfangen(n.i, n.d.m);
       if (n.t === 'knall' && typeof n.d?.x === 'number') {   // ein Mitspieler hat mit der Bazooka geschossen
         knallZeigen(n.d.x, n.d.y, n.d.z); hupen(60);
@@ -5223,6 +5426,7 @@
       if (a.gruppe) szene.remove(a.gruppe);
       if (a.auto) szene.remove(a.auto.gruppe);
       if (a.tier) szene.remove(a.tier.gruppe);
+      fremdesHausWeg(id);
       mp.andere.delete(id);
       zeigeMeldung(`👋 ${a.daten?.n || 'Ein Affe'} ist gegangen`, 1.5);
       mpLeisteZeigen();
