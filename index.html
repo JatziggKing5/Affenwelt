@@ -44,6 +44,15 @@
       box-shadow: 0 2px 10px rgba(0,0,0,0.4); pointer-events: none;
     }
     @media (max-width: 500px) { #karte { width: 110px; height: 110px; } }
+    #fahndung {
+      position: fixed; bottom: 96px; left: 50%; transform: translateX(-50%);
+      max-width: calc(100vw - 32px); box-sizing: border-box; text-align: center;
+      padding: 8px 16px; color: #fff; font-weight: bold; font-size: 16px; border-radius: 10px;
+      display: none; pointer-events: none; animation: blinken 0.6s infinite alternate;
+    }
+    #fahndung.offen { display: block; }
+    #fahndung small { display: block; font-size: 11px; font-weight: normal; opacity: 0.9; }
+    @keyframes blinken { from { background: rgba(213, 0, 0, 0.85); } to { background: rgba(41, 98, 255, 0.85); } }
     #fahrinfo {
       position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
       max-width: calc(100vw - 32px); box-sizing: border-box;
@@ -73,6 +82,7 @@
   <div id="punkte"></div>
   <div id="meldung"></div>
   <div id="fahrinfo"></div>
+  <div id="fahndung"></div>
   <canvas id="karte" width="180" height="180" title="Mini-Karte"></canvas>
   <div id="kabine">
     <h2>👕 Umkleidekabine</h2>
@@ -80,7 +90,7 @@
     <div id="farben"></div>
     <p class="klein">Zum Verlassen einfach rauslaufen.</p>
   </div>
-  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung</div>
+  <div id="hilfe">W A S D: laufen · Pfeiltasten: Kamera · Leertaste: springen (2× = Doppelsprung) · E: Fahrzeug ein/aus · Obby: hinten über den Rand · Garage: an der ersten Kreuzung · 🚔 Nicht über Rot fahren!</div>
 
   <script type="module">
     import * as THREE from 'three/webgpu';
@@ -291,6 +301,32 @@
     // Zebrastreifen direkt vor dem Start
     for (let x = -HALB + 0.5; x < HALB; x += 1) flach(linie, x, 7.2, 0.5, 1.8, 0.035);
 
+    // --- Gehwege links und rechts jeder Straße (dort laufen die Fußgänger-Affen) ---
+    const GEHWEG = HALB + 0.9; // Mitte des Gehwegs, von der Straßenmitte aus gemessen
+    const gehwegMaterial = new THREE.MeshStandardMaterial({ color: 0xbdbdbd, roughness: 0.9 });
+    function abschnitte(von, bis, punktBei, istFrei) { // Teilt eine Linie in Stücke, wo istFrei gilt
+      const teile = [];
+      let anfang = null;
+      for (let t = von; t <= bis; t += 0.5) {
+        const frei = istFrei(...punktBei(t));
+        if (frei && anfang === null) anfang = t;
+        if ((!frei || t + 0.5 > bis) && anfang !== null) { if (t - anfang > 0.4) teile.push([anfang, t]); anfang = null; }
+      }
+      return teile;
+    }
+    const nebenStrasse = (x, z) => !nahAnStrasse(x, z, 0);
+    for (const s of STRASSEN) {
+      for (const seite of [-1, 1]) {
+        if (s.richtung === 'z') {
+          const x = s.mitte + seite * GEHWEG;
+          for (const [a, b] of abschnitte(s.z1 - 1.8, s.z2 + 1.8, t => [x, t], nebenStrasse)) flach(gehwegMaterial, x, (a + b) / 2, 1.8, b - a, 0.02);
+        } else {
+          const z = s.mitte + seite * GEHWEG;
+          for (const [a, b] of abschnitte(s.x1 - 1.8, s.x2 + 1.8, t => [t, z], nebenStrasse)) flach(gehwegMaterial, (a + b) / 2, z, b - a, 1.8, 0.02);
+        }
+      }
+    }
+
     // --- Das Netz für die Autos: Knoten (Kreuzungen, Kurven, Enden) und Verbindungen ---
     const knotenListe = new Map();
     function knoten(x, z) {
@@ -442,6 +478,47 @@
       }
     }
 
+    // --- Affen-Kopien: für Fahrer, Fußgänger, Polizisten und den Wärter ---
+    // Jede Kopie bekommt ihr eigenes Fell und (wenn Polizei) eine blaue Mütze mit Stern.
+    const AFFEN_FELLE = [0x3b2314, 0x5d4037, 0x8d6e63, 0x795548, 0x4e342e, 0x9e9e9e, 0xbcaaa4, 0x212121, 0xa1887f];
+    const muetzenMaterial = new THREE.MeshStandardMaterial({ color: 0x1a237e, roughness: 0.6, name: 'Polizeimuetze' });
+    const sternMaterial = new THREE.MeshStandardMaterial({ color: 0xffd600, metalness: 0.6, roughness: 0.3, emissive: 0x332800 });
+    function affenKlon(fellFarbe, polizei = false) {
+      const k = figur.clone(true);
+      k.position.set(0, 0, 0);
+      k.rotation.set(0, 0, 0);
+      const eigenesFell = fell.clone();
+      eigenesFell.color.set(fellFarbe);
+      k.traverse(o => { if (o.isMesh) { o.castShadow = false; if (o.material === fell) o.material = eigenesFell; } });
+      const leer = () => new THREE.Group();
+      const teile = {
+        kopf: finde(k, 'Affe_Kopf') || leer(),
+        armL: finde(k, 'Affe_Arm_links') || leer(), armR: finde(k, 'Affe_Arm_rechts') || leer(),
+        beinL: finde(k, 'Affe_Bein_links') || leer(), beinR: finde(k, 'Affe_Bein_rechts') || leer(),
+      };
+      if (polizei) {
+        const muetze = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.27, 0.17, 16), muetzenMaterial);
+        muetze.position.set(0, 0.27, 0);
+        const schirm = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.03, 0.18), muetzenMaterial);
+        schirm.position.set(0, 0.2, 0.22);
+        const stern = new THREE.Mesh(new THREE.OctahedronGeometry(0.055), sternMaterial);
+        stern.position.set(0, 0.29, 0.26);
+        teile.kopf.add(muetze, schirm, stern);
+      }
+      const gruppe = new THREE.Group();
+      gruppe.add(k);
+      return { gruppe, figur: k, teile };
+    }
+    // Pose: sitzen (im Auto) und laufen
+    function sitzen(t) {
+      t.armL.rotation.set(-1.2, 0, -0.2); t.armR.rotation.set(-1.2, 0, 0.2);
+      t.beinL.rotation.set(-1.4, 0, 0); t.beinR.rotation.set(-1.4, 0, 0);
+    }
+    function laufAnimation(t, zeit, staerke) {
+      t.armL.rotation.set(Math.sin(zeit) * staerke, 0, -0.35); t.armR.rotation.set(-Math.sin(zeit) * staerke, 0, 0.35);
+      t.beinL.rotation.set(-Math.sin(zeit) * staerke * 0.7, 0, 0); t.beinR.rotation.set(Math.sin(zeit) * staerke * 0.7, 0, 0);
+    }
+
     // --- Alle Blöcke der Welt landen in dieser Liste ---
     // Jeder Block: x/z = Mitte, b = Breite, t = Tiefe, unten/oben = Höhe von Unterkante und Oberkante,
     // art = 'block' (normal), 'lava' (tödlich), 'checkpoint' (Speicherpunkt), 'ziel' (Ende der Obby)
@@ -579,6 +656,7 @@
       { x: KABINE.x, z: KABINE.z, r: 4 },           // Umkleidekabine
       { x: 0, z: 0, r: 4 },                         // Startplatz
       { x: 16, z: 62, r: 13 },                      // Garage
+      { x: -135, z: 20, r: 23 },                    // Gefängnis
     ];
     const SPIELPLATZ = { x1: -26, x2: 13.5, z1: -26, z2: 16 };      // die alte Wiese mit den Blöcken
     const STADT = [{ x1: -86, x2: 86, z1: 134, z2: 206 }, { x1: -86, x2: 86, z1: 214, z2: 286 }];
@@ -598,7 +676,7 @@
       instanz(kugelForm, lampenLicht, x + armX, 3.85, z + armZ, 0.22, 0.15, 0.22, 0, null, false); // Lampe
     }
     const nahAnKnoten = (x, z, r) => [...knotenListe.values()].some(k => Math.hypot(k.x - x, k.z - z) < r);
-    const RAND = HALB + 0.8; // Abstand der Laternen von der Straßenmitte
+    const RAND = HALB + 2.2; // Abstand der Laternen von der Straßenmitte (hinter dem Gehweg)
     for (const l of LAENGS) {
       for (let z = l.z1 + 12, n = 0; z < l.z2; z += 24, n++) {
         const seite = n % 2 ? 1 : -1;
@@ -686,6 +764,119 @@
       }
     }
 
+    // ================= SUPERMÄRKTE =================
+    // Drei Supermärkte in der Stadt. Die Fußgänger-Affen gehen dort einkaufen – du kannst auch hinein.
+    const LAEDEN = [];
+    const ladenWand = new THREE.MeshStandardMaterial({ color: 0xfff3e0, roughness: 0.9 });
+    const schaufenster = new THREE.MeshStandardMaterial({ color: 0x81d4fa, roughness: 0.1, metalness: 0.3, transparent: true, opacity: 0.55 });
+    const fliesen = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.6 });
+    const warenMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 });
+    const WAREN_FARBEN = [0xe53935, 0xfdd835, 0x43a047, 0x1e88e5, 0xff7043, 0x8e24aa, 0xffffff, 0xffb300];
+    function schildBauen(text, breite, hoehe, hintergrund, schrift, x, y, z, drehY) {
+      const lw = document.createElement('canvas');
+      lw.width = 512; lw.height = Math.round(512 * hoehe / breite);
+      const pi = lw.getContext('2d');
+      pi.fillStyle = hintergrund; pi.fillRect(0, 0, lw.width, lw.height);
+      pi.fillStyle = schrift; pi.font = `bold ${Math.round(lw.height * 0.62)}px sans-serif`;
+      pi.textAlign = 'center'; pi.textBaseline = 'middle';
+      pi.fillText(text, lw.width / 2, lw.height * 0.54);
+      const tex = new THREE.CanvasTexture(lw);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(breite, hoehe), new THREE.MeshBasicMaterial({ map: tex }));
+      m.position.set(x, y, z);
+      m.rotation.y = drehY;
+      szene.add(m);
+      return m;
+    }
+    // vorne = -1: die Tür zeigt nach -z (zur Straße davor), vorne = +1: Tür zeigt nach +z
+    function supermarkt(cx, cz, vorne) {
+      const B = 16, T = 12, H = 5, W = 0.3;
+      const fz = cz + vorne * T / 2, hz = cz - vorne * T / 2; // Vorder- und Rückwand
+      neuerBlock(cx, hz, B, W, 0, H, 'block', 0xfff3e0);
+      neuerBlock(cx - B / 2, cz, W, T, 0, H, 'block', 0xfff3e0);
+      neuerBlock(cx + B / 2, cz, W, T, 0, H, 'block', 0xfff3e0);
+      neuerBlock(cx - (B / 4 + 0.75), fz, B / 2 - 1.5, W, 0, H, 'block', 0xfff3e0); // Vorderwand links der Tür
+      neuerBlock(cx + (B / 4 + 0.75), fz, B / 2 - 1.5, W, 0, H, 'block', 0xfff3e0); // Vorderwand rechts der Tür
+      neuerBlock(cx, fz, 3, W, 3, H, 'block', 0xfff3e0);                              // über der Tür
+      neuerBlock(cx, cz, B + 0.6, T + 0.6, H, H + 0.3, 'block', 0x2e7d32);            // grünes Dach
+      for (const s of [-1, 1]) instanz(einheitsKiste, schaufenster, cx + s * (B / 4 + 0.75), 1.9, fz + vorne * 0.17, B / 2 - 2.6, 2.2, 0.05, 0, null, false);
+      flach(fliesen, cx, cz, B - 0.4, T - 0.4, 0.03);
+      // Regale mit bunten Waren (in der Mitte bleibt ein Gang frei)
+      const regalZ = cz - vorne * 1.5;
+      for (const rx of [-5.6, -2.6, 2.6, 5.6]) {
+        neuerBlock(cx + rx, regalZ, 1.0, 5, 0, 1.8, 'block', 0x8d6e63);
+        for (let i = 0; i < 18; i++) {
+          const seite = i % 2 ? 0.55 : -0.55, reihe = Math.floor(i / 6), spalte = Math.floor(i / 2) % 3;
+          instanz(einheitsKiste, warenMaterial, cx + rx + seite, 0.45 + reihe * 0.5, regalZ - 1.6 + spalte * 1.6,
+                  0.25, 0.35, 1.2, 0, WAREN_FARBEN[(i * 7 + Math.abs(rx * 3)) % WAREN_FARBEN.length], false);
+        }
+      }
+      // Kasse mit Kassierer-Affe
+      neuerBlock(cx + 5, fz - vorne * 1.8, 2.6, 0.8, 0, 1.0, 'block', 0x37474f);
+      const kassierer = affenKlon(0x8d6e63);
+      kassierer.gruppe.position.set(cx + 5, 0.5, fz - vorne * 2.7);
+      kassierer.gruppe.rotation.y = vorne > 0 ? 0 : Math.PI; // schaut zur Tür
+      szene.add(kassierer.gruppe);
+      schildBauen('🍌 SUPERMARKT', 8, 1.4, '#2e7d32', '#ffeb3b', cx, H - 0.9, fz + vorne * 0.2, vorne > 0 ? 0 : Math.PI);
+      const laden = {
+        x: cx, z: cz, b: B, t: T, vorne,
+        tuerAussen: { x: cx, z: fz + vorne * 1.4 },  // auf dem Gehweg vor der Tür
+        tuerInnen: { x: cx, z: fz - vorne * 1.3 },
+        innen: [{ x: cx, z: regalZ }, { x: cx - 4.1, z: regalZ }, { x: cx + 4.1, z: regalZ - 1 }, { x: cx - 4.1, z: regalZ + 1.5 }],
+      };
+      LAEDEN.push(laden);
+      return laden;
+    }
+    supermarkt(30, 143, -1);    // an der Querstraße bei z = 130
+    supermarkt(-40, 222.5, -1); // an der Querstraße bei z = 210
+    supermarkt(40, 277.5, 1);   // an der Querstraße bei z = 290
+
+    // ================= GEFÄNGNIS =================
+    // Ein Hof mit hoher Mauer, in der Mitte eine Zelle. In der Rückwand der Zelle ist eine lockere Stelle …
+    const GEF = { x: -135, z: 20 };
+    const MAUER_HOCH = 3.2;
+    const mauerGrau = 0x9e9e9e, zellenGrau = 0x757575;
+    neuerBlock(GEF.x, GEF.z - 13, 26.4, 0.4, 0, MAUER_HOCH, 'block', mauerGrau); // Süden
+    neuerBlock(GEF.x, GEF.z + 13, 26.4, 0.4, 0, MAUER_HOCH, 'block', mauerGrau); // Norden (Tor-Seite)
+    neuerBlock(GEF.x - 13, GEF.z, 0.4, 26.4, 0, MAUER_HOCH, 'block', mauerGrau); // Westen
+    neuerBlock(GEF.x + 13, GEF.z, 0.4, 26.4, 0, MAUER_HOCH, 'block', mauerGrau); // Osten
+    // Stacheldraht oben auf der Mauer (nur zum Anschauen)
+    const drahtMaterial = new THREE.MeshStandardMaterial({ color: 0x424242, metalness: 0.8, roughness: 0.4 });
+    for (const [x, z, b, t] of [[GEF.x, GEF.z - 13, 26.4, 0.1], [GEF.x, GEF.z + 13, 26.4, 0.1], [GEF.x - 13, GEF.z, 0.1, 26.4], [GEF.x + 13, GEF.z, 0.1, 26.4]]) {
+      instanz(einheitsKiste, drahtMaterial, x, MAUER_HOCH + 0.12, z, b, 0.06, t, 0, null, false);
+    }
+    flach(new THREE.MeshStandardMaterial({ color: 0xa1887f, roughness: 1 }), GEF.x, GEF.z, 25.6, 25.6, 0.015); // Hof aus Sand
+    // Tor (Gitterstäbe) in der Nordmauer – geschlossen
+    const gitterMaterial = new THREE.MeshStandardMaterial({ color: 0x37474f, metalness: 0.7, roughness: 0.4 });
+    const stabForm = new THREE.CylinderGeometry(0.05, 0.05, 1, 6);
+    for (let x = -1.6; x <= 1.6; x += 0.4) instanz(stabForm, gitterMaterial, GEF.x + x, MAUER_HOCH / 2, GEF.z + 13.25, 1, MAUER_HOCH, 1);
+    schildBauen('GEFÄNGNIS', 7, 1.2, '#263238', '#ffffff', GEF.x, MAUER_HOCH + 0.9, GEF.z + 13.25, 0);
+
+    // Die Zelle (innen 4,4 × 4,4), Mitte bei ZELLE
+    const ZELLE = { x: GEF.x, z: GEF.z - 6 };
+    const zx = ZELLE.x, zz = ZELLE.z;
+    neuerBlock(zx - 2.4, zz, 0.4, 5.2, 0, 4, 'block', zellenGrau);           // linke Wand
+    neuerBlock(zx + 2.4, zz, 0.4, 5.2, 0, 4, 'block', zellenGrau);           // rechte Wand
+    neuerBlock(zx - 1.6, zz - 2.4, 1.6, 0.4, 0, 4, 'block', zellenGrau);     // Rückwand links
+    neuerBlock(zx + 1.6, zz - 2.4, 1.6, 0.4, 0, 4, 'block', zellenGrau);     // Rückwand rechts
+    neuerBlock(zx, zz - 2.4, 1.6, 0.4, 1.3, 4, 'block', zellenGrau);         // Rückwand über dem Loch
+    const lockereStelle = neuerBlock(zx, zz - 2.4, 1.6, 0.4, 0, 1.3, 'block', 0x8a8a8a); // die lockere Stelle!
+    lockereStelle.mesh.material.color.offsetHSL(0, 0, -0.05);
+    neuerBlock(zx, zz, 5.2, 5.2, 4, 4.3, 'block', 0x616161);                 // Dach
+    const zellenGitter = neuerBlock(zx, zz + 2.4, 4.4, 0.25, 0, 4, 'block', 0x37474f); // Gittertür (fest zu)
+    zellenGitter.mesh.visible = false;                                       // statt einer Wand: Stäbe
+    for (let x = -2.0; x <= 2.0; x += 0.33) instanz(stabForm, gitterMaterial, zx + x, 2, zz + 2.4, 1.4, 4, 1.4);
+    neuerBlock(zx + 1.5, zz + 0.2, 1.1, 2.2, 0, 0.5, 'block', 0x5d4037);     // Bett
+    instanz(einheitsKiste, new THREE.MeshStandardMaterial({ color: 0xeceff1 }), zx + 1.5, 0.55, zz - 0.5, 1.0, 0.1, 0.6); // Kissen
+    // Kisten im Hof (Südwest-Ecke) – ein Weg über die Mauer …
+    neuerBlock(GEF.x - 10.6, GEF.z - 11.4, 1.4, 1.4, 0, 1.0, 'block', 0x8d6e63);  // kleine Kiste (normaler Sprung)
+    neuerBlock(GEF.x - 12.1, GEF.z - 11.4, 1.4, 1.4, 0, 1.9, 'block', 0x795548);  // große Kiste, dann Doppelsprung über die Mauer
+    // Runde, die der Wärter im Hof abläuft
+    const WAERTER_RUNDE = [
+      { x: GEF.x - 9, z: GEF.z - 9.6 }, { x: GEF.x + 9, z: GEF.z - 9.6 },
+      { x: GEF.x + 9, z: GEF.z + 9 }, { x: GEF.x - 9, z: GEF.z + 9 },
+    ];
+
     // --- Stadt: Häuser in Reihen zwischen den Straßen ---
     const HAUS_FARBEN = [0xffccbc, 0xfff9c4, 0xc8e6c9, 0xbbdefb, 0xe1bee7, 0xffe0b2, 0xd7ccc8, 0xf5f5f5, 0xb2dfdb];
     const hausMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
@@ -697,7 +888,8 @@
       for (let x = gebiet.x1 + 8; x < gebiet.x2 - 4; x += 14) {
         for (let z = gebiet.z1 + 8; z < gebiet.z2 - 4; z += 14) {
           const b = zwischen(7, 10), t = zwischen(7, 10);
-          if (nahAnStrasse(x, z, Math.max(b, t) / 2 + 1.5)) continue;
+          if (nahAnStrasse(x, z, Math.max(b, t) / 2 + 2.6)) continue;
+          if (LAEDEN.some(l => Math.abs(l.x - x) < (l.b + b) / 2 + 3 && Math.abs(l.z - z) < (l.t + t) / 2 + 3)) continue;
           const hoch = zufall() < 0.25; // manche sind Hochhäuser
           const h = hoch ? zwischen(12, 22) : zwischen(4, 7);
           const wandFarbe = HAUS_FARBEN[Math.floor(zufall() * HAUS_FARBEN.length)];
@@ -726,10 +918,10 @@
     }
 
     // --- Wald: auf einem Raster verteilt, jedes Feld bekommt vielleicht einen Baum ---
-    const ZELLE = 7;
+    const RASTER = 7; // Wald: Größe eines Rasterfelds
     let baumZahl = 0;
-    for (let zx = WIESE.x1 + ZELLE / 2; zx < WIESE.x2; zx += ZELLE) {
-      for (let zz = WIESE.z1 + ZELLE / 2; zz < WIESE.z2; zz += ZELLE) {
+    for (let zx = WIESE.x1 + RASTER / 2; zx < WIESE.x2; zx += RASTER) {
+      for (let zz = WIESE.z1 + RASTER / 2; zz < WIESE.z2; zz += RASTER) {
         if (zufall() > 0.72) continue;                                  // manche Felder bleiben leer
         const x = zx + zwischen(-2.5, 2.5), z = zz + zwischen(-2.5, 2.5);
         if (x < WIESE.x1 + 1 || x > WIESE.x2 - 1 || z < WIESE.z1 + 1 || z > WIESE.z2 - 1) continue;
@@ -1258,16 +1450,19 @@
       return punkte;
     }
     // Würde das Fahrzeug an dieser Stelle irgendwo anstoßen?
+    let letzterTreffer = null; // was zuletzt angefahren wurde
     function fahrzeugStoesst(f, x, z, richtung) {
       const halb = f.breite / 2;
+      letzterTreffer = 'block';
       for (const [px, pz] of fahrzeugPunkte(f, x, z, richtung)) {
         if (px < WIESE.x1 + halb || px > WIESE.x2 - halb || pz < WIESE.z1 + halb || pz > WIESE.z2 - halb) return true;
         for (const o of bloecke) {
           if (o.art === 'lava' || o.unten > f.hoehe || o.oben < 0.1) continue;
           if (Math.abs(px - o.x) < o.b / 2 + halb && Math.abs(pz - o.z) < o.t / 2 + halb) return true;
         }
-        for (const g of fahrzeuge) if (g !== f && punktInFahrzeug(g, px, pz, halb)) return true;
-        for (const a of verkehr) if (punktInFahrzeug(a, px, pz, halb)) return true; // Autos im Verkehr
+        for (const g of fahrzeuge) if (g !== f && punktInFahrzeug(g, px, pz, halb)) { letzterTreffer = 'fahrzeug'; return true; }
+        for (const a of verkehr) if (punktInFahrzeug(a, px, pz, halb)) { letzterTreffer = 'verkehr'; return true; } // Autos im Verkehr
+        if (polizei.aktiv && punktInFahrzeug(polizei, px, pz, halb)) { letzterTreffer = 'polizei'; return true; }
       }
       return false;
     }
@@ -1355,6 +1550,8 @@
       const nz = f.z + Math.cos(neueRichtung) * f.tempo * dt;
       if (fahrzeugStoesst(f, nx, nz, neueRichtung)) {
         if (Math.abs(f.tempo) > 6) zeigeMeldung('💥 Bumm!', 0.8);
+        if (Math.abs(f.tempo) > 4 && (letzterTreffer === 'verkehr' || letzterTreffer === 'fahrzeug')) straftat('Unfall gebaut!');
+        if (letzterTreffer === 'polizei') straftat('Polizeiauto gerammt!');
         f.tempo *= -0.3; // abprallen
       } else {
         f.x = nx; f.z = nz; f.richtung = neueRichtung;
@@ -1387,7 +1584,7 @@
     // halten an roten Ampeln und bremsen, wenn vor ihnen jemand ist.
     const verkehr = [];
     const AUTO_FARBEN = [0xe53935, 0x1e88e5, 0x43a047, 0xfdd835, 0xffffff, 0x212121, 0x8e24aa, 0xff7043, 0x90a4ae, 0x00897b];
-    const dunkelGlas = new THREE.MeshStandardMaterial({ color: 0x263238, roughness: 0.1, metalness: 0.5 });
+    const dunkelGlas = new THREE.MeshStandardMaterial({ color: 0x263238, roughness: 0.1, metalness: 0.5, transparent: true, opacity: 0.45, name: 'Glas' });
     const radForm = new THREE.CylinderGeometry(1, 1, 1, 14);
     const ARTEN = {
       limo:   { laenge: 4.2, breite: 1.9, hoehe: 1.5, tempo: [10, 14] },
@@ -1421,6 +1618,10 @@
             eigenerLack ??= o.material.clone();
             eigenerLack.color.set(farbe);
             o.material = eigenerLack;
+          }
+          if (o.isMesh && grundName(o.material.name || '').startsWith('Glas') && !o.material.transparent) {
+            o.material = o.material.clone();                 // Scheiben durchsichtig, damit man den Fahrer sieht
+            o.material.transparent = true; o.material.opacity = 0.45;
           }
           if (grundName(o.name).startsWith(`${name}_Rad_`)) {
             raeder.push({ halter: o, r: new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y / 2 || 0.4 });
@@ -1503,6 +1704,7 @@
     // --- Autos verteilen ---
     const strecken = [];
     for (const k of knotenListe.values()) for (const n of k.nachbarn) strecken.push([k, n]);
+    const FAHRER_SITZ = { limo: [0.42, 0.85, 0.1, 0.8], van: [0.45, 1.3, 1.3, 0.85], bus: [0.7, 1.75, 3.9, 0.9], laster: [0.5, 1.75, 2.7, 0.9] };
     const artenMix = ['limo', 'limo', 'limo', 'limo', 'limo', 'limo', 'van', 'van', 'laster', 'bus'];
     for (let versuch = 0; verkehr.length < 48 && versuch < 600; versuch++) {
       const [A, B] = strecken[Math.floor(zufall() * strecken.length)];
@@ -1518,6 +1720,13 @@
       const auto = { art, ...a, x, z, richtung: Math.atan2(d.x, d.z), tempo: 0,
                      maxTempo: zwischen(a.tempo[0], a.tempo[1]), wartet: 0, draengelnBis: 0, hupteUm: 0,
                      farbe, ...verkehrsAutoBauen(art, farbe) };
+      // Ein Affe sitzt am Steuer (links vorne)
+      const [sx, sy, sz, sk] = FAHRER_SITZ[art];
+      auto.fahrer = affenKlon(AFFEN_FELLE[Math.floor(zufall() * AFFEN_FELLE.length)]);
+      sitzen(auto.fahrer.teile);
+      auto.fahrer.gruppe.position.set(sx, sy, sz);
+      auto.fahrer.gruppe.scale.setScalar(sk);
+      auto.gruppe.add(auto.fahrer.gruppe);
       wegPlanen(auto, A, B);
       verkehr.push(auto);
     }
@@ -1526,10 +1735,10 @@
     // nurGleicheRichtung = true: Autos, die quer oder entgegen fahren, werden nicht beachtet
     function freieFahrt(auto, hindernisse, nurGleicheRichtung) {
       const s = Math.sin(auto.richtung), c = Math.cos(auto.richtung);
-      let erlaubt = Infinity, wegenSpieler = false, wegenAuto = false, querAuto = false;
+      let erlaubt = Infinity, wegenSpieler = false, wegenAuto = false, querAuto = false, verursacher = null;
       for (const o of hindernisse) {
         if (o === auto) continue;
-        const gleicheRichtung = o.istSpieler || Math.cos(o.richtung - auto.richtung) > 0.7;
+        const gleicheRichtung = o.istSpieler || o.immer || Math.cos(o.richtung - auto.richtung) > 0.7; // Fußgänger immer beachten
         if (nurGleicheRichtung && !gleicheRichtung) continue;
         const dx = o.x - auto.x, dz = o.z - auto.z;
         const vorne = dx * s + dz * c;
@@ -1538,17 +1747,26 @@
         if (Math.abs(seitlich) > (auto.breite + o.breite) / 2 + 0.3) continue;
         const luecke = vorne - (auto.laenge + o.laenge) / 2;
         const v = Math.sqrt(2 * 7 * Math.max(0, luecke - 2.5)); // so schnell, dass es noch rechtzeitig hält
-        if (v < erlaubt) { erlaubt = v; wegenSpieler = !!o.istSpieler; wegenAuto = !o.istSpieler; querAuto = !gleicheRichtung; }
+        if (v < erlaubt) { erlaubt = v; wegenSpieler = !!o.istSpieler; wegenAuto = !o.istSpieler && !o.immer; querAuto = !gleicheRichtung; verursacher = o; }
       }
-      return { erlaubt, wegenSpieler, wegenAuto, querAuto };
+      return { erlaubt, wegenSpieler, wegenAuto, querAuto, verursacher };
     }
 
     // Ein Bild lang den ganzen Verkehr bewegen
     function verkehrBewegen(dt) {
       // Alles, wovor Autos bremsen: andere Autos, die Fahrzeuge aus der Garage und der Affe
-      const spielerHindernisse = fahrzeuge.map(f => ({ x: f.x, z: f.z, laenge: f.laenge, breite: f.breite, istSpieler: true }));
-      if (!aktuellesFahrzeug) spielerHindernisse.push({ x: affe.position.x, z: affe.position.z, laenge: 1, breite: 1, istSpieler: true });
+      const spielerHindernisse = fahrzeuge.map(f => ({ x: f.x, z: f.z, laenge: f.laenge, breite: f.breite, istSpieler: true,
+        grund: f === aktuellesFahrzeug ? 'Verkehr blockiert!' : 'Falsch geparkt!' }));
+      if (!aktuellesFahrzeug) spielerHindernisse.push({ x: affe.position.x, z: affe.position.z, laenge: 1, breite: 1, istSpieler: true, grund: 'Verkehr blockiert!' });
+      for (const g of fussgaenger) if (g.zustand !== 'einkaufen') spielerHindernisse.push({ x: g.x, z: g.z, laenge: 0.8, breite: 0.8, immer: true });
+      if (polizei.aktiv) {
+        spielerHindernisse.push({ x: polizei.x, z: polizei.z, laenge: polizei.laenge, breite: polizei.breite, immer: true });
+        if (polizei.laeufer.gruppe.visible) spielerHindernisse.push({ x: polizei.laeufer.x, z: polizei.laeufer.z, laenge: 0.8, breite: 0.8, immer: true });
+      }
+      let stoertGrund = null;
       for (const auto of verkehr) {
+        // Fahrer-Affen nur zeigen, wenn das Auto nah genug ist (spart Arbeit)
+        auto.fahrer.gruppe.visible = (auto.x - kamera.position.x) ** 2 + (auto.z - kamera.position.z) ** 2 < 70 ** 2;
         let wunsch = auto.maxTempo;
         const ziel = auto.weg[auto.ziel];
         const bisZiel = Math.hypot(ziel.x - auto.x, ziel.z - auto.z);
@@ -1568,6 +1786,8 @@
         }
         // Abstand halten
         const frei = freieFahrt(auto, verkehr.concat(spielerHindernisse), spielZeit < auto.draengelnBis);
+        // Wird das Auto nur wegen dir (oder deinem geparkten Fahrzeug) aufgehalten?
+        if (frei.wegenSpieler && frei.erlaubt < 1 && wunsch > 3) stoertGrund = frei.verursacher.grund;
         wunsch = Math.min(wunsch, frei.erlaubt);
         // Wenn ein Auto von der Seite den Weg blockiert (und das andere auf dieses wartet):
         // nach 4 Sekunden vorsichtig weiterfahren. Hinter einem Auto in gleicher Richtung wird brav gewartet.
@@ -1611,6 +1831,396 @@
         auto.gruppe.rotation.y = auto.richtung;
         for (const r of auto.raeder) r.halter.rotation.x += (auto.tempo * dt) / r.r;
       }
+      // Hält jemand den Verkehr länger als 7 Sekunden auf? Dann ruft jemand die Polizei.
+      stoerZeit = stoertGrund ? stoerZeit + dt : Math.max(0, stoerZeit - dt);
+      if (stoerZeit > 7) { stoerZeit = 0; straftat(stoertGrund); }
+    }
+    let stoerZeit = 0;
+
+    // ================= FUSSGÄNGER-AFFEN =================
+    // Sie laufen auf den Gehwegen, biegen an Kreuzungen zufällig ab und gehen in Supermärkte einkaufen.
+    const fussgaenger = [];
+    const tueteMaterial = new THREE.MeshStandardMaterial({ color: 0xd7b98e, roughness: 1 });
+    function fussWegPlanen(f, A, B) {
+      const d = richtungVon(A, B), r = rechtsVon(d);
+      const nachbarn = B.nachbarn.filter(n => n !== A);
+      const N = nachbarn.length ? nachbarn[Math.floor(Math.random() * nachbarn.length)] : A;
+      const d2 = richtungVon(B, N), r2 = rechtsVon(d2);
+      f.weg = [
+        { x: B.x - d.x * (B.hw + 1) + r.x * GEHWEG, z: B.z - d.z * (B.hw + 1) + r.z * GEHWEG },    // Ecke vor der Kreuzung
+        { x: B.x + d2.x * (B.hw + 1) + r2.x * GEHWEG, z: B.z + d2.z * (B.hw + 1) + r2.z * GEHWEG }, // drüben weiter
+      ];
+      f.ziel = 0; f.von = A; f.nach = B; f.danach = N;
+    }
+    const inDerStadt = k => Math.abs(k.x) <= 90 && k.z >= 130 && k.z <= 290;
+    for (let versuch = 0; fussgaenger.length < 26 && versuch < 500; versuch++) {
+      const [A, B] = strecken[Math.floor(zufall() * strecken.length)];
+      if (fussgaenger.length < 20 && !(inDerStadt(A) && inDerStadt(B))) continue; // die meisten in der Stadt
+      const d = richtungVon(A, B), r = rechtsVon(d);
+      const laenge = Math.hypot(B.x - A.x, B.z - A.z) - A.hw - B.hw - 4;
+      const s = A.hw + 2 + zufall() * laenge;
+      const f = {
+        x: A.x + d.x * s + r.x * GEHWEG, z: A.z + d.z * s + r.z * GEHWEG, richtung: Math.atan2(d.x, d.z),
+        tempo: zwischen(1.3, 2.0), zustand: 'laufen', ladenPause: zwischen(0, 15), laufZeit: zufall() * 10,
+        ...affenKlon(AFFEN_FELLE[Math.floor(zufall() * AFFEN_FELLE.length)]),
+      };
+      f.groesse = zwischen(0.8, 1.0);
+      f.gruppe.scale.setScalar(f.groesse);
+      f.tuete = new THREE.Mesh(einheitsKiste, tueteMaterial);
+      f.tuete.scale.set(0.22, 0.28, 0.14);
+      f.tuete.position.set(0, -0.6, 0);
+      f.tuete.visible = false;
+      f.teile.armR.add(f.tuete);
+      szene.add(f.gruppe);
+      fussWegPlanen(f, A, B);
+      fussgaenger.push(f);
+    }
+
+    // Einen Fußgänger umwerfen (wenn ihn jemand anfährt). Nach 3 Sekunden steht er wieder auf.
+    function umwerfen(f) {
+      if (f.zustand === 'liegt') return;
+      f.vorher = f.zustand;
+      f.zustand = 'liegt';
+      f.aufstehenUm = spielZeit + 3;
+    }
+
+    function fussgaengerBewegen(dt) {
+      for (const f of fussgaenger) {
+        // Weit weg? Dann nicht zeichnen (spart Arbeit) – bewegen tun sie sich trotzdem
+        f.gruppe.visible = (f.x - kamera.position.x) ** 2 + (f.z - kamera.position.z) ** 2 < 85 ** 2;
+        if (f.zustand === 'liegt') {
+          f.figur.rotation.x = -Math.PI / 2;  // liegt auf dem Rücken
+          f.gruppe.position.set(f.x, 0.25, f.z);
+          if (spielZeit > f.aufstehenUm) { f.zustand = f.vorher; f.figur.rotation.x = 0; }
+          continue;
+        }
+        if (f.zustand === 'einkaufen') {     // steht im Laden und sucht etwas aus
+          laufAnimation(f.teile, 0, 0);
+          if (spielZeit > f.fertigUm) {
+            f.zustand = 'raus';
+            f.tuete.visible = true;
+            f.weg = [f.laden.tuerInnen, f.laden.tuerAussen, f.abzweig];
+            f.ziel = 0;
+          }
+          f.gruppe.position.set(f.x, 0.5 * f.groesse, f.z);
+          continue;
+        }
+        // Am Supermarkt vorbei? Dann vielleicht hineingehen
+        if (f.zustand === 'laufen' && spielZeit > f.ladenPause) {
+          for (const l of LAEDEN) {
+            if (Math.hypot(f.x - l.tuerAussen.x, f.z - l.tuerAussen.z) < 4.5) {
+              f.gemerkt = { weg: f.weg, ziel: f.ziel, von: f.von, nach: f.nach, danach: f.danach };
+              f.abzweig = { x: f.x, z: f.z };
+              f.laden = l;
+              f.weg = [l.tuerAussen, l.tuerInnen, l.innen[Math.floor(Math.random() * l.innen.length)]];
+              f.ziel = 0;
+              f.zustand = 'zumLaden';
+              break;
+            }
+          }
+        }
+        // Am Weg entlanglaufen
+        let strecke = f.tempo * dt;
+        const altX = f.x, altZ = f.z;
+        while (strecke > 0) {
+          const p = f.weg[f.ziel];
+          const d = Math.hypot(p.x - f.x, p.z - f.z);
+          if (d > strecke) { f.x += (p.x - f.x) / d * strecke; f.z += (p.z - f.z) / d * strecke; break; }
+          f.x = p.x; f.z = p.z; strecke -= d; f.ziel++;
+          if (f.ziel < f.weg.length) continue;
+          if (f.zustand === 'laufen') fussWegPlanen(f, f.nach, f.danach);
+          else if (f.zustand === 'zumLaden') { f.zustand = 'einkaufen'; f.fertigUm = spielZeit + zwischen(4, 9); break; }
+          else if (f.zustand === 'raus') { Object.assign(f, f.gemerkt); f.zustand = 'laufen'; f.ladenPause = spielZeit + 40; }
+        }
+        if (Math.hypot(f.x - altX, f.z - altZ) > 0.0005) {
+          const neu = Math.atan2(f.x - altX, f.z - altZ);
+          let u = neu - f.richtung; u = Math.atan2(Math.sin(u), Math.cos(u));
+          f.richtung += u * Math.min(1, 10 * dt);
+        }
+        f.laufZeit += dt * 10;
+        if (f.gruppe.visible) laufAnimation(f.teile, f.laufZeit, 0.6);
+        f.gruppe.position.set(f.x, 0.5 * f.groesse + Math.abs(Math.sin(f.laufZeit)) * 0.03, f.z);
+        f.gruppe.rotation.y = f.richtung;
+      }
+    }
+
+    // ================= POLIZEI =================
+    // Wer etwas Verbotenes macht, wird von der Polizei gesucht ("Fahndung").
+    // Das Polizeiauto fährt über die Straßen zu dir. Bist du zu Fuß, steigt der Polizei-Affe aus und rennt hinterher.
+    const polizei = {
+      aktiv: false, art: 'limo', laenge: 4.2, breite: 1.9, hoehe: 1.5, x: 0, z: 0, richtung: 0, tempo: 0,
+      zustand: 'fahren', punkte: [], planUm: 0, entkommen: 0,
+      ...verkehrsAutoBauen('limo', 0xffffff),
+    };
+    {
+      // Blaue Streifen, Blaulicht auf dem Dach und "POLIZEI" an der Seite
+      const blau = new THREE.MeshStandardMaterial({ color: 0x1565c0, roughness: 0.4 });
+      teilVon(polizei.gruppe, blau, 1.92, 0.22, 4.22, 0, 0.72, 0);
+      polizei.blaulicht = new THREE.MeshStandardMaterial({ color: 0x2979ff, emissive: 0x2979ff, emissiveIntensity: 3 });
+      polizei.rotlicht = new THREE.MeshStandardMaterial({ color: 0xff1744, emissive: 0xff1744, emissiveIntensity: 3 });
+      teilVon(polizei.gruppe, polizei.blaulicht, 0.5, 0.18, 0.35, -0.35, 1.58, -0.25);
+      teilVon(polizei.gruppe, polizei.rotlicht, 0.5, 0.18, 0.35, 0.35, 1.58, -0.25);
+      for (const seite of [-1, 1]) {
+        const t = schildBauen('POLIZEI', 2.2, 0.45, '#ffffff', '#1565c0', seite * 0.97, 0.75, 0, seite * Math.PI / 2);
+        szene.remove(t); polizei.gruppe.add(t);
+      }
+      polizei.fahrer = affenKlon(0x3b2314, true);
+      sitzen(polizei.fahrer.teile);
+      polizei.fahrer.gruppe.position.set(0.42, 0.85, 0.1);
+      polizei.fahrer.gruppe.scale.setScalar(0.8);
+      polizei.gruppe.add(polizei.fahrer.gruppe);
+      polizei.gruppe.visible = false;
+      // Der Polizist zu Fuß (taucht auf, wenn er aussteigt)
+      polizei.laeufer = affenKlon(0x3b2314, true);
+      polizei.laeufer.gruppe.visible = false;
+      szene.add(polizei.laeufer.gruppe);
+    }
+
+    let fahndung = null;       // null = niemand sucht dich, sonst { grund }
+    let straftatPause = 0;
+    let imGefaengnis = false;
+    const fahndungsAnzeige = document.getElementById('fahndung');
+
+    // Sirene: ein Ton, der zwischen zwei Höhen hin und her springt ("Tatü-Tata")
+    let sirene = null;
+    function sireneAn() {
+      try {
+        tonMaschine ??= new AudioContext();
+        if (sirene) return;
+        const osz = tonMaschine.createOscillator();
+        osz.type = 'triangle';
+        const laut = tonMaschine.createGain();
+        laut.gain.value = 0;
+        osz.connect(laut).connect(tonMaschine.destination);
+        osz.start();
+        sirene = { osz, laut };
+      } catch (e) {}
+    }
+    function sireneAus() {
+      if (!sirene) return;
+      try { sirene.osz.stop(); } catch (e) {}
+      sirene = null;
+    }
+
+    // Kürzester Weg über die Kreuzungen (Breitensuche)
+    function naechsterKnoten(x, z) {
+      let bester = null, abstand = Infinity;
+      for (const k of knotenListe.values()) { const d = Math.hypot(k.x - x, k.z - z); if (d < abstand) { abstand = d; bester = k; } }
+      return bester;
+    }
+    function route(start, ziel) {
+      const herkunft = new Map([[start, null]]);
+      const schlange = [start];
+      while (schlange.length) {
+        const k = schlange.shift();
+        if (k === ziel) break;
+        for (const n of k.nachbarn) if (!herkunft.has(n)) { herkunft.set(n, k); schlange.push(n); }
+      }
+      const weg = [];
+      for (let k = ziel; k; k = herkunft.get(k)) weg.unshift(k);
+      return weg;
+    }
+
+    // Etwas Verbotenes ist passiert!
+    function straftat(grund) {
+      if (imGefaengnis || spielZeit < straftatPause) return;
+      straftatPause = spielZeit + 3;
+      if (fahndung) { fahndung.grund = grund; zeigeMeldung('🚨 ' + grund, 2); return; }
+      fahndung = { grund };
+      polizeiStarten();
+      zeigeMeldung('🚨 ' + grund + ' Die Polizei kommt!', 3);
+    }
+
+    function polizeiStarten() {
+      const p = affe.position;
+      // Startpunkt: eine Kreuzung, die nicht zu nah und nicht zu weit weg ist
+      const knoten = [...knotenListe.values()].sort((a, b) =>
+        Math.abs(Math.hypot(a.x - p.x, a.z - p.z) - 90) - Math.abs(Math.hypot(b.x - p.x, b.z - p.z) - 90));
+      const start = knoten.find(k => Math.hypot(k.x - p.x, k.z - p.z) > 45) || knoten[0];
+      Object.assign(polizei, { aktiv: true, x: start.x, z: start.z, tempo: 0, zustand: 'fahren', punkte: [], planUm: 0, entkommen: 0 });
+      polizei.richtung = Math.atan2(p.x - start.x, p.z - start.z);
+      polizei.gruppe.visible = true;
+      polizei.laeufer.gruppe.visible = false;
+      sireneAn();
+    }
+    function polizeiBeenden() {
+      polizei.aktiv = false;
+      polizei.gruppe.visible = false;
+      polizei.laeufer.gruppe.visible = false;
+      fahndung = null;
+      sireneAus();
+    }
+
+    // Wo ist der Spieler gerade (zu Fuß oder im Fahrzeug)?
+    function spielerOrt() {
+      const f = aktuellesFahrzeug;
+      return f ? { x: f.x, z: f.z, laenge: f.laenge, imAuto: true } : { x: affe.position.x, z: affe.position.z, laenge: 1, imAuto: false };
+    }
+    // Ist für einen Polizisten zu Fuß an dieser Stelle frei? (Bäume, Wände)
+    function frei(x, z) {
+      return !bloecke.some(o => o.art !== 'lava' && o.unten < 1 && o.oben > 0.1 &&
+        Math.abs(x - o.x) < o.b / 2 + 0.4 && Math.abs(z - o.z) < o.t / 2 + 0.4);
+    }
+
+    function polizeiBewegen(dt) {
+      if (!polizei.aktiv) { fahndungsAnzeige.classList.remove('offen'); return; }
+      const ziel = spielerOrt();
+      // Blaulicht blinkt
+      const an = Math.floor(spielZeit * 4) % 2 === 0;
+      polizei.blaulicht.emissiveIntensity = an ? 4 : 0.2;
+      polizei.rotlicht.emissiveIntensity = an ? 0.2 : 4;
+
+      if (polizei.zustand === 'fahren') {
+        const direkt = Math.hypot(ziel.x - polizei.x, ziel.z - polizei.z);
+        let zielPunkt;
+        if (direkt < 40) {
+          zielPunkt = ziel; // nah dran: direkt hinfahren
+        } else {
+          if (spielZeit > polizei.planUm) { // Weg über die Kreuzungen planen
+            polizei.planUm = spielZeit + 1;
+            polizei.punkte = route(naechsterKnoten(polizei.x, polizei.z), naechsterKnoten(ziel.x, ziel.z));
+            // Liegt die erste Kreuzung schon hinter uns (wir sind näher an der zweiten)? Dann überspringen.
+            const [a, b] = polizei.punkte;
+            if (b && Math.hypot(b.x - polizei.x, b.z - polizei.z) < Math.hypot(b.x - a.x, b.z - a.z)) polizei.punkte.shift();
+          }
+          while (polizei.punkte.length && Math.hypot(polizei.punkte[0].x - polizei.x, polizei.punkte[0].z - polizei.z) < 4) polizei.punkte.shift();
+          zielPunkt = polizei.punkte[0] || ziel;
+        }
+        // Lenken und Gas geben
+        const wunsch = Math.atan2(zielPunkt.x - polizei.x, zielPunkt.z - polizei.z);
+        let u = wunsch - polizei.richtung; u = Math.atan2(Math.sin(u), Math.cos(u));
+        polizei.richtung = Math.atan2(Math.sin(polizei.richtung + THREE.MathUtils.clamp(u, -2.5 * dt, 2.5 * dt)),
+                                      Math.cos(polizei.richtung + THREE.MathUtils.clamp(u, -2.5 * dt, 2.5 * dt)));
+        const wunschTempo = direkt < 40 ? Math.min(22, Math.max(5, direkt * 1.2)) : 22;
+        polizei.tempo += THREE.MathUtils.clamp(wunschTempo * Math.max(0.3, Math.cos(u)) - polizei.tempo, -15 * dt, 8 * dt);
+        polizei.x = THREE.MathUtils.clamp(polizei.x + Math.sin(polizei.richtung) * polizei.tempo * dt, WIESE.x1 + 2, WIESE.x2 - 2);
+        polizei.z = THREE.MathUtils.clamp(polizei.z + Math.cos(polizei.richtung) * polizei.tempo * dt, WIESE.z1 + 2, WIESE.z2 - 2);
+        if (ziel.imAuto && direkt < (polizei.laenge + ziel.laenge) / 2 + 0.8) { verhaften(); return; }
+        if (!ziel.imAuto && direkt < 12) {
+          // Aussteigen und hinterherrennen!
+          polizei.zustand = 'rennen';
+          polizei.tempo = 0;
+          polizei.laeufer.gruppe.visible = true;
+          polizei.laeufer.x = polizei.x + Math.cos(polizei.richtung) * 1.6;
+          polizei.laeufer.z = polizei.z - Math.sin(polizei.richtung) * 1.6;
+          zeigeMeldung('👮 Stehen bleiben!', 1.5);
+        }
+      } else if (polizei.zustand === 'rennen' || polizei.zustand === 'zurueck') {
+        const l = polizei.laeufer;
+        const hin = polizei.zustand === 'rennen' ? ziel : polizei;
+        const abstand = Math.hypot(hin.x - l.x, hin.z - l.z);
+        if (polizei.zustand === 'rennen' && !ziel.imAuto && abstand < 1.2) { verhaften(); return; }
+        if (polizei.zustand === 'rennen' && ziel.imAuto) polizei.zustand = 'zurueck'; // Spieler fährt weg → zurück zum Auto
+        if (polizei.zustand === 'zurueck' && abstand < 1.8) {
+          polizei.zustand = 'fahren'; l.gruppe.visible = false;
+        } else {
+          // Hinrennen und Hindernissen ausweichen
+          const wunsch = Math.atan2(hin.x - l.x, hin.z - l.z);
+          const schritt = 7 * dt;
+          for (const versatz of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8]) {
+            const w = wunsch + versatz, nx = l.x + Math.sin(w) * schritt, nz = l.z + Math.cos(w) * schritt;
+            if (frei(nx, nz)) { l.x = nx; l.z = nz; l.richtung = w; break; }
+          }
+          l.zeit = (l.zeit || 0) + dt * 16;
+          laufAnimation(l.teile, l.zeit, 1.0);
+          l.gruppe.position.set(l.x, 0.5, l.z);
+          l.gruppe.rotation.y = l.richtung || 0;
+        }
+      }
+      polizei.gruppe.position.set(polizei.x, 0, polizei.z);
+      polizei.gruppe.rotation.y = polizei.richtung;
+      for (const r of polizei.raeder) r.halter.rotation.x += (polizei.tempo * dt) / r.r;
+
+      // Sirene: je näher, desto lauter
+      const nah = Math.min(Math.hypot(ziel.x - polizei.x, ziel.z - polizei.z),
+        polizei.laeufer.gruppe.visible ? Math.hypot(ziel.x - polizei.laeufer.x, ziel.z - polizei.laeufer.z) : Infinity);
+      if (sirene) {
+        sirene.osz.frequency.value = Math.floor(spielZeit * 1.6) % 2 ? 587 : 440;
+        sirene.laut.gain.value = 0.07 * THREE.MathUtils.clamp(1 - nah / 160, 0.05, 1);
+      }
+      // Weit genug weg? Dann bist du entkommen!
+      polizei.entkommen = nah > 90 ? polizei.entkommen + dt : 0;
+      if (polizei.entkommen > 2.5) {
+        polizeiBeenden();
+        zeigeMeldung('😎 Entkommen! Die Polizei gibt auf.', 3);
+        return;
+      }
+      fahndungsAnzeige.innerHTML = `🚨 FAHNDUNG: ${fahndung.grund} <small>Polizei ${Math.round(nah)} m · ab 90 m bist du entkommen</small>`;
+      fahndungsAnzeige.classList.add('offen');
+    }
+
+    // ================= GEFÄNGNIS-REGELN =================
+    let grabZaehler = 0;
+    const GRAB_NOETIG = 8;
+    const waerter = { ...affenKlon(0x5d4037, true), x: WAERTER_RUNDE[0].x, z: WAERTER_RUNDE[0].z, ziel: 1, richtung: 0, zeit: 0 };
+    waerter.gruppe.position.set(waerter.x, 0.5, waerter.z);
+    szene.add(waerter.gruppe);
+    const inZelle = p => Math.abs(p.x - ZELLE.x) < 2.25 && p.z > ZELLE.z - 2.25 && p.z < ZELLE.z + 2.3;
+    const imGefaengnisHof = p => Math.abs(p.x - GEF.x) < 13 && Math.abs(p.z - GEF.z) < 13;
+
+    function lockereStelleZu() { // Wand wieder zumauern
+      if (!bloecke.includes(lockereStelle)) bloecke.push(lockereStelle);
+      lockereStelle.mesh.visible = true;
+      grabZaehler = 0;
+    }
+    function inDieZelle(text) {
+      affe.position.set(ZELLE.x - 0.5, 0.5, ZELLE.z + 0.6);
+      fallTempo = 0;
+      blickRichtung = Math.PI;
+      kameraWinkel = 0; kameraNeigung = 0.6;
+      imGefaengnis = true;
+      zeigeMeldung(text, 3);
+    }
+    function verhaften() {
+      if (aktuellesFahrzeug) aussteigen();
+      polizeiBeenden();
+      punkte = Math.max(0, punkte - 20);
+      punkteZeigen();
+      lockereStelleZu();
+      inDieZelle('🚔 Verhaftet! −20 Punkte. Ab ins Gefängnis!');
+    }
+    // E-Taste in der Zelle: an der lockeren Stelle graben
+    function graben(p) {
+      if (!imGefaengnis || !bloecke.includes(lockereStelle)) return false;
+      if (Math.hypot(p.x - lockereStelle.x, p.z - lockereStelle.z) > 1.9) return false;
+      grabZaehler++;
+      hupen(90); // dumpfes "Klonk"
+      if (grabZaehler >= GRAB_NOETIG) {
+        bloecke.splice(bloecke.indexOf(lockereStelle), 1);
+        lockereStelle.mesh.visible = false;
+        zeigeMeldung('🕳️ Ein Loch! Pass auf den Wärter auf …', 3);
+      }
+      return true;
+    }
+    function gefaengnisBewegen(dt, p) {
+      // Der Wärter läuft seine Runde im Hof
+      const z = WAERTER_RUNDE[waerter.ziel];
+      const d = Math.hypot(z.x - waerter.x, z.z - waerter.z);
+      if (d < 0.1) waerter.ziel = (waerter.ziel + 1) % WAERTER_RUNDE.length;
+      else {
+        const s = Math.min(d, 2.2 * dt);
+        waerter.richtung = Math.atan2(z.x - waerter.x, z.z - waerter.z);
+        waerter.x += (z.x - waerter.x) / d * s; waerter.z += (z.z - waerter.z) / d * s;
+      }
+      waerter.zeit += dt * 7;
+      laufAnimation(waerter.teile, waerter.zeit, 0.5);
+      waerter.gruppe.position.set(waerter.x, 0.5, waerter.z);
+      waerter.gruppe.rotation.y = waerter.richtung;
+      if (!imGefaengnis || aktuellesFahrzeug) return;
+      // Sieht der Wärter dich außerhalb der Zelle? (vor ihm, nicht weiter als 6 m)
+      const dx = p.x - waerter.x, dz = p.z - waerter.z, abstand = Math.hypot(dx, dz);
+      const vorIhm = (dx * Math.sin(waerter.richtung) + dz * Math.cos(waerter.richtung)) / (abstand || 1);
+      if (!inZelle(p) && imGefaengnisHof(p) && abstand < 6 && vorIhm > 0.3) {
+        inDieZelle('👮 Erwischt! Zurück in die Zelle!');
+        return;
+      }
+      // Über die Mauer raus? Ausgebrochen!
+      if (!imGefaengnisHof(p) && p.y < 3) {
+        imGefaengnis = false;
+        zeigeMeldung('🏃 Ausgebrochen!', 2);
+        straftatPause = 0;
+        straftat('Aus dem Gefängnis ausgebrochen!');
+      }
     }
 
     // ================= MINI-KARTE =================
@@ -1633,12 +2243,22 @@
       for (const h of haeuser) p.fillRect(kx2(h.x - h.b / 2), kz2(h.z + h.t / 2), h.b * massstab, h.t * massstab);
       p.fillStyle = '#ffca28'; p.fillRect(kx2(GARAGE.x - 8), kz2(GARAGE.z + 5), 16 * massstab, 10 * massstab);
       p.fillStyle = '#f48fb1'; p.fillRect(kx2(KABINE.x - 1.6), kz2(KABINE.z + 1.6), 3.2 * massstab + 1, 3.2 * massstab + 1);
+      p.fillStyle = '#ff9800'; // Supermärkte
+      for (const l of LAEDEN) p.fillRect(kx2(l.x - l.b / 2), kz2(l.z + l.t / 2), l.b * massstab, l.t * massstab);
+      p.fillStyle = '#37474f'; p.strokeStyle = '#ffffff'; p.lineWidth = 1; // Gefängnis
+      p.fillRect(kx2(GEF.x - 13), kz2(GEF.z + 13), 26 * massstab, 26 * massstab);
+      p.strokeRect(kx2(GEF.x - 13), kz2(GEF.z + 13), 26 * massstab, 26 * massstab);
     }
     function karteMalen(blick) {
       kartenPinsel.drawImage(kartenHintergrund, 0, 0);
       for (const a of verkehr) { // Autos als kleine Punkte
         kartenPinsel.fillStyle = '#' + a.farbe.toString(16).padStart(6, '0');
         kartenPinsel.fillRect(kx2(a.x) - 1.5, kz2(a.z) - 1.5, 3, 3);
+      }
+      // Polizei: blinkender Punkt
+      if (polizei.aktiv) {
+        kartenPinsel.fillStyle = Math.floor(spielZeit * 4) % 2 ? '#2979ff' : '#ff1744';
+        kartenPinsel.beginPath(); kartenPinsel.arc(kx2(polizei.x), kz2(polizei.z), 4.5, 0, Math.PI * 2); kartenPinsel.fill();
       }
       // Der Affe (oder sein Fahrzeug) als Pfeil
       const x = kx2(affe.position.x), y = kz2(affe.position.z);
@@ -1671,12 +2291,15 @@
       plattformenBewegen(spielZeit); // fahrende Plattformen der Obby
       verkehrBewegen(dt);            // alle Autos auf den Straßen
       ampelnZeigen(spielZeit);       // Ampeln umschalten
+      fussgaengerBewegen(dt);        // Fußgänger-Affen
+      polizeiBewegen(dt);            // Polizei (wenn jemand gesucht wird)
 
       // E-Taste: einsteigen oder aussteigen
       if (eGedrueckt) {
         eGedrueckt = false;
-        if (aktuellesFahrzeug) aussteigen();
-        else { const f = naechstesFahrzeug(p); if (f) einsteigen(f); }
+        if (!aktuellesFahrzeug && graben(p)) { /* im Gefängnis: an der Wand graben */ }
+        else if (aktuellesFahrzeug) aussteigen();
+        else if (!imGefaengnis) { const f = naechstesFahrzeug(p); if (f) einsteigen(f); }
       }
 
       let dx = 0, dz = 0, amBoden = true, unter = { block: null };
@@ -1685,7 +2308,24 @@
         // ===== FAHREN =====
         const f = aktuellesFahrzeug;
         if (sprungGedrueckt) { hupen(f.hupe); sprungGedrueckt = false; } // Leertaste = hupen
+        if (f.vorherX === undefined) { f.vorherX = f.x; f.vorherZ = f.z; }
         fahren(f, dt);
+        // --- Verbotenes beim Fahren? ---
+        // Über eine rote Ampel in die Kreuzung gefahren?
+        for (const k of knotenListe.values()) {
+          if (!k.ampel) continue;
+          const drin = Math.abs(f.x - k.x) < k.hw && Math.abs(f.z - k.z) < k.hw;
+          const vorherDrin = Math.abs(f.vorherX - k.x) < k.hw && Math.abs(f.vorherZ - k.z) < k.hw;
+          if (drin && !vorherDrin && Math.abs(f.tempo) > 2) {
+            const achse = Math.abs(Math.sin(f.richtung)) > 0.7 ? 'ew' : 'ns';
+            if (ampelFarbe(k, achse, spielZeit) === 'rot') straftat('Über Rot gefahren!');
+          }
+        }
+        f.vorherX = f.x; f.vorherZ = f.z;
+        // Einen Fußgänger angefahren?
+        for (const g of fussgaenger) {
+          if (g.zustand !== 'liegt' && Math.abs(f.tempo) > 2 && punktInFahrzeug(f, g.x, g.z, 0.3)) { umwerfen(g); straftat('Fußgänger angefahren!'); }
+        }
         // Kamera dreht sich langsam hinter das Fahrzeug, sobald es fährt
         if (Math.abs(f.tempo) > 1 && !tasten.ArrowLeft && !tasten.ArrowRight) {
           let unterschied = (f.richtung + Math.PI) - kameraWinkel;
@@ -1772,9 +2412,16 @@
           armLinks.rotation.z = -0.35; armRechts.rotation.z = 0.35;
         }
 
-        // Hinweis, wenn ein Fahrzeug in der Nähe ist
-        const nah = naechstesFahrzeug(p);
-        if (nah) {
+        // Hinweis, wenn ein Fahrzeug in der Nähe ist (oder im Gefängnis)
+        const nah = imGefaengnis ? null : naechstesFahrzeug(p);
+        if (imGefaengnis && imGefaengnisHof(p)) {
+          const loch = !bloecke.includes(lockereStelle);
+          const amStein = Math.hypot(p.x - lockereStelle.x, p.z - lockereStelle.z) < 1.9;
+          fahrInfo.innerHTML = loch ? '<b>🕳️ Durchs Loch – und dann über die Mauer!</b><small>Achte auf den Wärter. Die Kisten in der Ecke helfen …</small>'
+            : amStein ? `<b>⛏️ E drücken zum Graben (${grabZaehler}/${GRAB_NOETIG})</b>`
+            : '<b>🔒 Du bist im Gefängnis!</b><small>Tipp: Ein Stück der Rückwand sieht locker aus …</small>';
+          fahrInfo.classList.add('offen');
+        } else if (nah) {
           fahrInfo.innerHTML = `<b>Drücke E zum Einsteigen: ${nah.emoji} ${nah.name}</b>`;
           fahrInfo.classList.add('offen');
         } else {
@@ -1806,6 +2453,7 @@
         startPunkt.set(0, 0.5, 0);   // Startpunkt wieder auf die Wiese
         neuStart('Zurück zum Start! 🏁');
       }
+      gefaengnisBewegen(dt, p);   // Wärter, erwischt werden, ausbrechen
       if (spielZeit > meldungBis) meldung.style.opacity = 0;
 
       karteMalen(aktuellesFahrzeug ? aktuellesFahrzeug.richtung : blickRichtung); // Mini-Karte
