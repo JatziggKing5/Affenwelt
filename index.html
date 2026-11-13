@@ -180,6 +180,22 @@
       background: rgba(0,0,0,0.8); color: #fff; outline: none;
     }
     #chatEingabe button { font-size: 20px; border: none; border-radius: 10px; background: #ffd600; padding: 0 14px; cursor: pointer; }
+    /* --- Gespräch mit einem Affen (wie in GTA) --- */
+    #gespraech {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 23; display: none;
+      width: min(460px, calc(100vw - 24px)); background: rgba(0,0,0,0.82); color: #fff; border: 3px solid #ffd600;
+      border-radius: 14px; padding: 10px 12px; font-family: sans-serif;
+    }
+    #gespraech.offen { display: block; }
+    #gespraech .wer { color: #ffd600; font-weight: bold; }
+    #gespraech .satz { margin: 4px 0 8px; font-size: 17px; min-height: 22px; }
+    #gespraech .wahl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    #gespraech .wahl button { font-size: 14px; padding: 8px; border-radius: 9px; border: none; background: #333; color: #fff; cursor: pointer; text-align: left; }
+    #gespraech .wahl button:hover { background: #ffd600; color: #000; }
+    #gespraech form { display: none; gap: 6px; margin-top: 6px; }
+    #gespraech form.offen { display: flex; }
+    #gespraech input { flex: 1; font-size: 16px; padding: 8px 10px; border-radius: 9px; border: 2px solid #ffd600; background: #111; color: #fff; outline: none; }
+    #gespraech form button { font-size: 18px; border: none; border-radius: 9px; background: #ffd600; padding: 0 12px; cursor: pointer; }
     #funkKnopf {
       position: fixed; top: 12px; right: 314px; width: 44px; height: 44px; border-radius: 12px; z-index: 6;
       border: 2px solid rgba(255,255,255,0.6); background: rgba(0,0,0,0.55); font-size: 22px; cursor: pointer;
@@ -438,6 +454,14 @@
   <button id="funkKnopf" title="Funkgerät: gedrückt halten und sprechen (V)" hidden>🎙️</button>
   <div id="funkAnzeige"></div>
   <form id="chatEingabe" autocomplete="off"><input id="chatText" maxlength="80" placeholder="Nachricht schreiben … (Enter = senden)"><button>➤</button></form>
+  <div id="gespraech"><div><span class="wer"></span></div><div class="satz"></div>
+    <div class="wahl">
+      <button data-w="plaudern">1 👋 Plaudern</button><button data-w="witz">2 😂 Witz erzählen</button>
+      <button data-w="weg">3 🗺️ Nach dem Weg fragen</button><button data-w="frech">4 😠 Frech sein</button>
+      <button data-w="schreiben">5 ✍️ Selbst schreiben</button><button data-w="tschuess">0 👋 Tschüss</button>
+    </div>
+    <form autocomplete="off"><input maxlength="80" placeholder="Was willst du sagen? (Enter)"><button>➤</button></form>
+  </div>
   <button id="karteZu" title="Karte schließen">✕</button>
   <div id="stick"><div id="stickKnopf"></div></div>
   <div id="tanzRad"><div class="mitte"></div></div>
@@ -531,7 +555,7 @@
       ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🐾 Tierhandlung', 'rechts neben der Hauptstraße beim Start'], ['🏡 Affen-Siedlung', 'Häuser kaufen und einrichten (rechts vom Start)'], ['🏁 Straßenrennen', 'mit einem Fahrzeug unters Start-Tor fahren'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
       ['🔫 Waffenhändler', 'Bananen-Pistole & Zielfernrohr'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
       ['🚔 Polizei', 'nicht über Rot fahren, nichts Verbotenes tun'], ['🔒 Gefängnis', 'man kann ausbrechen …'],
-      ['💬 Mit Affen reden', 'neben einen Affen stellen und ' + E_TASTE + ' drücken'],
+      ['💬 Mit Affen reden', 'neben einen Affen stellen und ' + E_TASTE + ' drücken – dann Antwort wählen (1–5) oder selbst schreiben'],
       ['📟 Fernbedienung', 'Codes eingeben' + (IST_HANDY ? '' : ' mit ' + k('C'))],
       ['🐆 Nachts: Leopard!', 'renn weg, steig in ein Auto oder flüchte in ein Haus'],
       ['🤫 Geheimversteck', 'irgendwo gibt es eins – nicht auf der Karte!'],
@@ -5376,17 +5400,139 @@
       const f = naechsterFussgaenger(p, 2.4);
       if (f) {
         f.name ??= NAMEN_NPC[Math.floor(Math.random() * NAMEN_NPC.length)];
-        f.redetBis = spielZeit + 4.5;
-        npcSagt(f.gruppe, gespraechsSpruch(), f, 4500, true);
+        gespraechAuf(f, gespraechsSpruch());
         return true;
       }
       const n = naechsterStand(p, 3.2);
       if (n) {
         if (n.art === 'auftrag' && nachtAktiv) return false;
-        npcSagt(n.gruppe, zufallsSpruch(n.art), n, 4500, true);
+        n.name ??= { kassierer: 'Kassierer', dj: 'DJ', barkeeper: 'Barkeeper', bank: 'Bank-Affe', haendler: 'Händler', kleider: 'Verkäuferin', tierladen: 'Tierhändler', auftrag: 'Auftrags-Affe' }[n.art] || 'Affe';
+        gespraechAuf(n, zufallsSpruch(n.art));
         return true;
       }
       return false;
+    }
+
+    // ================= GESPRÄCH WIE IN GTA: Antwort auswählen oder selbst schreiben =================
+    const gespraechBox = document.getElementById('gespraech');
+    const gespraechForm = gespraechBox.querySelector('form'), gespraechText = gespraechBox.querySelector('input');
+    let gespraechMit = null;
+    const WITZE_ANTWORT = ['Hahaha! 😂 Der ist gut!', 'Hihi, den erzähl ich weiter! 🤣', 'Hä? Den versteh ich nicht … 🤔', 'Uh-uh-ah-ah! 😆 Zu lustig!', 'Der war ja sooo alt … 🙄'];
+    const FRECH_ANTWORT = ['Was?! Frechheit! 😠', 'Mit dir red ich nicht mehr! 😤', 'Na warte, ich sag\'s meiner Mama! 😡', 'Selber! 😝'];
+    const BELEIDIGT = ['Lass mich in Ruhe! 😤', 'Pff. Ich bin noch sauer. 😒', 'Erst frech sein und jetzt reden wollen? Nö!'];
+    // Orte, nach denen man fragen kann (der Affe setzt dir einen Wegpunkt)
+    function wegOrte() {
+      const vorDie = (o, name) => ({ name, x: o.x, z: o.z + (o.vorne ?? 1) * ((o.t ?? 4) / 2 + 3) });
+      return [
+        ...LAEDEN.map(l => vorDie(l, 'zum Supermarkt 🛒')), ...BANKEN.map(b => vorDie(b, 'zur Bank 🏦')),
+        vorDie(CLUB, 'zum Club 🪩'), vorDie(HAENDLER, 'zum geheimen Händler 😎'), vorDie(KLEIDERLADEN, 'zum Kleiderladen 👕'),
+        { name: 'zur Tierhandlung 🐾', x: TIERLADEN.x, z: TIERLADEN.z + 4 }, { name: 'zum Auftrags-Affen ❗', x: AUFTRAGGEBER.x, z: AUFTRAGGEBER.z + 2 },
+      ];
+    }
+    function richtungsWort(x, z) {   // grob: in welche Himmelsrichtung vom Spieler aus?
+      const dx = x - affe.position.x, dz = z - affe.position.z;
+      return Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'Richtung Osten' : 'Richtung Westen') : (dz > 0 ? 'Richtung Süden' : 'Richtung Norden');
+    }
+    function gespraechSatz(text) {   // der Affe sagt etwas: Sprechblase, Stimme und Text im Fenster
+      if (!gespraechMit) return;
+      gespraechBox.querySelector('.satz').textContent = text;
+      npcSagt(gespraechMit.gruppe, text, gespraechMit, 5000, true);
+    }
+    function gespraechAuf(wer, ersterSatz) {
+      gespraechMit = wer;
+      gespraechBox.querySelector('.wer').textContent = '💬 ' + wer.name;
+      gespraechBox.classList.add('offen');
+      gespraechForm.classList.remove('offen');
+      if (wer.sauerBis > spielZeit) { gespraechSatz(BELEIDIGT[Math.floor(Math.random() * BELEIDIGT.length)]); setTimeout(() => { if (gespraechMit === wer) gespraechZu(); }, 1800); return; }
+      gespraechSatz(ersterSatz);
+    }
+    function gespraechZu() {
+      gespraechBox.classList.remove('offen');
+      gespraechForm.classList.remove('offen');
+      gespraechText.blur();
+      if (gespraechMit) gespraechMit.redetBis = spielZeit + 1.5;   // kurz noch nachschauen, dann weiterlaufen
+      gespraechMit = null;
+    }
+    function gespraechWahl(w) {
+      const wer = gespraechMit;
+      if (!wer) return;
+      if (w === 'tschuess') { gespraechSatz(['Tschüss! 👋', 'Bis bald!', 'Mach\'s gut! 🍌'][Math.floor(Math.random() * 3)]); gespraechZu(); return; }
+      if (w === 'schreiben') { gespraechForm.classList.add('offen'); gespraechText.value = ''; gespraechText.focus(); return; }
+      if (w === 'plaudern') gespraechSatz(wer.art ? zufallsSpruch(wer.art) : gespraechsSpruch());
+      if (w === 'witz') gespraechSatz(WITZE_ANTWORT[Math.floor(Math.random() * WITZE_ANTWORT.length)]);
+      if (w === 'weg') {
+        const orte = wegOrte(), o = orte[Math.floor(Math.random() * orte.length)];
+        wegpunkt = { x: o.x, z: o.z };
+        gespraechSatz(`Willst du ${o.name}? Da lang, ${richtungsWort(o.x, o.z)}! Ich mach dir einen Punkt auf die Karte. 📍`);
+      }
+      if (w === 'frech') {
+        gespraechSatz(FRECH_ANTWORT[Math.floor(Math.random() * FRECH_ANTWORT.length)]);
+        wer.sauerBis = spielZeit + 30;             // 30 Sekunden beleidigt
+        gespraechZu();
+      }
+    }
+    // Selbst geschrieben: der Affe sucht in deinem Satz nach Wörtern, die er kennt
+    function npcAntwortAuf(text) {
+      const t = text.toLowerCase(), wer = gespraechMit;
+      const regeln = [
+        [/tsch(ü|ue)ss|bye|ciao|bis dann|bis bald/, () => 'Tschüss! 👋'],
+        [/dumm|bl(ö|oe)d|doof|idiot|hässlich|stinkst|affenarsch|depp/, () => { wer.sauerBis = spielZeit + 30; return FRECH_ANTWORT[Math.floor(Math.random() * FRECH_ANTWORT.length)]; }],
+        [/wie geht/, () => ['Mir geht\'s super! Und dir? 😊', 'Ganz gut, nur ein bisschen hungrig. 🍌', 'Prima, danke!'][Math.floor(Math.random() * 3)]],
+        [/hei(ß|ss)t du|dein name|wer bist/, () => `Ich heiße ${wer.name}! 🐒`],
+        [/wie alt/, () => `Ich bin ${5 + Math.floor(Math.random() * 30)} Affenjahre alt!`],
+        [/hallo|hi\b|hey|servus|moin|guten (tag|morgen|abend)|huhu/, () => zufallsSpruch('hallo')],
+        [/danke/, () => 'Gern geschehen! 😊'],
+        [/witz|lustig/, () => 'Was macht ein Affe im Kühlschrank? Er macht die Banane cool! 😎🍌'],
+        [/banane|essen|hunger/, () => 'Bananen sind das Beste! Im Supermarkt gibt es frische. 🍌'],
+        [/polizei|verbrecher|bank|tresor|klau/, () => fahndung ? 'Psst, die Polizei sucht dich! 😱' : 'Die Polizei ist streng – ich würde nichts klauen! 🚔'],
+        [/tanz|club|party|musik/, () => 'Im Club im Osten wird die ganze Nacht getanzt! 🪩'],
+        [/wo |weg|finde|wohin/, () => { gespraechWahl('weg'); return null; }],
+        [/geld|m(ü|ue)nze|punkte|reich/, () => 'Für Punkte kannst du Aufträge beim Auftrags-Affen machen! ❗'],
+        [/auto|fahren|rennen/, () => 'Steig in ein Auto mit E – aber fahr nicht über Rot! 🚦'],
+        [/freund|magst du mich|lieb/, () => 'Klar, wir sind jetzt Freunde! 🤝'],
+        [/ja\b|ok|cool|super|toll/, () => 'Cool! 😎'],
+        [/nein|nö/, () => 'Na gut … 🤷'],
+        [/\?$/, () => ['Gute Frage! Keine Ahnung … 🤔', 'Hmm, das weiß ich nicht.', 'Frag mal den Auftrags-Affen!'][Math.floor(Math.random() * 3)]],
+      ];
+      for (const [muster, antwort] of regeln) if (muster.test(t)) return antwort();
+      return ['Hä? 🤔', 'Interessant! Erzähl mehr!', 'Uh-uh-ah? 🐒', 'Das versteh ich nicht ganz …'][Math.floor(Math.random() * 4)];
+    }
+    gespraechForm.addEventListener('submit', e => {
+      e.preventDefault();
+      const text = gespraechText.value.trim().slice(0, 80);
+      gespraechText.value = '';
+      if (!text || !gespraechMit) return;
+      sprechblase(affe, text);
+      const wer = gespraechMit;
+      setTimeout(() => {
+        if (gespraechMit !== wer) return;
+        const antwort = npcAntwortAuf(text);
+        if (antwort) gespraechSatz(antwort);
+        if (/tsch(ü|ue)ss|bye|ciao/.test(text.toLowerCase()) || wer.sauerBis > spielZeit) gespraechZu();
+      }, 700);
+    });
+    gespraechText.addEventListener('keydown', e => { e.stopPropagation(); if (e.code === 'Escape') { gespraechForm.classList.remove('offen'); gespraechText.blur(); } });
+    gespraechText.addEventListener('keyup', e => e.stopPropagation());
+    gespraechBox.querySelectorAll('.wahl button').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); gespraechWahl(b.dataset.w); }));
+    for (const ev of ['pointerdown', 'mousedown', 'touchstart']) gespraechBox.addEventListener(ev, e => e.stopPropagation());
+    // Tastatur: Ziffern wählen eine Antwort (statt Waffen), Esc/E beendet das Gespräch
+    addEventListener('keydown', e => {
+      if (!gespraechMit || document.activeElement === gespraechText) return;
+      const nr = /^(Digit|Numpad)(\d)$/.exec(e.code)?.[2];
+      const wahl = { 1: 'plaudern', 2: 'witz', 3: 'weg', 4: 'frech', 5: 'schreiben', 0: 'tschuess' }[nr];
+      if (wahl) { if (!e.repeat) gespraechWahl(wahl); }
+      else if (e.code === 'Enter' || e.code === 'KeyT') { if (!e.repeat) gespraechWahl('schreiben'); }
+      else if (e.code === 'Escape' || e.code === 'KeyE') { if (!e.repeat) gespraechWahl('tschuess'); }
+      else return;
+      e.preventDefault(); e.stopImmediatePropagation();
+    }, true);
+    // Jedes Bild: der Affe bleibt stehen, solange ihr redet. Wer weggeht, beendet das Gespräch.
+    function gespraechPruefen() {
+      if (!gespraechMit) return;
+      const g = gespraechMit;
+      g.redetBis = spielZeit + 1;
+      const q = g.gruppe.getWorldPosition(_npcPos);
+      if (aktuellesFahrzeug || g.zustand === 'liegt' || !g.gruppe.visible || Math.hypot(q.x - affe.position.x, q.z - affe.position.z) > 5) gespraechZu();
     }
     function redeHinweis(p) {
       const f = naechsterFussgaenger(p, 2.4);
@@ -5637,6 +5783,7 @@
       verkehrBewegen(dt);            // alle Autos auf den Straßen
       ampelnZeigen(spielZeit);       // Ampeln umschalten
       fussgaengerBewegen(dt);        // Fußgänger-Affen
+      gespraechPruefen();            // Gespräch mit einem Affen
       polizeiBewegen(dt);            // Polizei (wenn jemand gesucht wird)
       mehrspielerBewegen(dt);        // Mitspieler
       geschosseBewegen(dt);          // fliegende Bananen
