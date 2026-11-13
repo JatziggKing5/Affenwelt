@@ -609,8 +609,8 @@
     szene.add(sonne.target); // damit die Sonne dem Affen folgen kann
 
     // --- Grüner Boden: eine riesige flache Fläche ---
-    // Die Welt geht von links -200 bis rechts 200 und von hinten -25 (dort beginnt die Obby) bis vorne 375.
-    const WIESE = { x1: -200, x2: 200, z1: -25, z2: 375 };
+    // Die Welt geht von links -300 bis rechts 300 und von hinten -25 (dort beginnt die Obby) bis vorne 575.
+    const WIESE = { x1: -300, x2: 300, z1: -25, z2: 575 };
     const boden = new THREE.Mesh(
       new THREE.PlaneGeometry(WIESE.x2 - WIESE.x1, WIESE.z2 - WIESE.z1),
       new THREE.MeshStandardMaterial({ color: 0x4caf50 })
@@ -722,11 +722,11 @@
     // Wo sie sich treffen, sind Kreuzungen mit Ampeln.
     const BREITE = 8, HALB = BREITE / 2, SPUR = 2; // Straße 8 breit, jede Fahrspur 4 breit
     const LAENGS = [
-      { x: -180, z1: 50, z2: 360 }, { x: -90, z1: 50, z2: 360 },
-      { x: 0,    z1: 6,  z2: 360 },                                // Hauptstraße: fängt beim Start an
-      { x: 90,   z1: 50, z2: 360 }, { x: 180, z1: 50, z2: 360 },
+      { x: -270, z1: 50, z2: 520 }, { x: -180, z1: 50, z2: 520 }, { x: -90, z1: 50, z2: 520 },
+      { x: 0,    z1: 6,  z2: 520 },                                // Hauptstraße: fängt beim Start an
+      { x: 90,   z1: 50, z2: 520 }, { x: 180, z1: 50, z2: 520 }, { x: 270, z1: 50, z2: 520 },
     ];
-    const QUER = [50, 130, 210, 290, 360].map(z => ({ z, x1: -180, x2: 180 }));
+    const QUER = [50, 130, 210, 290, 360, 440, 520].map(z => ({ z, x1: -270, x2: 270 }));
     // Jede Straße als Rechteck (für Asphalt, und um zu prüfen, ob etwas auf der Straße steht)
     const STRASSEN = [
       ...LAENGS.map(s => ({ x1: s.x - HALB, x2: s.x + HALB, z1: s.z1 === 6 ? 6 : s.z1 - HALB, z2: s.z2 + HALB, richtung: 'z', mitte: s.x })),
@@ -1271,7 +1271,11 @@
       { x: 135, z: 250, r: 20 },                    // Affen-Club
     ];
     const SPIELPLATZ = { x1: -26, x2: 13.5, z1: -26, z2: 16 };      // die alte Wiese mit den Blöcken
-    const STADT = [{ x1: -86, x2: 86, z1: 134, z2: 206 }, { x1: -86, x2: 86, z1: 214, z2: 286 }];
+    const STADT = [{ x1: -86, x2: 86, z1: 134, z2: 206 }, { x1: -86, x2: 86, z1: 214, z2: 286 },
+      // neue Stadtviertel: Westen, Osten, Süden
+      { x1: -266, x2: -94, z1: 134, z2: 286 }, { x1: 94, x2: 266, z1: 134, z2: 286 },
+      { x1: -86, x2: 86, z1: 294, z2: 356 }, { x1: -266, x2: -94, z1: 294, z2: 356 }, { x1: 94, x2: 266, z1: 294, z2: 356 },
+      { x1: -266, x2: 266, z1: 364, z2: 436 }, { x1: -266, x2: 266, z1: 444, z2: 516 }];
     const inRechteck = (r, x, z, rand = 0) => x > r.x1 - rand && x < r.x2 + rand && z > r.z1 - rand && z < r.z2 + rand;
 
     // --- Straßenlaternen am Straßenrand ---
@@ -1445,6 +1449,10 @@
     supermarkt(30, 143, -1);    // an der Querstraße bei z = 130
     supermarkt(-40, 222.5, -1); // an der Querstraße bei z = 210
     supermarkt(40, 277.5, 1);   // an der Querstraße bei z = 290
+    supermarkt(-135, 143, -1);  // neu: im Westen
+    supermarkt(-135, 277.5, 1);
+    supermarkt(135, 373, -1);   // neu: im Süden, an der Querstraße bei z = 360
+    supermarkt(-135, 453, -1);  // an der Querstraße bei z = 440
 
     // ================= BANK =================
     // Groß, mit Säulen. Hinten steht der Tresor – den kann man knacken (E drücken) …
@@ -1882,7 +1890,7 @@
         for (let z = gebiet.z1 + 8; z < gebiet.z2 - 4; z += 14) {
           const b = zwischen(7, 10), t = zwischen(7, 10);
           if (nahAnStrasse(x, z, Math.max(b, t) / 2 + 2.6)) continue;
-          if ([...LAEDEN, ...BANKEN, KLEIDERLADEN].some(l => Math.abs(l.x - x) < (l.b + b) / 2 + 3 && Math.abs(l.z - z) < (l.t + t) / 2 + 3)) continue;
+          if ([...LAEDEN, ...BANKEN, KLEIDERLADEN, CLUB].some(l => Math.abs(l.x - x) < (l.b + b) / 2 + 3 && Math.abs(l.z - z) < (l.t + t) / 2 + 3)) continue;
           const hoch = zufall() < 0.25; // manche sind Hochhäuser
           const h = hoch ? zwischen(12, 22) : zwischen(4, 7);
           const wandFarbe = HAUS_FARBEN[Math.floor(zufall() * HAUS_FARBEN.length)];
@@ -3133,7 +3141,7 @@
     for (const k of knotenListe.values()) for (const n of k.nachbarn) strecken.push([k, n]);
     const FAHRER_SITZ = { limo: [0.42, 0.85, 0.1, 0.8], van: [0.45, 1.3, 1.3, 0.85], bus: [0.7, 1.75, 3.9, 0.9], laster: [0.5, 1.75, 2.7, 0.9] };
     const artenMix = ['limo', 'limo', 'limo', 'limo', 'limo', 'limo', 'van', 'van', 'laster', 'bus'];
-    for (let versuch = 0; verkehr.length < 48 && versuch < 600; versuch++) {
+    for (let versuch = 0; verkehr.length < 80 && versuch < 1000; versuch++) {
       const [A, B] = strecken[Math.floor(zufall() * strecken.length)];
       const d = richtungVon(A, B), r = rechtsVon(d);
       const laenge = Math.hypot(B.x - A.x, B.z - A.z) - A.hw - B.hw - 12;
@@ -3280,10 +3288,10 @@
       ];
       f.ziel = 0; f.von = A; f.nach = B; f.danach = N;
     }
-    const inDerStadt = k => Math.abs(k.x) <= 90 && k.z >= 130 && k.z <= 290;
-    for (let versuch = 0; fussgaenger.length < 26 && versuch < 500; versuch++) {
+    const inDerStadt = k => Math.abs(k.x) <= 270 && k.z >= 130 && k.z <= 520;
+    for (let versuch = 0; fussgaenger.length < 44 && versuch < 800; versuch++) {
       const [A, B] = strecken[Math.floor(zufall() * strecken.length)];
-      if (fussgaenger.length < 20 && !(inDerStadt(A) && inDerStadt(B))) continue; // die meisten in der Stadt
+      if (fussgaenger.length < 34 && !(inDerStadt(A) && inDerStadt(B))) continue; // die meisten in der Stadt
       const d = richtungVon(A, B), r = rechtsVon(d);
       const laenge = Math.hypot(B.x - A.x, B.z - A.z) - A.hw - B.hw - 4;
       const s = A.hw + 2 + zufall() * laenge;
