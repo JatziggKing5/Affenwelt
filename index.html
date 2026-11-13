@@ -235,6 +235,28 @@
       position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 120px; text-align: center;
       color: #fff; font-weight: bold; font-size: 16px; text-shadow: 0 2px 4px #000; pointer-events: none;
     }
+    /* --- Waffen-Rad (Tab halten) --- */
+    #waffenRad { position: fixed; inset: 0; z-index: 24; display: none; background: radial-gradient(circle, rgba(60,0,0,0.6) 0, rgba(0,0,0,0.25) 60%, rgba(0,0,0,0.1) 75%); }
+    #waffenRad.offen { display: block; }
+    #waffenRad .waffe {
+      position: absolute; width: 96px; height: 96px; margin: -48px 0 0 -48px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.7);
+      background: rgba(0,0,0,0.65); color: #fff; font-size: 34px; cursor: pointer; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; transition: transform 0.1s, background 0.1s; padding: 0;
+    }
+    #waffenRad .waffe small { font-size: 11px; font-weight: bold; margin-top: 2px; line-height: 1.15; }
+    #waffenRad .waffe.gesperrt { opacity: 0.35; }
+    #waffenRad .waffe.jetzt { border-color: #ffd600; }
+    #waffenRad .waffe.gewaehlt { background: #ff5252; transform: scale(1.2); border-color: #fff; }
+    #waffenRad .mitte {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 150px; text-align: center;
+      color: #fff; font-weight: bold; font-size: 16px; text-shadow: 0 2px 4px #000; pointer-events: none;
+    }
+    @media (max-width: 600px) { #waffenRad .waffe { width: 70px; height: 70px; margin: -35px 0 0 -35px; font-size: 26px; } #waffenRad .waffe small { font-size: 9px; } }
+    #waffenRadKnopf { display: none; }
+    body.handy #waffenRadKnopf {
+      display: block; position: fixed; left: 14px; top: calc(45% + 64px); width: 54px; height: 54px; border-radius: 50%; z-index: 6;
+      border: 2px solid rgba(255,255,255,0.6); background: rgba(0,0,0,0.5); font-size: 26px;
+    }
     #tanzKnopf { display: none; }
     body.handy #tanzKnopf {
       display: block; position: fixed; left: 14px; top: 45%; width: 54px; height: 54px; border-radius: 50%; z-index: 6;
@@ -497,6 +519,8 @@
   <div id="stick"><div id="stickKnopf"></div></div>
   <div id="tanzRad"><div class="mitte"></div></div>
   <button id="tanzKnopf">🕺</button>
+  <div id="waffenRad"><div class="mitte"></div></div>
+  <button id="waffenRadKnopf">🎯</button>
   <div id="handyknoepfe">
     <button data-taste="rauch" hidden>💨</button>
     <button data-taste="zielen" hidden>🎯</button>
@@ -600,13 +624,13 @@
       ['🐒 Bewegen', [['Laufen', 'Stick links'], ['Rennen', 'Stick ganz nach außen'], ['Springen / Doppelsprung', '⬆️ / 2× ⬆️'], ['Jetpack fliegen', '⬆️ halten'], ['Tanzen', '🕺 links']]],
       ['🎥 Kamera & Karte', [['Umschauen', 'rechts wischen'], ['Große Karte', 'Karte antippen'], ['Wegpunkt setzen', 'auf große Karte tippen']]],
       ['🚗 Fahren', [['Einsteigen / Aussteigen', '✋'], ['Gas, Bremse, Lenken', 'Stick'], ['Hupen', '📯']]],
-      ['🍌 Waffen', [['Schießen', '🔫'], ['Zielen', '🎯'], ['Rauchbombe', '💨'], ['Waffe wählen', 'Leiste oben links']]],
+      ['🍌 Waffen', [['Schießen', '🔫'], ['Zielen', '🎯'], ['Rauchbombe', '💨'], ['Waffe wählen', 'Leiste oben links oder 🎯 (Waffen-Rad)']]],
       ['👥 Mehrspieler', [['Bei einem Freund mitfahren', 'neben sein Auto, ✋'], ['Mini-Spiele: Fangen & Bananen-Duell', 'im 👥-Menü'], ['Raum öffnen / beitreten', '👥'], ['Chat schreiben', '💬'], ['Funkgerät', '🎙️ halten']]],
     ] : [
       ['🐒 Bewegen', [['Laufen', k('W','A','S','D')], ['Rennen', k('Shift')], ['Springen / Doppelsprung', k('Leertaste') + ' / 2×'], ['Jetpack fliegen', k('Leertaste') + ' halten'], ['Tanzen', k('B') + ' halten']]],
       ['🎥 Kamera & Karte', [['Kamera drehen', k('←','→','↑','↓')], ['Kamera mit der Maus', 'rechte Maustaste halten'], ['Große Karte', k('M')], ['Wegpunkt setzen', 'Klick auf die große Karte']]],
       ['🚗 Fahren', [['Einsteigen / Aussteigen', k('E')], ['Gas / Bremse / Lenken', k('W','S','A','D')], ['Hupen', k('Leertaste')], ['Garage', 'an der ersten Kreuzung']]],
-      ['🍌 Waffen', [['Waffe wählen', k('1','2','3','4','5')], ['Schießen', 'Linksklick oder ' + k('F')], ['Zielen', 'rechte Maustaste oder ' + k('Z')], ['Rauchbombe', k('G')]]],
+      ['🍌 Waffen', [['Waffe wählen', k('1','2','3','4','5')], ['Waffen-Rad (Zeitlupe)', k('Tab') + ' halten'], ['Schießen', 'Linksklick oder ' + k('F')], ['Zielen', 'rechte Maustaste oder ' + k('Z')], ['Rauchbombe', k('G')]]],
       ['👥 Mehrspieler', [['Bei einem Freund mitfahren', 'neben sein Auto stellen, ' + k('E')], ['Mini-Spiele: Fangen & Bananen-Duell', 'im 👥-Menü ' + k('P')], ['Raum öffnen / beitreten', k('P')], ['Chat schreiben', k('T') + ' oder ' + k('Enter')], ['Funkgerät', k('V') + ' halten']]],
     ];
     HILFE.push(['🗺️ Zum Entdecken', [
@@ -4514,6 +4538,79 @@
       inventarZeigen();
     }
 
+    // ================= WAFFEN-RAD (wie in GTA): Tab halten, Maus in eine Richtung, loslassen =================
+    // Solange das Rad offen ist, läuft das Spiel in Zeitlupe.
+    const WAFFEN_IM_RAD = [
+      { nr: 0, emoji: '👊', name: 'Faust',         hat: () => true,                 info: () => 'immer dabei' },
+      { nr: 1, emoji: '🍌🔫', name: 'Pistole',     hat: () => inventar.pistole,     info: () => `${inventar.munition} Schuss` },
+      { nr: 5, emoji: '🍌🍌', name: 'Schrotflinte', hat: () => inventar.schrot,     info: () => `${inventar.srMun} Ladungen` },
+      { nr: 3, emoji: '🍌🔁', name: 'Minigun',     hat: () => inventar.minigun,     info: () => `${inventar.mgMun} Schuss` },
+      { nr: 4, emoji: '🍌💥', name: 'Bazooka',     hat: () => inventar.bazooka,     info: () => `${inventar.bzMun} Raketen` },
+      { nr: 2, emoji: '💨', name: 'Rauchbombe',    hat: () => inventar.rauch > 0,   info: () => `${inventar.rauch}×` },
+    ];
+    const waffenRad = document.getElementById('waffenRad'), waffenRadMitte = waffenRad.querySelector('.mitte');
+    let waffenRadOffen = false, waffenRadMitTaste = false, waffenRadWahl = null;
+    const waffenRadKnoepfe = WAFFEN_IM_RAD.map((w, i) => {
+      const k = document.createElement('button');
+      k.className = 'waffe';
+      k.addEventListener('click', e => { e.stopPropagation(); waffenRadMarkieren(i); waffenRadZu(true); });
+      k.addEventListener('pointerenter', () => waffenRadMarkieren(i));
+      waffenRad.append(k);
+      return k;
+    });
+    function waffenRadMarkieren(i) {
+      waffenRadWahl = i;
+      waffenRadKnoepfe.forEach((k, j) => k.classList.toggle('gewaehlt', j === i));
+      const w = WAFFEN_IM_RAD[i];
+      waffenRadMitte.innerHTML = i === null ? '🎯 Wähl eine Waffe!' : w.hat() ? `${w.emoji}<br>${w.name}` : `🔒 ${w.name}<br><small>hast du noch nicht</small>`;
+    }
+    function waffenRadAuf(mitTaste) {
+      if (waffenRadOffen || aktuellesFahrzeug || tanzRadOffen) return;
+      waffenRadOffen = true; waffenRadMitTaste = mitTaste;
+      for (const t in tasten) tasten[t] = false;
+      const r = Math.min(innerWidth, innerHeight) * 0.3;
+      WAFFEN_IM_RAD.forEach((w, i) => {                          // im Kreis anordnen und beschriften
+        const k = waffenRadKnoepfe[i], winkel = i / WAFFEN_IM_RAD.length * Math.PI * 2 - Math.PI / 2;
+        k.style.left = (innerWidth / 2 + Math.cos(winkel) * r) + 'px';
+        k.style.top = (innerHeight / 2 + Math.sin(winkel) * r) + 'px';
+        k.innerHTML = `${w.hat() ? w.emoji : '🔒'}<small>${w.name}<br>${w.hat() ? w.info() : ''}</small>`;
+        k.classList.toggle('gesperrt', !w.hat());
+        k.classList.toggle('jetzt', w.nr === (WAFFEN_NR.includes(auswahl) || auswahl === 2 ? auswahl : 0));
+      });
+      waffenRadMarkieren(null);
+      waffenRad.classList.add('offen');
+    }
+    function waffenRadZu(uebernehmen) {
+      if (!waffenRadOffen) return;
+      waffenRadOffen = false; waffenRad.classList.remove('offen');
+      if (!uebernehmen || waffenRadWahl === null) return;
+      const w = WAFFEN_IM_RAD[waffenRadWahl];
+      if (!w.hat()) { zeigeMeldung(`🔒 ${w.name}: hast du noch nicht`, 1.5); return; }
+      if (w.nr === 0) { auswahl = 0; zielfernrohrBenutzen(false); inventarZeigen(); }
+      else if (auswahl !== w.nr) waehlen(w.nr);
+      zeigeMeldung(`${w.emoji} ${w.name}`, 1);
+    }
+    waffenRad.addEventListener('pointermove', e => {           // Richtung von der Mitte aus wählt (muss nicht genau sein)
+      const dx = e.clientX - innerWidth / 2, dy = e.clientY - innerHeight / 2;
+      if (Math.hypot(dx, dy) < 50) { waffenRadMarkieren(null); return; }
+      let w = Math.atan2(dy, dx) + Math.PI / 2;
+      if (w < 0) w += Math.PI * 2;
+      waffenRadMarkieren(Math.round(w / (Math.PI * 2) * WAFFEN_IM_RAD.length) % WAFFEN_IM_RAD.length);
+    });
+    waffenRad.addEventListener('click', e => { e.stopPropagation(); waffenRadZu(false); });
+    for (const ev of ['pointerdown', 'mousedown', 'touchstart', 'contextmenu']) waffenRad.addEventListener(ev, e => { e.stopPropagation(); if (ev === 'contextmenu') e.preventDefault(); });
+    addEventListener('keydown', e => {
+      if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat) waffenRadAuf(true); }
+      if (e.code === 'Escape' && waffenRadOffen) waffenRadZu(false);
+    });
+    addEventListener('keyup', e => {
+      if (e.code !== 'Tab' || !waffenRadOffen || !waffenRadMitTaste) return;
+      if (waffenRadWahl !== null) waffenRadZu(true);           // nichts gewählt: Rad bleibt offen, dann kann man klicken
+    });
+    const waffenRadKnopf = document.getElementById('waffenRadKnopf');
+    waffenRadKnopf.addEventListener('pointerdown', e => e.stopPropagation());
+    waffenRadKnopf.addEventListener('click', e => { e.stopPropagation(); waffenRadOffen ? waffenRadZu(false) : waffenRadAuf(false); });
+
     const imHaendlerLaden = p => Math.abs(p.x - HAENDLER.x) < HAENDLER.b / 2 && Math.abs(p.z - HAENDLER.z) < HAENDLER.t / 2 && p.y < 2;
     function kaufen(ware) {
       if (ware === 'pistole' && inventar.pistole) ware = 'munition';
@@ -6629,7 +6726,7 @@
     // --- Spiel-Schleife: läuft ca. 60 Mal pro Sekunde ---
     const uhr = new THREE.Clock();
     function spielSchleife() {
-      const dt = Math.min(uhr.getDelta(), 0.05); // Zeit seit dem letzten Bild
+      const dt = Math.min(uhr.getDelta(), 0.05) * (waffenRadOffen ? 0.2 : 1); // Zeit seit dem letzten Bild (Waffen-Rad: Zeitlupe)
       spielZeit += dt;
 
       // Kamera drehen mit den Pfeiltasten
