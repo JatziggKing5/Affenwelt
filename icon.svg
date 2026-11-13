@@ -1,59 +1,72 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
     <linearGradient id="himmel" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#4fc3f7"/>
-      <stop offset="1" stop-color="#b3e9ff"/>
+      <stop offset="0" stop-color="#3b1a8c"/>
+      <stop offset="0.35" stop-color="#c2339b"/>
+      <stop offset="0.7" stop-color="#ff6a4d"/>
+      <stop offset="1" stop-color="#ffb347"/>
     </linearGradient>
-    <radialGradient id="sonne" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#fff59d"/>
-      <stop offset="1" stop-color="#ffd54f"/>
-    </radialGradient>
+    <linearGradient id="sonne" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff176"/>
+      <stop offset="1" stop-color="#ff7043"/>
+    </linearGradient>
     <linearGradient id="fell" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#9c6234"/>
-      <stop offset="1" stop-color="#7a4624"/>
+      <stop offset="0" stop-color="#a86a38"/>
+      <stop offset="1" stop-color="#6e3f1f"/>
+    </linearGradient>
+    <linearGradient id="glas" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2a2a3a"/>
+      <stop offset="1" stop-color="#000"/>
     </linearGradient>
     <clipPath id="rund"><rect width="512" height="512" rx="115"/></clipPath>
   </defs>
   <g clip-path="url(#rund)">
     <rect width="512" height="512" fill="url(#himmel)"/>
-    <circle cx="410" cy="100" r="62" fill="url(#sonne)"/>
-    <!-- Huegel -->
-    <ellipse cx="90" cy="470" rx="260" ry="110" fill="#2e9e4f"/>
-    <ellipse cx="440" cy="490" rx="260" ry="110" fill="#43b55f"/>
-    <!-- Palmblaetter -->
-    <g fill="#1f7a3a">
-      <path d="M40 40 Q130 40 200 120 Q110 90 40 100Z"/>
-      <path d="M40 40 Q90 110 110 200 Q60 130 20 110Z"/>
+    <!-- Sonne mit Streifen -->
+    <circle cx="256" cy="250" r="190" fill="url(#sonne)"/>
+    <g fill="#c2339b">
+      <rect x="40" y="300" width="432" height="10"/>
+      <rect x="40" y="326" width="432" height="16"/>
+      <rect x="40" y="356" width="432" height="22"/>
     </g>
+    <!-- Palmen-Silhouetten -->
+    <g fill="#1a0b3d">
+      <path d="M60 512 Q70 360 90 250 L102 250 Q92 360 90 512Z"/>
+      <path d="M96 250 Q40 220 -10 250 Q50 215 96 240 Q60 190 20 190 Q80 180 100 235 Q100 170 80 130 Q120 160 106 238 Q140 190 190 190 Q140 205 112 245 Q165 235 200 262 Q150 245 112 252Z"/>
+      <path d="M452 512 Q445 400 430 300 L441 300 Q460 400 464 512Z"/>
+      <path d="M436 300 Q390 270 350 290 Q395 262 436 288 Q410 240 380 235 Q430 232 440 285 Q450 230 480 205 Q470 250 445 288 Q490 255 530 270 Q485 268 450 298Z"/>
+    </g>
+    <!-- Boden -->
+    <path d="M0 470 L512 440 L512 512 L0 512Z" fill="#1a0b3d"/>
     <!-- Ohren -->
-    <circle cx="140" cy="270" r="52" fill="url(#fell)"/>
-    <circle cx="372" cy="270" r="52" fill="url(#fell)"/>
-    <circle cx="140" cy="270" r="30" fill="#f2b98a"/>
-    <circle cx="372" cy="270" r="30" fill="#f2b98a"/>
-    <!-- Kopf -->
-    <ellipse cx="256" cy="262" rx="125" ry="118" fill="url(#fell)"/>
-    <!-- Gesicht -->
-    <path d="M256 200 C200 170 140 215 150 280 C158 340 205 385 256 385 C307 385 354 340 362 280 C372 215 312 170 256 200Z" fill="#f2b98a"/>
-    <!-- Augen -->
-    <circle cx="214" cy="262" r="27" fill="#fff"/>
-    <circle cx="298" cy="262" r="27" fill="#fff"/>
-    <circle cx="220" cy="266" r="14" fill="#2b1a10"/>
-    <circle cx="304" cy="266" r="14" fill="#2b1a10"/>
-    <circle cx="225" cy="260" r="5" fill="#fff"/>
-    <circle cx="309" cy="260" r="5" fill="#fff"/>
-    <!-- Augenbrauen -->
-    <path d="M186 228 Q214 212 240 228" stroke="#5a3118" stroke-width="10" stroke-linecap="round" fill="none"/>
-    <path d="M272 228 Q298 212 326 228" stroke="#5a3118" stroke-width="10" stroke-linecap="round" fill="none"/>
-    <!-- Nase -->
-    <ellipse cx="244" cy="308" rx="7" ry="9" fill="#8a5a3a"/>
-    <ellipse cx="268" cy="308" rx="7" ry="9" fill="#8a5a3a"/>
-    <!-- Mund -->
-    <path d="M205 335 Q256 385 307 335" stroke="#5a3118" stroke-width="10" stroke-linecap="round" fill="none"/>
-    <path d="M222 345 Q256 372 290 345 Q256 360 222 345Z" fill="#c4534a"/>
-    <!-- Banane -->
-    <g transform="translate(330 395) rotate(-25)">
-      <path d="M0 0 C40 -70 140 -60 170 -10 C120 -40 50 -30 18 30 C10 40 -6 20 0 0Z" fill="#ffd93b" stroke="#c99a00" stroke-width="6" stroke-linejoin="round"/>
-      <path d="M168 -12 L182 -22" stroke="#6b4a1a" stroke-width="10" stroke-linecap="round"/>
+    <g stroke="#1a0b3d" stroke-width="10">
+      <circle cx="150" cy="268" r="44" fill="url(#fell)"/>
+      <circle cx="362" cy="268" r="44" fill="url(#fell)"/>
     </g>
+    <circle cx="150" cy="268" r="22" fill="#f2b98a"/>
+    <circle cx="362" cy="268" r="22" fill="#f2b98a"/>
+    <!-- Kopf -->
+    <ellipse cx="256" cy="262" rx="112" ry="108" fill="url(#fell)" stroke="#1a0b3d" stroke-width="12"/>
+    <path d="M256 205 C206 180 156 220 164 280 C170 335 212 372 256 372 C300 372 342 335 348 280 C356 220 306 180 256 205Z" fill="#f2b98a" stroke="#1a0b3d" stroke-width="8"/>
+    <!-- Sonnenbrille -->
+    <g stroke="#000" stroke-width="8" stroke-linejoin="round">
+      <path d="M170 250 H250 V278 Q250 304 215 304 Q170 304 170 272Z" fill="url(#glas)"/>
+      <path d="M262 250 H342 V272 Q342 304 297 304 Q262 304 262 278Z" fill="url(#glas)"/>
+      <path d="M250 258 H262" fill="none"/>
+    </g>
+    <path d="M184 262 L214 262 L196 290Z" fill="#fff" opacity="0.35"/>
+    <path d="M276 262 L306 262 L288 290Z" fill="#fff" opacity="0.35"/>
+    <!-- Nase -->
+    <ellipse cx="244" cy="322" rx="6" ry="8" fill="#6e3f1f"/>
+    <ellipse cx="268" cy="322" rx="6" ry="8" fill="#6e3f1f"/>
+    <!-- Frecher Grinser mit Zahnstocher/Zigarre-frei: Grinsen -->
+    <path d="M205 342 Q256 372 307 342" stroke="#1a0b3d" stroke-width="9" stroke-linecap="round" fill="none"/>
+    <path d="M222 348 Q256 366 290 348 L282 356 Q256 368 230 356Z" fill="#fff"/>
+    <!-- Goldkette -->
+    <path d="M176 378 Q256 440 336 378" stroke="#1a0b3d" stroke-width="16" fill="none" stroke-linecap="round"/>
+    <path d="M176 378 Q256 440 336 378" stroke="#ffd54f" stroke-width="9" fill="none" stroke-linecap="round" stroke-dasharray="14 5"/>
+    <circle cx="256" cy="418" r="15" fill="#ffd54f" stroke="#1a0b3d" stroke-width="6"/>
+    <!-- Titel -->
+    <text x="256" y="494" text-anchor="middle" font-family="Impact, 'Arial Black', Helvetica, sans-serif" font-weight="900" font-size="54" letter-spacing="4" fill="#fff" stroke="#1a0b3d" stroke-width="10" paint-order="stroke">AFFENWELT</text>
   </g>
 </svg>
