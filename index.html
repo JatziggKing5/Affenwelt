@@ -3921,6 +3921,29 @@
       return { fang: false, nahster };
     }
 
+    // Ab 2 Sternen schießt die Polizei mit blauen Polizei-Bananen zurück – je mehr Sterne, desto öfter
+    const polizeiBananenMaterial = new THREE.MeshStandardMaterial({ color: 0x448aff, emissive: 0x0d47a1, roughness: 0.4 });
+    let polizeiSchiesstGemeldet = false;
+    function polizeiSchiessen(ziel) {
+      if (!fahndung || (fahndung.sterne || 1) < 2 || imGefaengnis || spielZeit < selbstLiegtBis) return;
+      if (!polizeiSchiesstGemeldet) { polizeiSchiesstGemeldet = true; zeigeMeldung('🚔 Die Polizei schießt jetzt zurück! Pass auf dein Leben auf ❤️', 3); }
+      const pause = 2.6 - fahndung.sterne * 0.4;                    // 2 Sterne: alle 1,8 s · 5 Sterne: alle 0,6 s
+      const schuetzen = [];
+      const l = polizei.laeufer;
+      if (l.gruppe.visible && polizei.zustand === 'rennen' && spielZeit > (polizei.betaeubtBis || 0)) schuetzen.push(l);
+      for (const h of helfer) if (h.gruppe.visible) schuetzen.push(h);
+      if (polizei.gruppe.visible && polizei.zustand === 'fahren' && spielZeit > (polizei.betaeubtBis || 0))  // aus dem Autofenster
+        schuetzen.push(polizei);
+      for (const s of schuetzen) {
+        const d = Math.hypot(ziel.x - s.x, ziel.z - s.z);
+        if (d > 32 || d < 2) continue;
+        if (!(s.naechsterSchuss > spielZeit - 10)) s.naechsterSchuss = spielZeit + 0.8 + Math.random();  // erst kurz zielen
+        if (spielZeit < s.naechsterSchuss) continue;
+        s.naechsterSchuss = spielZeit + pause + Math.random() * 0.6;
+        mafiaSchiesst({ x: s.x, z: s.z, richtung: Math.atan2(ziel.x - s.x, ziel.z - s.z), gruppe: s.gruppe || polizei.gruppe }, ziel, ziel.imAuto, 'polizei');
+      }
+    }
+
     let fahndung = null;       // null = niemand sucht dich, sonst { grund }
     let straftatPause = 0;
     let imGefaengnis = false;
@@ -4013,6 +4036,7 @@
       for (const h of helfer) h.gruppe.visible = false;
       fahndung = null;
       sireneAus();
+      polizeiSchiesstGemeldet = false;
     }
 
     // Wo ist der Spieler gerade (zu Fuß oder im Fahrzeug)?
@@ -4035,6 +4059,7 @@
     function polizeiBewegen(dt) {
       sterneZeigen();
       if (!polizei.aktiv) { fahndungsAnzeige.classList.remove('offen'); return; }
+      if (ohnmachtBis) return;                                       // du bist ohnmächtig: die Polizei wartet
       const ziel = spielerOrt();
       // Blaulicht blinkt
       const an = Math.floor(spielZeit * 4) % 2 === 0;
@@ -4134,6 +4159,7 @@
         zeigeMeldung('😎 Entkommen! Die Polizei gibt auf.', 3);
         return;
       }
+      polizeiSchiessen(ziel);
       fahndungsAnzeige.innerHTML = `🚨 FAHNDUNG: ${fahndung.grund} <small>Polizei ${Math.round(nah)} m · ab ${entkommenAb} m bist du entkommen</small>`;
       fahndungsAnzeige.classList.add('offen');
     }
@@ -7481,17 +7507,17 @@
       }
       return false;
     }
-    function mafiaSchiesst(m, ziel, imAuto) {
+    function mafiaSchiesst(m, ziel, imAuto, von = 'mafia') {
       const ox = m.x + Math.sin(m.richtung) * 0.6, oy = 1.0, oz = m.z + Math.cos(m.richtung) * 0.6;
       const zy = imAuto ? 0.8 : affe.position.y;
       const dx = ziel.x - ox + (Math.random() - 0.5) * 1.6, dy = zy - oy, dz = ziel.z - oz + (Math.random() - 0.5) * 1.6;
       const l = Math.hypot(dx, dy, dz) || 1, tempo = 24;
-      const b = new THREE.Mesh(bananenForm, bananenMaterial);
+      const b = new THREE.Mesh(bananenForm, von === 'polizei' ? polizeiBananenMaterial : bananenMaterial);
       b.position.set(ox, oy, oz); b.scale.setScalar(1.2);
       szene.add(b);
       if (Math.random() < 0.3) panik(m.x, m.z, 18);
-      mafiaSchuesse.push({ mesh: b, vx: dx / l * tempo, vy: dy / l * tempo, vz: dz / l * tempo, leben: 2.5 });
-      if (m.gruppe.visible) hupen(520);                              // "Peng!"
+      mafiaSchuesse.push({ mesh: b, vx: dx / l * tempo, vy: dy / l * tempo, vz: dz / l * tempo, leben: 2.5, von });
+      if (m.gruppe.visible) hupen(von === 'polizei' ? 640 : 520);                              // "Peng!"
     }
     function mafiaTot(m) {
       m.tot = true; m.jagt = false;
@@ -7522,7 +7548,7 @@
           const f = aktuellesFahrzeug, p = affe.position;
           if (f ? (punktInFahrzeug(f, q.x, q.z, 0.2) && q.y < f.hoehe + 0.5)
                 : (Math.hypot(q.x - p.x, q.z - p.z) < 0.7 && Math.abs(q.y - p.y) < 0.9)) {
-            if (!ohnmachtBis) spielerVonMafiaGetroffen();
+            if (!ohnmachtBis) { if (s.von === 'polizei') schaden(aktuellesFahrzeug ? 5 : 10); else spielerVonMafiaGetroffen(); }
             weg = true;
           } else if (q.y < 0 || bloecke.some(o => o.art !== 'lava' && Math.abs(q.x - o.x) < o.b / 2 && Math.abs(q.z - o.z) < o.t / 2 && q.y < o.oben && q.y > o.unten)) weg = true;
         }
