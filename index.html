@@ -2606,6 +2606,17 @@
         if (neu) { szene.remove(flug.gruppe); fahrzeuge.splice(fahrzeuge.indexOf(flug), 1); }
         return '✈️ Hier ist kein Platz. Geh auf eine freie Wiese!';
       },
+      '1111': () => {   // Polizei weg: Fahndung und Sterne löschen
+        if (!fahndung && !polizei.aktiv) return '👮 Die Polizei sucht dich gar nicht.';
+        polizeiBeenden(); sterneZeigen();
+        return '👮 Die Polizei ist weg! Du bist wieder frei!';
+      },
+      '2222': () => {   // 1000 Münzen geschenkt
+        if (!Number.isFinite(punkte)) return '💰 Du hast schon unendlich Geld!';
+        punkte += 1000; punkteZeigen();
+        return '💰 +1000 Münzen!';
+      },
+      '5555': () => '🐵 Ooh-ooh-aah-aah! Du bist der König der Affen!',   // nur zum Spaß
     };
     const fb = document.getElementById('fernbedienung'), fbAnzeige = fb.querySelector('.anzeige'), fbText = fb.querySelector('.text'), fbLed = fb.querySelector('.led');
     let fbCode = '';
