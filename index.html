@@ -3336,12 +3336,50 @@
         if (Math.hypot(p.x - a.x, p.z - a.z) - a.laenge / 2 > 1.6) continue;
         szene.remove(a.gruppe); verkehr.splice(i, 1);
         const f = neuesFahrzeug('auto', a.x, a.z, a.richtung);
+        fahrerFlieht(a);
         einsteigen(f);
         straftat('Auto geklaut!');
+        panik(a.x, a.z, 18, ['Ein Autodieb! 😱', 'Hast du das gesehen?!', 'Ruft die Polizei! 📞', 'Der klaut Autos! 🚨']);
         zeigeMeldung('🚗 Auto geklaut! Der Fahrer rennt schreiend weg …', 2.5);
         return true;
       }
       return false;
+    }
+    // Der Fahrer, dem du das Auto geklaut hast: springt raus, rennt weg und schreit um Hilfe
+    const fluechtende = [];
+    const HILFERUFE = ['Hilfe! Mein Auto! 😱', 'Hilfe! Ein Autodieb! 🚨', 'Polizei! Der hat mein Auto geklaut!', 'Haltet den Dieb! 😡', 'Hiiilfe! Jemand muss ihn aufhalten! 😭', 'Mein schönes Auto … 😢'];
+    function fahrerFlieht(auto) {
+      const k = affenKlon(AFFEN_FELLE[Math.floor(Math.random() * AFFEN_FELLE.length)]);
+      const rx = Math.cos(auto.richtung), rz = -Math.sin(auto.richtung);   // rechts vom Auto
+      const seite = Math.hypot(auto.x + rx * 1.6 - affe.position.x, auto.z + rz * 1.6 - affe.position.z) >
+                    Math.hypot(auto.x - rx * 1.6 - affe.position.x, auto.z - rz * 1.6 - affe.position.z) ? 1 : -1;
+      const g = { ...k, x: auto.x + rx * 1.6 * seite, z: auto.z + rz * 1.6 * seite, richtung: auto.richtung, laufZeit: 0, rufUm: spielZeit + 0.3, bis: spielZeit + 14, stimme: 1.2 + Math.random() * 0.6, erster: true };
+      g.gruppe.scale.setScalar(0.95);
+      szene.add(g.gruppe);
+      fluechtende.push(g);
+    }
+    function fluechtendeBewegen(dt) {
+      for (let i = fluechtende.length - 1; i >= 0; i--) {
+        const g = fluechtende[i];
+        if (spielZeit > g.bis) { szene.remove(g.gruppe); fluechtende.splice(i, 1); continue; }
+        const weg = Math.atan2(g.x - affe.position.x, g.z - affe.position.z);
+        for (const abw of [0, 0.7, -0.7, 1.5, -1.5, 2.3, -2.3]) {
+          const nx = g.x + Math.sin(weg + abw) * 6.5 * dt, nz = g.z + Math.cos(weg + abw) * 6.5 * dt;
+          if (stoesstAn(nx, 0.5, nz) || nx < WIESE.x1 + 2 || nx > WIESE.x2 - 2 || nz < WIESE.z1 + 2 || nz > WIESE.z2 - 2) continue;
+          g.x = nx; g.z = nz; g.richtung = weg + abw; break;
+        }
+        g.laufZeit += dt * 18;
+        laufAnimation(g.teile, g.laufZeit, 1);
+        const winken = Math.sin(spielZeit * 14) * 0.4;   // Arme hoch und wild winken
+        if (g.teile.armL) g.teile.armL.rotation.z = -2.6 + winken;
+        if (g.teile.armR) g.teile.armR.rotation.z = 2.6 - winken;
+        g.gruppe.position.set(g.x, 0.5 * 0.95 + Math.abs(Math.sin(g.laufZeit)) * 0.06, g.z);
+        g.gruppe.rotation.y = g.richtung;
+        if (spielZeit > g.rufUm) {                      // immer wieder um Hilfe schreien
+          npcSagt(g.gruppe, g.erster ? HILFERUFE[0] : eins(HILFERUFE.slice(1)), g, 2200, g.erster);
+          g.erster = false; g.rufUm = spielZeit + 2.4 + Math.random();
+        }
+      }
     }
     function einsteigen(f) {
       if (miniSpiel?.art === 'fangen') { zeigeMeldung('🏃 Beim Fangen wird gelaufen, nicht gefahren!', 2); return; }
@@ -3789,6 +3827,7 @@
       if (f.zustand === 'liegt') return;
       f.vorher = f.zustand;
       f.zustand = 'liegt';
+      f.umgeworfenUm = spielZeit;
       if (typeof npcSagt === 'function') npcSagt(f.gruppe, zufallsSpruch('aua'), f);
       f.aufstehenUm = spielZeit + dauer;
     }
@@ -4149,6 +4188,7 @@
 
     // Etwas Verbotenes ist passiert!
     function straftat(grund) {
+      if (!imGefaengnis) ereignisMerken(grund);
       if (imGefaengnis || spielZeit < straftatPause) return;
       straftatPause = spielZeit + 3;
       if (fahndung) {
@@ -4801,7 +4841,7 @@
       for (const m of mafia) if (!m.tot && nah(m.x, m.z)) { mafiaTot(m); umgeworfen++; }   // die Mafia stirbt durch Explosionen
       let fussgaengerGetroffen = false;
       for (const f of fussgaenger) if (f.zustand !== 'liegt' && f.zustand !== 'einkaufen' && nah(f.x, f.z)) { umwerfen(f, LIEGEZEIT); umgeworfen++; fussgaengerGetroffen = true; }
-      panik(x, z, 30);
+      panik(x, z, 30, ['Was war das?! 💥', 'Lauft, es brennt! 🔥', 'Aaaah! 😱']);
       if (fussgaengerGetroffen) straftat('Explosion in der Stadt!');
       if (umgeworfen) zeigeMeldung(`💥 BUMM! ${umgeworfen} umgeworfen!`, 1.5);
     }
@@ -6117,6 +6157,46 @@
       waerter: ['Hier kommt keiner raus! 😤', 'Zurück in die Zelle!', 'Ich hab dich im Blick!'],
     };
     const zufallsSpruch = art => { const l = SPRUECHE[art]; return l[Math.floor(Math.random() * l.length)]; };
+    const eins = l => l[Math.floor(Math.random() * l.length)];
+    // Gesprächs-Themen: der Affe stellt eine Frage, merkt sich das Thema und antwortet passend auf Ja/Nein
+    const THEMEN = [
+      { frage: 'Hast du die Obby schon geschafft?', ja: 'Echt?! Du bist ja ein Profi! 🏆', nein: 'Ich auch nicht. Ich fall immer in die Lava! 🔥', mehr: ['Mein Tipp: erst springen, wenn die Plattform ganz nah ist.', 'Oben gibt es Punkte, hab ich gehört!'] },
+      { frage: 'Ich geh gleich Bananen kaufen. Magst du auch Bananen? 🍌', ja: 'Wusst ich\'s doch! Jeder Affe liebt Bananen!', nein: 'Was?! Ein Affe ohne Bananen? 😲', mehr: ['Im Supermarkt gibt es sie ganz frisch.', 'Mein Lieblingsessen ist Bananen-Pizza! 🍕'] },
+      { frage: 'Gehst du nachts raus? Ich nicht – wegen dem Leoparden! 🐆', ja: 'Du bist mutig! Pass bloß auf dich auf.', nein: 'Schlau! Nachts bleibt man besser drinnen.', mehr: ['Wenn es dunkel wird, sind die Straßen ganz leer.', 'Man sagt, der Leopard ist superschnell.'] },
+      { frage: 'Ich spare auf ein Haus in der Affen-Siedlung. Hast du schon ein Haus? 🏡', ja: 'Cool! Dann lad mich mal ein! 😄', nein: 'Dann sparen wir zusammen! 💰', mehr: ['Mit Aufträgen verdient man am schnellsten Punkte.', 'Ein Haus mit Garten wär ein Traum!'] },
+      { frage: 'Die Polizei hier ist echt streng. Hattest du schon mal Ärger mit ihr? 🚔', ja: 'Oh oh … dann benimm dich lieber! 😬', nein: 'Gut so! Bleib brav.', mehr: ['Schon wer über Rot fährt, wird gesucht.', 'Ab vier Sternen kommt sogar der Hubschrauber! 🚁'] },
+      { frage: 'Die Tierhandlung hat einen Mini-Drachen! Hast du ein Haustier? 🐉', ja: 'Wie süß! Ich will auch eins!', nein: 'Kauf dir doch eins! Die sind alle ganz lieb. 🐾', mehr: ['Der Mini-Drache ist mein Liebling.', 'Haustiere laufen dir überall hinterher!'] },
+      { frage: 'Kannst du tanzen? 🕺', ja: 'Dann ab in den Club! Da wird die ganze Nacht getanzt. 🪩', nein: 'Ich kann den Roboter! 🤖 Das bring ich dir bei.', mehr: ['Der DJ im Club ist echt gut.', 'Tanzen macht hungrig – auf Bananen! 🍌'] },
+      { frage: 'Man sagt, irgendwo gibt es ein Geheimversteck. Hast du es gefunden? 🤫', ja: 'Psst! Nicht verraten!', nein: 'Ich auch nicht. Angeblich in einem hohlen Baum mit Pilzen … 🍄', mehr: ['Vielleicht leuchten die Pilze ja im Dunkeln?', 'Wer es findet, ist ein echter Entdecker!'] },
+      { frage: 'Ich war mal im Gefängnis. Warst du auch schon mal da drin? 😅', ja: 'Die Obby da drin ist echt schwer, oder?', nein: 'Bleib lieber draußen! Das Essen ist furchtbar.', mehr: ['Ich bin ausgebrochen … psst! 🤫', 'Der Wärter passt immer gut auf.'] },
+      { frage: 'Fährst du gern Auto? 🚗', ja: 'Ich auch! Aber fahr nie über Rot. 🚦', nein: 'Zu Fuß ist auch schön. Und gesünder!', mehr: ['Der Monstertruck ist mein Lieblingsauto!', 'Beim Straßenrennen bin ich immer zu langsam.'] },
+      { frage: 'Im Kleiderladen gibt es eine coole Sonnenbrille. Magst du Mode? 😎', ja: 'Dann musst du da unbedingt hin!', nein: 'Fell ist ja auch schon schick genug! 🐒', mehr: ['Die Verkäuferin dort ist super nett.', 'Mit Sonnenbrille sieht jeder cool aus.'] },
+    ];
+    // Was in der Stadt passiert ist (nur gehört) – und was der Affe selbst gesehen hat (du warst es!)
+    const GERUECHT = {
+      autoklau: 'Hast du das gehört? Hier hat gerade einer ein Auto geklaut! 😱', schuss: 'Hast du die Schüsse gehört? Ich hab voll Angst! 😨',
+      explosion: 'Was war das für ein Knall?! Da ist was explodiert! 💥', bank: 'Die Bank wurde ausgeraubt! Das kommt bestimmt in den Nachrichten! 📰',
+      unfall: 'Da vorne hat es gerade gekracht! Fahrt doch vorsichtig! 🚑', pruegel: 'Hier gab es gerade eine Prügelei. Schlimm … 😟',
+      polizist: 'Ein Polizist wurde angegriffen! Hier ist es gefährlich! 🚨', rot: 'Da ist gerade einer über Rot gefahren! Unglaublich! 🚦',
+      aerger: 'Hier war gerade ganz schön was los … 😬',
+    };
+    const ZEUGE = {
+      autoklau: 'Du! Ich hab genau gesehen, wie du das Auto geklaut hast! Bleib weg! 😠', schuss: 'Du hast hier rumgeschossen! Lass mich in Ruhe! 😱',
+      explosion: 'Du hast das in die Luft gejagt! Hilfe! 😱', bank: 'Du bist der Bankräuber! Ich ruf die Polizei! 📞',
+      unfall: 'Du bist doch der Raser von eben! Pass auf, wo du hinfährst! 😠', pruegel: 'Du hast den armen Affen verhauen! Fass mich nicht an! 😨',
+      polizist: 'Du hast den Polizisten angegriffen! Hilfe! 😱', rot: 'Du bist über Rot gefahren! Das macht man nicht! 😤',
+      aerger: 'Du machst nur Ärger! Geh weg! 😒',
+    };
+    const ZEUGE_FLIEHT = new Set(['autoklau', 'schuss', 'explosion', 'bank', 'pruegel', 'polizist']);
+    const ereignisse = [];
+    function ereignisMerken(grund, x = affe.position.x, z = affe.position.z) {
+      const art = /Auto geklaut/.test(grund) ? 'autoklau' : /geschossen|Schüsse/.test(grund) ? 'schuss' : /Explosion/.test(grund) ? 'explosion'
+        : /Bank/.test(grund) ? 'bank' : /angefahren|Unfall/.test(grund) ? 'unfall' : /verhauen/.test(grund) ? 'pruegel'
+        : /Polizist|Polizeiauto/.test(grund) ? 'polizist' : /Rot/.test(grund) ? 'rot' : 'aerger';
+      ereignisse.push({ art, x, z, zeit: spielZeit });
+      if (ereignisse.length > 20) ereignisse.shift();
+      for (const f of fussgaenger) if (f.gruppe.visible && Math.hypot(f.x - x, f.z - z) < 25) f.hatGesehen = { art, zeit: spielZeit };
+    }
     // Laut vorlesen (die Stimme des Browsers – jeder Affe hat seine eigene Tonhöhe)
     let stimmeDeutsch = null;
     function sprechen(text, hoehe = 1.5, wichtig = false) {
@@ -6161,18 +6241,45 @@
     }
     const _npcPos = new THREE.Vector3();
     // Was sagt ein Fußgänger, wenn man ihn anspricht? Kommt drauf an, was gerade los ist!
-    function gespraechsSpruch() {
-      if (fahndung) return zufallsSpruch('gesucht');
+    function neuesThema(f) {   // ein Thema, über das dieser Affe noch nicht geredet hat
+      f.gehabt ??= [];
+      let frei = THEMEN.filter(t => !f.gehabt.includes(t));
+      if (!frei.length) { f.gehabt = []; frei = THEMEN; }
+      f.thema = eins(frei); f.gehabt.push(f.thema); f.themaSchritt = 0; f.wartetAufAntwort = true;
+      return f.thema.frage;
+    }
+    function gespraechsSpruch(f) {
+      const w = f.hatGesehen;
+      if (w && spielZeit - w.zeit < 120) {          // er hat gesehen, was du gemacht hast!
+        f.thema = null;
+        if (ZEUGE_FLIEHT.has(w.art)) f.fliehtGleich = true;
+        return ZEUGE[w.art];
+      }
+      if (fahndung) { f.fliehtGleich = true; f.thema = null; return zufallsSpruch('gesucht'); }
+      if (spielZeit - (f.umgeworfenUm ?? -999) < 90) { f.thema = null; return 'Uff, mich hat gerade einer umgehauen. Mir tut alles weh! 😣'; }
+      const neu = ereignisse.filter(e => spielZeit - e.zeit < 150 && Math.hypot(e.x - f.x, e.z - f.z) < 70).pop();
+      if (neu && !f.geruechtErzaehlt?.includes(neu)) { (f.geruechtErzaehlt ??= []).push(neu); f.thema = null; return GERUECHT[neu.art]; }
       if (tanz && Math.random() < 0.7) return zufallsSpruch('tanz');
       if (meinTier && Math.random() < 0.35) return zufallsSpruch('tier');
       if (stunde >= 18.5 && stunde < 20 && Math.random() < 0.5) return zufallsSpruch('spaet');
-      return Math.random() < 0.25 ? zufallsSpruch('hallo') : zufallsSpruch('reden');
+      const gruss = f.kennt ? eins(['Ach, du schon wieder! 😊', 'Hey, wir kennen uns doch!', 'Schön, dich wiederzusehen!']) : eins(['Hallo! 👋', 'Hi!', 'Huhu!', 'Guten Tag!', 'Uh-uh-ah-ah! 🐒']);
+      f.kennt = true;
+      return gruss + ' ' + neuesThema(f);
+    }
+    // "Plaudern": beim gleichen Thema bleiben und mehr erzählen – erst wenn alles gesagt ist, kommt ein neues Thema
+    function weiterPlaudern(f) {
+      if (f.thema && f.themaSchritt < f.thema.mehr.length) { f.wartetAufAntwort = false; return f.thema.mehr[f.themaSchritt++]; }
+      return eins(['Ach, übrigens …', 'Was anderes:', 'Weißt du was?']) + ' ' + neuesThema(f);
     }
     function npcAnsprechen(p) {
       const f = naechsterFussgaenger(p, 2.4);
       if (f) {
         f.name ??= NAMEN_NPC[Math.floor(Math.random() * NAMEN_NPC.length)];
-        gespraechAuf(f, gespraechsSpruch());
+        gespraechAuf(f, gespraechsSpruch(f));
+        if (f.fliehtGleich) {                     // Angst vor dir: kurz was sagen, dann wegrennen
+          f.fliehtGleich = false;
+          setTimeout(() => { if (gespraechMit === f) gespraechZu(); f.redetBis = 0; f.fliehtBis = spielZeit + 5; }, 1600);
+        }
         return true;
       }
       const n = naechsterStand(p, 3.2);
@@ -6232,7 +6339,7 @@
       if (w === 'tschuess') { gespraechSatz(['Tschüss! 👋', 'Bis bald!', 'Mach\'s gut! 🍌'][Math.floor(Math.random() * 3)]); gespraechZu(); return; }
       if (w === 'mikro') { mikroZuhoeren(); return; }
       if (w === 'schreiben') { gespraechForm.classList.add('offen'); gespraechText.value = ''; gespraechText.focus(); return; }
-      if (w === 'plaudern') gespraechSatz(wer.art ? zufallsSpruch(wer.art) : gespraechsSpruch());
+      if (w === 'plaudern') gespraechSatz(wer.art ? zufallsSpruch(wer.art) : weiterPlaudern(wer));
       if (w === 'witz') gespraechSatz(WITZE_ANTWORT[Math.floor(Math.random() * WITZE_ANTWORT.length)]);
       if (w === 'weg') {
         const orte = wegOrte(), o = orte[Math.floor(Math.random() * orte.length)];
@@ -6264,8 +6371,10 @@
         [/geld|m(ü|ue)nze|punkte|reich/, () => 'Für Punkte kannst du Aufträge beim Auftrags-Affen machen! ❗'],
         [/auto|fahren|rennen/, () => 'Steig in ein Auto mit E – aber fahr nicht über Rot! 🚦'],
         [/freund|magst du mich|lieb/, () => 'Klar, wir sind jetzt Freunde! 🤝'],
-        [/ja\b|ok|cool|super|toll/, () => 'Cool! 😎'],
-        [/nein|nö/, () => 'Na gut … 🤷'],
+        [/^(ja|jo|jep|klar|natürlich|na klar|yes|sicher|schon)\b/, () => { if (wer.thema && wer.wartetAufAntwort) { wer.wartetAufAntwort = false; return wer.thema.ja; } return 'Cool! 😎'; }],
+        [/^(nein|nö|ne|nee|noch nicht|nicht)\b/, () => { if (wer.thema && wer.wartetAufAntwort) { wer.wartetAufAntwort = false; return wer.thema.nein; } return 'Na gut … 🤷'; }],
+        [/erz(ä|ae)hl|mehr|und dann|wieso|warum|echt\?/, () => wer.art ? zufallsSpruch(wer.art) : weiterPlaudern(wer)],
+        [/ok|cool|super|toll/, () => 'Cool! 😎'],
         [/\?$/, () => ['Gute Frage! Keine Ahnung … 🤔', 'Hmm, das weiß ich nicht.', 'Frag mal den Auftrags-Affen!'][Math.floor(Math.random() * 3)]],
       ];
       for (const [muster, antwort] of regeln) if (muster.test(t)) return antwort();
@@ -6716,11 +6825,12 @@
       if (leben < 100 && spielZeit - letzterSchadenUm > 6) { leben = Math.min(100, leben + 5 * dt); lebenZeigen(); } // langsam heilen
     }
     // Panik: alle Fußgänger im Umkreis rennen ein paar Sekunden weg
-    function panik(x, z, radius) {
+    const RUFE_SCHUSS = ['Hilfe! 😱', 'Lauft! 🙀', 'Nicht schießen!', 'Aaaah!'];
+    function panik(x, z, radius, rufe = RUFE_SCHUSS) {
       let gerufen = false;
       for (const f of fussgaenger) {
         if (f.zustand === 'liegt' || f.zustand === 'einkaufen' || Math.hypot(f.x - x, f.z - z) > radius) continue;
-        if (!(f.fliehtBis > spielZeit) && !gerufen && f.gruppe.visible) { gerufen = true; npcSagt(f.gruppe, ['Hilfe! 😱', 'Lauft! 🙀', 'Nicht schießen!', 'Aaaah!'][Math.floor(Math.random() * 4)], f, 2000); }
+        if (!(f.fliehtBis > spielZeit) && !gerufen && f.gruppe.visible) { gerufen = true; npcSagt(f.gruppe, eins(rufe), f, 2000); }
         f.fliehtBis = spielZeit + 4 + Math.random() * 2;
       }
     }
@@ -6749,7 +6859,7 @@
           const d = Math.hypot(f.x - p.x, f.z - p.z);
           if (d < bd) { bd = d; best = f; }
         }
-        if (best) { tx = best.x; tz = best.z; umwerfen(best, 3); panik(best.x, best.z, 12); straftat('Affe verhauen!'); traf = true; }
+        if (best) { tx = best.x; tz = best.z; umwerfen(best, 3); panik(best.x, best.z, 12, ['Eine Prügelei! 😱', 'Hört auf zu hauen!', 'Hilfe! Der haut alle!']); straftat('Affe verhauen!'); traf = true; }
       }
       if (traf) {
         ton(140, 60, 0.14, 'square', 0.3); ton(90, 40, 0.1, 'sawtooth', 0.2);
@@ -6787,6 +6897,7 @@
       verkehrBewegen(dt);            // alle Autos auf den Straßen
       ampelnZeigen(spielZeit);       // Ampeln umschalten
       fussgaengerBewegen(dt);        // Fußgänger-Affen
+      fluechtendeBewegen(dt);        // beklaute Fahrer rennen schreiend weg
       gespraechPruefen();            // Gespräch mit einem Affen
       polizeiBewegen(dt);            // Polizei (wenn jemand gesucht wird)
       mehrspielerBewegen(dt);        // Mitspieler
