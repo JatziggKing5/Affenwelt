@@ -4315,7 +4315,7 @@
     function zielfernrohrBenutzen(an) {
       if (an) {
         if (aktuellesFahrzeug || !hatWaffe()) return;
-        if (!WAFFEN_NR.includes(auswahl)) { auswahl = ersteWaffe(); inventarZeigen(); }
+        if (!WAFFEN_NR.includes(auswahl)) { zeigeMeldung('Nimm erst eine Waffe in die Hand: Taste 1, 3, 4 oder 5 🍌', 1.8); return; } // nur mit gewählter Waffe zielen
         if (!zielModus) zielNeigung = 0;
       }
       zielModus = an;
