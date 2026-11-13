@@ -3207,6 +3207,46 @@
       NPC_STAND.push({ gruppe: polizei.laeufer.gruppe, art: 'polizei', stimme: 0.8 });
     }
 
+    // Verstärkung beim Banküberfall: zwei weitere Polizisten rennen sofort los (mit dem Polizeiauto sind es drei)
+    const helfer = [0, 1].map(() => {
+      const h = { ...affenKlon(0x3b2314, true), x: 0, z: 0, richtung: 0, zeit: 0 };
+      h.gruppe.visible = false;
+      szene.add(h.gruppe);
+      return h;
+    });
+    function helferStarten() {
+      const p = spielerOrt();
+      helfer.forEach((h, i) => {
+        // einer von links-vorne, einer von rechts-hinten, etwa 30 m entfernt (an einer freien Stelle)
+        for (let versuch = 0; versuch < 12; versuch++) {
+          const w = (i ? 2.4 : 0.7) + versuch * 0.5, x = p.x + Math.sin(w) * 30, z = p.z + Math.cos(w) * 30;
+          if (frei(x, z) && x > WIESE.x1 && x < WIESE.x2 && z > WIESE.z1 && z < WIESE.z2) { h.x = x; h.z = z; break; }
+          h.x = p.x + Math.sin(w) * 12; h.z = p.z + Math.cos(w) * 12;
+        }
+        h.gruppe.visible = true;
+        h.gruppe.position.set(h.x, 0.5, h.z);
+      });
+    }
+    function helferBewegen(dt, ziel) {
+      let nahster = Infinity;
+      for (const h of helfer) {
+        if (!h.gruppe.visible) continue;
+        const abstand = Math.hypot(ziel.x - h.x, ziel.z - h.z);
+        nahster = Math.min(nahster, abstand);
+        if (abstand < (ziel.imAuto ? ziel.laenge / 2 + 0.8 : 1.2)) return { fang: true, nahster };
+        const wunsch = Math.atan2(ziel.x - h.x, ziel.z - h.z), schritt = 7.2 * dt;
+        for (const versatz of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8]) {
+          const w = wunsch + versatz, nx = h.x + Math.sin(w) * schritt, nz = h.z + Math.cos(w) * schritt;
+          if (frei(nx, nz)) { h.x = nx; h.z = nz; h.richtung = w; break; }
+        }
+        h.zeit += dt * 16;
+        laufAnimation(h.teile, h.zeit, 1.0);
+        h.gruppe.position.set(h.x, 0.5, h.z);
+        h.gruppe.rotation.y = h.richtung;
+      }
+      return { fang: false, nahster };
+    }
+
     let fahndung = null;       // null = niemand sucht dich, sonst { grund }
     let straftatPause = 0;
     let imGefaengnis = false;
@@ -3291,6 +3331,7 @@
       polizei.aktiv = false;
       polizei.gruppe.visible = false;
       polizei.laeufer.gruppe.visible = false;
+      for (const h of helfer) h.gruppe.visible = false;
       fahndung = null;
       sireneAus();
     }
@@ -3391,7 +3432,9 @@
       for (const r of polizei.raeder) r.halter.rotation.x += (polizei.tempo * dt) / r.r;
 
       // Sirene: je näher, desto lauter
-      const nah = Math.min(polizei.gruppe.visible ? Math.hypot(ziel.x - polizei.x, ziel.z - polizei.z) : Infinity,
+      const hf = helferBewegen(dt, ziel);
+      if (hf.fang) { verhaften(); return; }
+      const nah = Math.min(hf.nahster, polizei.gruppe.visible ? Math.hypot(ziel.x - polizei.x, ziel.z - polizei.z) : Infinity,
         polizei.laeufer.gruppe.visible ? Math.hypot(ziel.x - polizei.laeufer.x, ziel.z - polizei.laeufer.z) : Infinity);
       if (sirene) {
         sirene.osz.frequency.value = Math.floor(spielZeit * 1.6) % 2 ? 587 : 440;
@@ -3433,8 +3476,10 @@
     }
     function verhaften() {
       if (aktuellesFahrzeug) aussteigen();
+      const alles = !!(fahndung && fahndung.bankraub);   // nach einem Banküberfall ist das ganze Geld weg
+      const verloren = punkte;
       polizeiBeenden();
-      punkte = Math.max(0, punkte - 20);
+      punkte = alles ? 0 : Math.max(0, punkte - 20);
       punkteZeigen();
       const hatteSachen = hatWaffe() || inventar.rauch > 0;
       Object.assign(inventar, { pistole: false, munition: 0, zielfernrohr: false, rauch: 0, minigun: false, mgMun: 0, bazooka: false, bzMun: 0, schrot: false, srMun: 0 }); // die Polizei nimmt alles weg
@@ -3443,7 +3488,7 @@
       zielfernrohrBenutzen(false);
       inventarZeigen();
       lockereStelleZu();
-      inDieZelle('🚔 Verhaftet! −20 Punkte' + (hatteSachen ? ', Waffen weg' : '') + '. Ab ins Gefängnis!');
+      inDieZelle(alles ? '🚔 Erwischt! Dein ganzes Geld (' + (Number.isFinite(verloren) ? verloren : '∞') + ') ist weg' + (hatteSachen ? ', Waffen weg' : '') + '. Ab ins Gefängnis!' : '🚔 Verhaftet! −20 Punkte' + (hatteSachen ? ', Waffen weg' : '') + '. Ab ins Gefängnis!');
     }
     // E-Taste in der Zelle: an der lockeren Stelle graben
     function graben(p) {
@@ -3890,13 +3935,14 @@
       if (BANK.zaehler >= 10) {
         BANK.zaehler = 0;
         BANK.geraubtUm = spielZeit;
-        punkte += 200;
+        punkte += 1000;
         punkteZeigen();
         alarmBis = spielZeit + 6;
-        zeigeMeldung('💰 Tresor geknackt! +200 Punkte – ALARM!', 3);
+        zeigeMeldung('💰 Tresor geknackt! +1000 Münzen – ALARM! Drei Polizisten kommen!', 3);
         straftatPause = 0;
         straftat('Banküberfall!');
-        if (fahndung) fahndung.stark = true; // bei einem Banküberfall ist die Polizei schneller
+        if (fahndung) { fahndung.stark = true; fahndung.bankraub = true; } // Polizei ist schneller, und bei Verhaftung ist alles Geld weg
+        helferStarten();
       }
       return true;
     }
@@ -5563,7 +5609,7 @@
         } else if (amTresor(p)) {
           const BANK = bankAm(p);
           fahrInfo.innerHTML = spielZeit - BANK.geraubtUm < BANK_PAUSE ? '<b>Der Tresor ist leer.</b><small>In ein paar Minuten ist wieder Geld drin …</small>'
-            : `<b>💰 ${E_TASTE} drücken: Tresor knacken (${BANK.zaehler}/10)</b><small>Achtung: Danach kommt die Polizei!</small>`;
+            : `<b>💰 ${E_TASTE} drücken: Tresor knacken (${BANK.zaehler}/10)</b><small>+1000 Münzen! Aber: drei Polizisten kommen – wirst du erwischt, ist ALLES Geld weg!</small>`;
           fahrInfo.classList.add('offen');
         } else if (nah) {
           fahrInfo.innerHTML = `<b>Drücke ${E_TASTE} zum Einsteigen: ${nah.emoji} ${nah.name}</b>`;
