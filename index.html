@@ -3944,6 +3944,117 @@
       }
     }
 
+    // ================= POLIZEI-HUBSCHRAUBER (ab 4 Sternen) =================
+    // Fliegt 22 m hoch über dir, leuchtet mit einem Suchscheinwerfer und schießt von oben.
+    // 10 Bananen-Treffer (oder 2 mit der Bazooka) – dann fliegt er qualmend davon.
+    const HELI_HOEHE = 22, HELI_TEMPO = 19, HELI_LEBEN = 10, HELI_LOHN = 500;
+    const heli = { aktiv: false, x: 0, y: HELI_HOEHE, z: 0, richtung: 0, treffer: 0, flucht: false, naechsterSchuss: 0, kreis: 0 };
+    heli.gruppe = (function heliBauen() {
+      const g = new THREE.Group();
+      const blau = new THREE.MeshStandardMaterial({ color: 0x1a237e, metalness: 0.5, roughness: 0.35 });
+      const weissM = new THREE.MeshStandardMaterial({ color: 0xfafafa, metalness: 0.3, roughness: 0.4 });
+      const glas = new THREE.MeshStandardMaterial({ color: 0x80d8ff, metalness: 0.6, roughness: 0.05, transparent: true, opacity: 0.7 });
+      const dunkel = new THREE.MeshStandardMaterial({ color: 0x263238, metalness: 0.7, roughness: 0.4 });
+      const teilH = (geo, mat, x, y, z, sx = 1, sy = 1, sz = 1) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.castShadow = true; g.add(m); return m; };
+      const kugel = new THREE.SphereGeometry(1, 20, 14);
+      teilH(kugel, blau, 0, 0, 0, 1.4, 1.2, 2.4);                    // Rumpf
+      teilH(kugel, weissM, 0, -0.35, 0.1, 1.42, 0.7, 2.2);            // weißer Bauch
+      teilH(kugel, glas, 0, 0.25, 1.35, 1.05, 0.8, 1.1);              // Cockpit-Scheibe vorne
+      teilH(einheitsKiste, blau, 0, 0.25, -3.6, 0.35, 0.4, 3.6);      // Heckausleger
+      teilH(einheitsKiste, blau, 0, 0.9, -5.2, 0.12, 1.3, 0.8);       // Heckflosse
+      for (const sx of [-1, 1]) {                                     // Kufen
+        teilH(einheitsKiste, dunkel, sx * 1.0, -1.45, 0, 0.12, 0.12, 3.6);
+        teilH(einheitsKiste, dunkel, sx * 0.85, -1.15, 0.8, 0.08, 0.6, 0.08);
+        teilH(einheitsKiste, dunkel, sx * 0.85, -1.15, -0.8, 0.08, 0.6, 0.08);
+      }
+      teilH(einheitsKiste, dunkel, 0, 1.3, 0, 0.3, 0.4, 0.3);         // Rotor-Mast
+      const rotor = new THREE.Group(); rotor.position.set(0, 1.55, 0); g.add(rotor);
+      for (const w of [0, Math.PI / 2]) { const b = new THREE.Mesh(einheitsKiste, dunkel); b.scale.set(9, 0.06, 0.4); b.rotation.y = w; rotor.add(b); }
+      const heck = new THREE.Group(); heck.position.set(0.2, 0.9, -5.3); g.add(heck);
+      { const b = new THREE.Mesh(einheitsKiste, dunkel); b.scale.set(0.05, 1.6, 0.2); heck.add(b); }
+      // Blaulicht oben, POLIZEI-Schrift an der Seite
+      const blaulichtH = new THREE.MeshStandardMaterial({ color: 0x2979ff, emissive: 0x2979ff, emissiveIntensity: 3 });
+      teilH(kugel, blaulichtH, 0, 1.15, 1.0, 0.18, 0.18, 0.18);
+      const schrift = document.createElement('canvas'); schrift.width = 256; schrift.height = 64;
+      const c = schrift.getContext('2d'); c.fillStyle = '#ffffff'; c.font = 'bold 44px Arial'; c.textAlign = 'center'; c.fillText('POLIZEI', 128, 48);
+      const schriftMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(schrift), transparent: true });
+      for (const sx of [-1, 1]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.55), schriftMat); m.position.set(sx * 1.43, 0.25, -0.2); m.rotation.y = sx * Math.PI / 2; g.add(m); }
+      // Suchscheinwerfer: ein heller, durchsichtiger Lichtkegel nach unten
+      const kegel = new THREE.Mesh(new THREE.ConeGeometry(4.5, HELI_HOEHE, 24, 1, true),
+        new THREE.MeshBasicMaterial({ color: 0xfff9c4, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
+      kegel.position.set(0, -HELI_HOEHE / 2 - 1, 0);
+      g.add(kegel);
+      const rauchKugeln = [];                                          // Qualm, wenn er getroffen ist
+      const rauchMat = new THREE.MeshBasicMaterial({ color: 0x424242, transparent: true, opacity: 0.6, depthWrite: false });
+      for (let i = 0; i < 6; i++) { const r = new THREE.Mesh(kugel, rauchMat); r.visible = false; g.add(r); rauchKugeln.push(r); }
+      Object.assign(heli, { rotor, heck, blaulichtH, kegel, rauchKugeln });
+      g.visible = false;
+      szene.add(g);
+      return g;
+    })();
+    function heliStarten() {
+      if (heli.aktiv) return;
+      const p = spielerOrt();
+      const w = Math.random() * Math.PI * 2;                          // taucht 70 m entfernt am Himmel auf
+      Object.assign(heli, { aktiv: true, flucht: false, treffer: 0, x: p.x + Math.sin(w) * 70, z: p.z + Math.cos(w) * 70, y: HELI_HOEHE, naechsterSchuss: spielZeit + 3 });
+      heli.gruppe.visible = true;
+      zeigeMeldung('🚁 Ein Polizei-Hubschrauber jagt dich!', 3);
+    }
+    function heliWeg() { heli.aktiv = false; heli.gruppe.visible = false; }
+    function heliGetroffen(q, bazooka) {                               // trifft eine Banane den Hubschrauber?
+      if (!heli.aktiv || heli.flucht) return false;
+      if (Math.hypot(q.x - heli.x, q.z - heli.z) > 3 || Math.abs(q.y - heli.y) > 2.2) return false;
+      heli.treffer += bazooka ? 5 : 1;
+      klang('plopp');
+      if (heli.treffer >= HELI_LEBEN) {
+        heli.flucht = true;
+        punkte += HELI_LOHN; punkteZeigen(); klang('erfolg');
+        zeigeMeldung(`🚁💨 Hubschrauber vertrieben! +${HELI_LOHN} 🪙`, 3);
+      } else zeigeMeldung(`🚁 Treffer! ${HELI_LEBEN - heli.treffer} noch`, 1);
+      return true;
+    }
+    function heliBewegen(dt, ziel) {
+      if (!heli.aktiv) return Infinity;
+      heli.rotor.rotation.y += 30 * dt; heli.heck.rotation.x += 40 * dt;
+      heli.blaulichtH.emissiveIntensity = Math.floor(spielZeit * 3) % 2 ? 4 : 0.3;
+      const kaputt = heli.treffer / HELI_LEBEN;
+      heli.rauchKugeln.forEach((r, i) => {                             // Qualm steigt aus dem Rotor-Mast
+        r.visible = kaputt >= 0.5;
+        const t = (spielZeit * 0.8 + i / 6) % 1;
+        r.position.set(Math.sin(i * 2) * 0.4, 1.4 + t * 3, -1 - t * 4); r.scale.setScalar(0.3 + t * 1.2);
+      });
+      if (heli.flucht) {                                               // fliegt weg und steigt hoch
+        heli.y += 6 * dt; heli.x += Math.sin(heli.richtung) * 25 * dt; heli.z += Math.cos(heli.richtung) * 25 * dt;
+        heli.gruppe.rotation.z = Math.sin(spielZeit * 6) * 0.3;
+        if (heli.y > 70) heliWeg();
+      } else {
+        // kreist langsam um dich herum (12 m Abstand) und kommt hinterher
+        heli.kreis += dt * 0.5;
+        const zx = ziel.x + Math.sin(heli.kreis) * 12, zz = ziel.z + Math.cos(heli.kreis) * 12;
+        const dx = zx - heli.x, dz = zz - heli.z, d = Math.hypot(dx, dz);
+        const tempo = Math.min(HELI_TEMPO, d * 1.5);
+        if (d > 0.1) { heli.x += dx / d * tempo * dt; heli.z += dz / d * tempo * dt; }
+        const blick = Math.atan2(ziel.x - heli.x, ziel.z - heli.z);   // schaut immer zu dir
+        let u = blick - heli.richtung; u = Math.atan2(Math.sin(u), Math.cos(u));
+        heli.richtung += u * Math.min(1, 2 * dt);
+        heli.y += (HELI_HOEHE + Math.sin(spielZeit * 1.3) * 0.6 - heli.y) * Math.min(1, dt);
+        heli.gruppe.rotation.x = Math.min(0.3, tempo / HELI_TEMPO * 0.3);   // kippt beim Fliegen nach vorne
+        heli.gruppe.rotation.z = 0;
+        // Schießen (von oben, nicht so genau)
+        const nahAm = Math.hypot(ziel.x - heli.x, ziel.z - heli.z);
+        if (nahAm < 40 && spielZeit > heli.naechsterSchuss && spielZeit > selbstLiegtBis && !imGefaengnis) {
+          heli.naechsterSchuss = spielZeit + 0.9 + Math.random() * 0.8;
+          mafiaSchiesst({ x: heli.x, y: heli.y - 1.6, z: heli.z, richtung: heli.richtung, gruppe: heli.gruppe }, ziel, ziel.imAuto, 'polizei');
+        }
+        // Rotor-Geräusch, je näher desto lauter
+        if (spielZeit > (heli.tonUm || 0) && nahAm < 90) { heli.tonUm = spielZeit + 0.11; rauschen(0.06, 160, 0.12 * (1 - nahAm / 90)); }
+      }
+      heli.gruppe.position.set(heli.x, heli.y, heli.z);
+      heli.gruppe.rotation.y = heli.richtung;
+      heli.kegel.visible = !heli.flucht;
+      return heli.flucht ? Infinity : Math.hypot(ziel.x - heli.x, ziel.z - heli.z);
+    }
+
     let fahndung = null;       // null = niemand sucht dich, sonst { grund }
     let straftatPause = 0;
     let imGefaengnis = false;
@@ -3997,6 +4108,7 @@
         fahndung.grund = grund;
         fahndung.sterne = Math.min(5, (fahndung.sterne || 1) + 1);   // jede weitere Straftat = ein Stern mehr
         if (fahndung.sterne >= 3 && !fahndung.verstaerkung) { fahndung.verstaerkung = true; helferStarten(); }
+        if (fahndung.sterne >= 4 && !heli.aktiv) heliStarten();
         zeigeMeldung(`🚨 ${grund} ${'⭐'.repeat(fahndung.sterne)}`, 2); return;
       }
       fahndung = { grund, sterne: 1 };
@@ -4037,6 +4149,7 @@
       fahndung = null;
       sireneAus();
       polizeiSchiesstGemeldet = false;
+      if (heli.aktiv && !heli.flucht) { heli.flucht = true; heli.treffer = 0; }   // fliegt nach Hause
     }
 
     // Wo ist der Spieler gerade (zu Fuß oder im Fahrzeug)?
@@ -4058,7 +4171,7 @@
     }
     function polizeiBewegen(dt) {
       sterneZeigen();
-      if (!polizei.aktiv) { fahndungsAnzeige.classList.remove('offen'); return; }
+      if (!polizei.aktiv) { fahndungsAnzeige.classList.remove('offen'); if (heli.aktiv) heliBewegen(dt, spielerOrt()); return; }
       if (ohnmachtBis) return;                                       // du bist ohnmächtig: die Polizei wartet
       const ziel = spielerOrt();
       // Blaulicht blinkt
@@ -4145,7 +4258,8 @@
       // Sirene: je näher, desto lauter
       const hf = helferBewegen(dt, ziel);
       if (hf.fang) { verhaften(); return; }
-      const nah = Math.min(hf.nahster, polizei.gruppe.visible ? Math.hypot(ziel.x - polizei.x, ziel.z - polizei.z) : Infinity,
+      const heliAbstand = heliBewegen(dt, ziel);
+      const nah = Math.min(hf.nahster, heliAbstand, polizei.gruppe.visible ? Math.hypot(ziel.x - polizei.x, ziel.z - polizei.z) : Infinity,
         polizei.laeufer.gruppe.visible ? Math.hypot(ziel.x - polizei.laeufer.x, ziel.z - polizei.laeufer.z) : Infinity);
       if (sirene) {
         sirene.osz.frequency.value = Math.floor(spielZeit * 1.6) % 2 ? 587 : 440;
@@ -4442,6 +4556,7 @@
     let rechteMausGedrueckt = false;
     renderer.domElement.addEventListener('mousedown', e => {
       if (e.button === 2) { rechteMausGedrueckt = true; zielfernrohrBenutzen(true); }
+      if (e.button === 0 && !hatWaffe() && !aktuellesFahrzeug && auswahl !== 2) fGedrueckt = true;   // ohne Waffe: linke Maustaste = Faustschlag
       if (e.button === 0 && hatWaffe() && !aktuellesFahrzeug) {   // linke Maustaste = schießen
         if (!WAFFEN_NR.includes(auswahl)) { auswahl = ersteWaffe(); inventarZeigen(); }
         fGedrueckt = true;
@@ -4570,6 +4685,7 @@
       const nah = (x, z, r) => Math.hypot(q.x - x, q.z - z) < r && q.y < 1.6 && q.y > -0.1;
       if (zielscheibeGetroffen(q) || kopfgeldGetroffen(q)) return true;
       if (mafiaGetroffen(q)) return true;
+      if (heliGetroffen(q, g.art === 'bazooka')) return true;
       if (leopardGetroffen(q)) return true;
       if (polizei.aktiv && polizei.laeufer.gruppe.visible && nah(polizei.laeufer.x, polizei.laeufer.z, 0.7)) {
         polizei.betaeubtBis = spielZeit + LIEGEZEIT; zeigeMeldung('🍌 Polizist getroffen!', 1.5); return true;
@@ -6425,7 +6541,8 @@
     }
 
     // ================= LEBEN, KRANKENHAUS, FAUST UND PANIK (wie in GTA) =================
-    let leben = 100, letzterSchadenUm = -99, ohnmachtBis = 0, schlagBis = 0, naechsterSchlag = 0;
+    let leben = 100, letzterSchadenUm = -99, ohnmachtBis = 0, schlagBis = 0, naechsterSchlag = 0, schlagArm = 1, schlagTrefferUm = -9, schlagWackeln = 0;
+    const SCHLAG_ZEIT = 0.38;
     const KRANKENHAUS_RECHNUNG = 100;
     const lebenBox = document.getElementById('leben'), lebenFuell = document.getElementById('lebenFuell');
     const ohnmachtBild = document.getElementById('ohnmacht'), schadenRand = document.getElementById('schadenRand');
@@ -6474,23 +6591,40 @@
     // Faustschlag (F ohne Waffe): haut den nächsten Affen vor dir um
     function schlagen() {
       if (spielZeit < naechsterSchlag || spielZeit < selbstLiegtBis) return;
-      naechsterSchlag = spielZeit + 0.45; schlagBis = spielZeit + 0.3;
+      naechsterSchlag = spielZeit + 0.5; schlagBis = spielZeit + SCHLAG_ZEIT;
+      schlagArm = schlagArm === 1 ? -1 : 1;                        // links, rechts, links, ...
       const p = affe.position;
-      const hx = p.x + Math.sin(blickRichtung) * 0.9, hz = p.z + Math.cos(blickRichtung) * 0.9;   // Punkt vor der Faust
-      const nah = (x, z) => Math.hypot(x - hx, z - hz) < 1.1;
-      rauschen(0.08, 900, 0.25);                                   // "Wusch"
-      let traf = false;
-      for (const m of mafia) if (!m.tot && nah(m.x, m.z)) { mafiaTot(m); traf = true; break; }
-      if (!traf && polizei.aktiv && polizei.laeufer.gruppe.visible && nah(polizei.laeufer.x, polizei.laeufer.z)) { polizei.betaeubtBis = spielZeit + 3; zeigeMeldung('👊 Polizist umgehauen!', 1.5); traf = true; }
-      if (!traf && nah(waerter.x, waerter.z)) { waerter.betaeubtBis = spielZeit + 3; zeigeMeldung('👊 Wärter umgehauen – schnell!', 1.5); traf = true; }
-      if (!traf) for (const f of fussgaenger) {
-        if (f.zustand !== 'liegt' && f.zustand !== 'einkaufen' && nah(f.x, f.z)) {
-          umwerfen(f, 3); panik(f.x, f.z, 12); straftat('Affe verhauen!'); traf = true; break;
+      const fx = Math.sin(blickRichtung), fz = Math.cos(blickRichtung);
+      // Treffer: alle in 2,2 m Reichweite, vor dir (grob Halbkreis). Der Nächste zählt.
+      const nah = (x, z) => {
+        const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
+        return d < 2.2 && (d < 0.8 || (dx * fx + dz * fz) / d > 0.2);
+      };
+      rauschen(0.1, 1100, 0.3);                                    // "Wusch"
+      let traf = false, tx = p.x + fx * 1.2, tz = p.z + fz * 1.2;
+      for (const m of mafia) if (!m.tot && nah(m.x, m.z)) { tx = m.x; tz = m.z; mafiaTot(m); traf = true; break; }
+      if (!traf && polizei.aktiv && polizei.laeufer.gruppe.visible && nah(polizei.laeufer.x, polizei.laeufer.z)) { tx = polizei.laeufer.x; tz = polizei.laeufer.z; polizei.betaeubtBis = spielZeit + 3; zeigeMeldung('👊 Polizist umgehauen!', 1.5); traf = true; }
+      if (!traf && nah(waerter.x, waerter.z)) { tx = waerter.x; tz = waerter.z; waerter.betaeubtBis = spielZeit + 3; zeigeMeldung('👊 Wärter umgehauen – schnell!', 1.5); traf = true; }
+      if (!traf) {
+        let best = null, bd = 99;
+        for (const f of fussgaenger) {
+          if (f.zustand === 'liegt' || f.zustand === 'einkaufen' || !f.gruppe.visible || !nah(f.x, f.z)) continue;
+          const d = Math.hypot(f.x - p.x, f.z - p.z);
+          if (d < bd) { bd = d; best = f; }
         }
+        if (best) { tx = best.x; tz = best.z; umwerfen(best, 3); panik(best.x, best.z, 12); straftat('Affe verhauen!'); traf = true; }
       }
-      if (traf) ton(140, 60, 0.12, 'square', 0.25);
+      if (traf) {
+        ton(140, 60, 0.14, 'square', 0.3); ton(90, 40, 0.1, 'sawtooth', 0.2);
+        schlagTrefferUm = spielZeit; schlagWackeln = 0.35;
+        const w = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe14d, transparent: true, opacity: 0.9 }));
+        w.position.set(tx, p.y + 1.4, tz); scene.add(w);              // gelber "Bumm"-Stern
+        const t0 = spielZeit;
+        const gross = () => { const k = (spielZeit - t0) / 0.25; if (k >= 1) { scene.remove(w); return; } w.scale.setScalar(1 + k * 2.5); w.material.opacity = 0.9 * (1 - k); requestAnimationFrame(gross); };
+        gross();
+      }
     }
-    lebenZeigen();
+    lebenZeigen(); window.__test = { straftat, schleife: spielSchleife, heli, get leben() { return leben; }, get f() { return fahndung; }, affe }; //TESTWEG
 
     // --- Spiel-Schleife: läuft ca. 60 Mal pro Sekunde ---
     const uhr = new THREE.Clock();
@@ -6680,7 +6814,20 @@
           armLinks.rotation.z = -0.35; armRechts.rotation.z = 0.35;
         }
         if (WAFFEN_NR.includes(auswahl)) armRechts.rotation.set(-Math.PI / 2 + (zielModus ? zielNeigung : 0), 0, 0.1); // Waffe nach vorne halten
-        if (spielZeit < schlagBis) armRechts.rotation.set(-Math.PI / 2 - Math.sin((schlagBis - spielZeit) / 0.3 * Math.PI) * 0.4, 0, -0.15); // Faust nach vorne
+        if (spielZeit < schlagBis) {                                   // Faustschlag: ausholen, zuschlagen, zurück
+          const t = 1 - (schlagBis - spielZeit) / SCHLAG_ZEIT;          // 0 → 1
+          const ausholen = Math.min(1, t / 0.3), schlag = t < 0.3 ? 0 : Math.min(1, (t - 0.3) / 0.25), zurueck = t < 0.55 ? 0 : (t - 0.55) / 0.45;
+          const kraft = (ausholen * -0.5 + schlag * 1.5) * (1 - zurueck);  // erst nach hinten, dann nach vorne
+          const arm = schlagArm === 1 ? armRechts : armLinks, andere = schlagArm === 1 ? armLinks : armRechts;
+          arm.rotation.set(-Math.PI / 2 + 0.6 - kraft * 0.6 - (schlag * (1 - zurueck)) * 0.2, 0, -schlagArm * (0.15 - ausholen * 0.2));
+          andere.rotation.set(-0.9 * (ausholen * (1 - zurueck)), 0, schlagArm * 0.5);    // andere Faust zur Deckung
+          figur.rotation.y = schlagArm * (-ausholen * 0.35 + schlag * 0.7) * (1 - zurueck);  // Oberkörper dreht mit
+          figur.rotation.x = 0.25 * schlag * (1 - zurueck);                                 // Lehnt sich in den Schlag
+          figur.position.y = Math.max(figur.position.y, 0) + Math.sin(Math.min(1, t * 1.6) * Math.PI) * 0.05;
+          beinLinks.rotation.x = -0.5 * ausholen * (1 - zurueck) * schlagArm;    // Ausfallschritt
+          beinRechts.rotation.x = 0.5 * ausholen * (1 - zurueck) * schlagArm;
+        } else figur.rotation.y = 0;
+        if (spielZeit - schlagTrefferUm < 0.2) { figur.position.x = Math.sin(spielZeit * 90) * 0.03 * (1 - (spielZeit - schlagTrefferUm) / 0.2); } else figur.position.x = 0;  // kleiner Rückstoß beim Treffer
         if (spielZeit < trinkenBis) { armRechts.rotation.set(-2.5 + Math.sin(spielZeit * 9) * 0.05, 0, 0.1); kopf.rotation.x = -0.25; } // Glas an den Mund
         // Tanzen: hört auf, sobald man läuft, springt oder umgehauen wird
         if (tanz && (laeuft || !amBoden || liegt)) tanzStoppen();
@@ -7508,7 +7655,7 @@
       return false;
     }
     function mafiaSchiesst(m, ziel, imAuto, von = 'mafia') {
-      const ox = m.x + Math.sin(m.richtung) * 0.6, oy = 1.0, oz = m.z + Math.cos(m.richtung) * 0.6;
+      const ox = m.x + Math.sin(m.richtung) * 0.6, oy = m.y ?? 1.0, oz = m.z + Math.cos(m.richtung) * 0.6;
       const zy = imAuto ? 0.8 : affe.position.y;
       const dx = ziel.x - ox + (Math.random() - 0.5) * 1.6, dy = zy - oy, dz = ziel.z - oz + (Math.random() - 0.5) * 1.6;
       const l = Math.hypot(dx, dy, dz) || 1, tempo = 24;
