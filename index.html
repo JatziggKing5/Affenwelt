@@ -1268,7 +1268,7 @@
       { x: 16, z: 62, r: 13 },                      // Garage
       { x: -135, z: 20, r: 23 },                    // Gefängnis
       { x: 135, z: 145, r: 14 },                    // Ostbank
-      { x: 135, z: 250, r: 20 },                    // Affen-Club
+      { x: 135, z: 230, r: 20 },                    // Affen-Club
     ];
     const SPIELPLATZ = { x1: -26, x2: 13.5, z1: -26, z2: 16 };      // die alte Wiese mit den Blöcken
     const STADT = [{ x1: -86, x2: 86, z1: 134, z2: 206 }, { x1: -86, x2: 86, z1: 214, z2: 286 },
@@ -1503,9 +1503,9 @@
     bankBauen(135, 145, -1, 'Ostbank');
 
     // ================= AFFEN-CLUB =================
-    // Nachtclub in der Stadt (Osten, an der Querstraße bei z = 210). Drinnen: leuchtende Tanzfläche, Discokugel,
+    // Nachtclub in der Stadt (Osten, direkt an der Querstraße bei z = 210). Drinnen: leuchtende Tanzfläche, Discokugel,
     // DJ-Pult mit DJ-Affe, Boxen und eine Bar. Alles blinkt im Takt.
-    const CLUB = { x: 135, z: 250, b: 24, t: 18, h: 6, vorne: -1 };
+    const CLUB = { x: 135, z: 230, b: 24, t: 18, h: 6, vorne: -1 };
     const clubTanz = [];     // die Bodenplatten der Tanzfläche
     const clubStrahlen = []; // leuchtende Lichtbalken an der Decke
     let clubKugel = null;
