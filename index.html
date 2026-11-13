@@ -584,7 +584,7 @@
     ];
     HILFE.push(['🗺️ Zum Entdecken', [
       ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🐾 Tierhandlung', 'rechts neben der Hauptstraße beim Start'], ['🏡 Affen-Siedlung', 'Häuser kaufen und einrichten (rechts vom Start)'], ['🏁 Straßenrennen', 'mit einem Fahrzeug unters Start-Tor fahren'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
-      ['🎭 Mafia-Gang', 'maskierte Gangster in der Oststadt: +300 🪙 pro Abschuss – aber wenn sie dich treffen, sind Waffen und 200 🪙 weg!'],
+      ['🎭 Mafia-Gang', 'maskierte Banden überall auf der Karte: +300 🪙 pro Abschuss – aber wenn sie dich treffen, sind Waffen und 200 🪙 weg!'],
             ['🔫 Waffenhändler', 'Bananen-Pistole & Zielfernrohr'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
       ['🚔 Polizei', 'nicht über Rot fahren, nichts Verbotenes tun'], ['🔒 Gefängnis', 'man kann ausbrechen …'],
       ['💬 Mit Affen reden', 'neben einen Affen stellen und ' + E_TASTE + ' drücken – dann Antwort wählen (1–5), selbst schreiben (5) oder mit deiner Stimme sprechen (6 oder V)'],
@@ -7219,7 +7219,7 @@
     // ================= MAFIA-GANG =================
     // Maskierte Gangster in der Oststadt. Sie haben Waffen und schießen auf dich, wenn du ihnen zu nah kommst.
     // Triffst du einen, ist er tot: +300 Münzen. Treffen sie dich: alle Waffen weg und −200 Münzen.
-    const MAFIA_LOHN = 300, MAFIA_STRAFE = 200, MAFIA_ANZAHL = 5;
+    const MAFIA_LOHN = 300, MAFIA_STRAFE = 200, MAFIA_PRO_BANDE = 3;
     const mafiaSchwarz = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 });
     const mafiaAnzug = new THREE.MeshStandardMaterial({ color: 0x1c1c24, roughness: 0.6 });
     const mafiaWeiss = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
@@ -7256,11 +7256,15 @@
       }
       return { x: cx, z: cz };
     }
-    const MAFIA_HEIM = mafiaPlatz(180, 210, 25);
+    // Mehrere Banden, verteilt über die ganze Karte (Städte und Wiesen)
+    const MAFIA_HEIME = [[180, 210], [-180, 210], [0, 250], [-180, 325], [180, 325], [0, 400], [-150, 480], [150, 480], [0, 540],
+                         [120, 80], [-100, 100], [220, 40], [-230, 60], [0, 160]]
+      .map(([x, z]) => mafiaPlatz(x, z, 20));
     const mafia = [];
-    for (let i = 0; i < MAFIA_ANZAHL; i++) {
+    for (const heim of MAFIA_HEIME) for (let i = 0; i < MAFIA_PRO_BANDE; i++) {
       const g = mafiaAffeBauen();
-      const p = mafiaPlatz(MAFIA_HEIM.x, MAFIA_HEIM.z, 8);
+      const p = mafiaPlatz(heim.x, heim.z, 8);
+      g.heim = heim;
       Object.assign(g, { x: p.x, z: p.z, richtung: Math.random() * 6, tot: false, wiederUm: 0, totUm: 0, ziel: null, laufZeit: Math.random() * 6,
                          naechsterSchuss: 0, jagt: false, drehung: Math.random() < 0.5 ? 1 : -1 });
       g.gruppe.position.set(p.x, 0.5, p.z);
@@ -7337,10 +7341,11 @@
       for (const m of mafia) {
         const d = Math.hypot(ps.x - m.x, ps.z - m.z);
         m.gruppe.visible = d < 110 && (!m.tot || spielZeit < m.totUm + 4);
+        if (d > 130 && !m.tot) continue;                             // weit weg: ruht sich aus (spart Rechenzeit)
         if (m.tot) {                                                  // liegt am Boden, dann kommt ein neuer Gangster
           m.figur.rotation.x = -Math.PI / 2; m.gruppe.position.set(m.x, 0.25, m.z);
           if (spielZeit > m.wiederUm && d > 40) {
-            const p = mafiaPlatz(MAFIA_HEIM.x, MAFIA_HEIM.z, 8);
+            const p = mafiaPlatz(m.heim.x, m.heim.z, 8);
             m.x = p.x; m.z = p.z; m.tot = false; m.figur.rotation.x = 0; m.ziel = null;
           }
           continue;
@@ -7357,7 +7362,7 @@
           else bewegt = mafiaSchritt(m, m.x + Math.cos(m.richtung) * m.drehung * 10, m.z - Math.sin(m.richtung) * m.drehung * 10, 2.5, dt); // seitlich laufen
           if (d < 32 && spielZeit > m.naechsterSchuss) { mafiaSchiesst(m, ps, ps.imAuto); m.naechsterSchuss = spielZeit + 1.4 + Math.random() * 1.6; }
         } else {                                                      // Streife rund ums Versteck
-          if (!m.ziel || Math.hypot(m.ziel.x - m.x, m.ziel.z - m.z) < 1 || Math.random() < 0.004) m.ziel = mafiaPlatz(MAFIA_HEIM.x, MAFIA_HEIM.z, 12);
+          if (!m.ziel || Math.hypot(m.ziel.x - m.x, m.ziel.z - m.z) < 1 || Math.random() < 0.004) m.ziel = mafiaPlatz(m.heim.x, m.heim.z, 12);
           const alt = m.richtung;
           const weg = Math.atan2(m.ziel.x - m.x, m.ziel.z - m.z);
           m.richtung = alt + Math.atan2(Math.sin(weg - alt), Math.cos(weg - alt)) * Math.min(1, 6 * dt);
