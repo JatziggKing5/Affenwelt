@@ -584,7 +584,8 @@
     ];
     HILFE.push(['🗺️ Zum Entdecken', [
       ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🐾 Tierhandlung', 'rechts neben der Hauptstraße beim Start'], ['🏡 Affen-Siedlung', 'Häuser kaufen und einrichten (rechts vom Start)'], ['🏁 Straßenrennen', 'mit einem Fahrzeug unters Start-Tor fahren'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
-      ['🔫 Waffenhändler', 'Bananen-Pistole & Zielfernrohr'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
+      ['🎭 Mafia-Gang', 'maskierte Gangster in der Oststadt: +300 🪙 pro Abschuss – aber wenn sie dich treffen, sind Waffen und 200 🪙 weg!'],
+            ['🔫 Waffenhändler', 'Bananen-Pistole & Zielfernrohr'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
       ['🚔 Polizei', 'nicht über Rot fahren, nichts Verbotenes tun'], ['🔒 Gefängnis', 'man kann ausbrechen …'],
       ['💬 Mit Affen reden', 'neben einen Affen stellen und ' + E_TASTE + ' drücken – dann Antwort wählen (1–5), selbst schreiben (5) oder mit deiner Stimme sprechen (6 oder V)'],
       ['📟 Fernbedienung', 'Codes eingeben' + (IST_HANDY ? '' : ' mit ' + k('C'))],
@@ -4395,6 +4396,7 @@
       if (polizei.aktiv && polizei.laeufer.gruppe.visible && nah(polizei.laeufer.x, polizei.laeufer.z)) { polizei.betaeubtBis = spielZeit + LIEGEZEIT; umgeworfen++; }
       if (polizei.aktiv && nah(polizei.x, polizei.z)) { polizei.betaeubtBis = spielZeit + LIEGEZEIT; umgeworfen++; }
       if (nah(waerter.x, waerter.z)) { waerter.betaeubtBis = spielZeit + LIEGEZEIT; umgeworfen++; }
+      for (const m of mafia) if (!m.tot && nah(m.x, m.z)) { mafiaTot(m); umgeworfen++; }   // die Mafia stirbt durch Explosionen
       let fussgaengerGetroffen = false;
       for (const f of fussgaenger) if (f.zustand !== 'liegt' && f.zustand !== 'einkaufen' && nah(f.x, f.z)) { umwerfen(f, LIEGEZEIT); umgeworfen++; fussgaengerGetroffen = true; }
       if (fussgaengerGetroffen) straftat('Explosion in der Stadt!');
@@ -4414,6 +4416,7 @@
       const q = g.mesh.position;
       const nah = (x, z, r) => Math.hypot(q.x - x, q.z - z) < r && q.y < 1.6 && q.y > -0.1;
       if (zielscheibeGetroffen(q) || kopfgeldGetroffen(q)) return true;
+      if (mafiaGetroffen(q)) return true;
       if (leopardGetroffen(q)) return true;
       if (polizei.aktiv && polizei.laeufer.gruppe.visible && nah(polizei.laeufer.x, polizei.laeufer.z, 0.7)) {
         polizei.betaeubtBis = spielZeit + LIEGEZEIT; zeigeMeldung('🍌 Polizist getroffen!', 1.5); return true;
@@ -6294,6 +6297,7 @@
       polizeiBewegen(dt);            // Polizei (wenn jemand gesucht wird)
       mehrspielerBewegen(dt);        // Mitspieler
       geschosseBewegen(dt);          // fliegende Bananen
+      mafiaBewegen(dt);              // Mafia-Gang: Streife, Schüsse
       rauchBewegen(dt);              // Rauchwolken
       bankBewegen();                 // Alarmglocke
       clubBewegen(spielZeit);        // Disco-Lichter im Club
@@ -7210,6 +7214,164 @@
         }
       }
       return false;
+    }
+
+    // ================= MAFIA-GANG =================
+    // Maskierte Gangster in der Oststadt. Sie haben Waffen und schießen auf dich, wenn du ihnen zu nah kommst.
+    // Triffst du einen, ist er tot: +300 Münzen. Treffen sie dich: alle Waffen weg und −200 Münzen.
+    const MAFIA_LOHN = 300, MAFIA_STRAFE = 200, MAFIA_ANZAHL = 5;
+    const mafiaSchwarz = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 });
+    const mafiaAnzug = new THREE.MeshStandardMaterial({ color: 0x1c1c24, roughness: 0.6 });
+    const mafiaWeiss = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+    const mafiaRot = new THREE.MeshStandardMaterial({ color: 0xb71c1c, roughness: 0.5 });
+    function mafiaAffeBauen() {
+      const g = affenKlon(0x212121);
+      const f = g.figur, kopf = g.teile.kopf;
+      const teil = (geo, mat, eltern, x, y, z, sx = 1, sy = 1, sz = 1) => {
+        const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); eltern.add(m); return m;
+      };
+      const kugelG = new THREE.SphereGeometry(1, 16, 12);
+      teil(kugelG, mafiaAnzug, f, 0, -0.08, 0, 0.34, 0.37, 0.31);                 // schwarzer Anzug
+      teil(new THREE.BoxGeometry(0.1, 0.3, 0.02), mafiaRot, f, 0, -0.04, 0.3);    // rote Krawatte
+      teil(kugelG, mafiaSchwarz, kopf, 0, 0.0, 0.04, 0.41, 0.4, 0.42);            // die Maske über dem ganzen Kopf
+      for (const s of [-1, 1]) {
+        teil(kugelG, mafiaWeiss, kopf, s * 0.11, 0.08, 0.4, 0.07, 0.04, 0.03);    // Augenschlitze
+        teil(kugelG, mafiaSchwarz, kopf, s * 0.11, 0.08, 0.425, 0.03, 0.03, 0.01);
+      }
+      teil(new THREE.BoxGeometry(0.2, 0.025, 0.02), mafiaRot, kopf, 0, -0.1, 0.43); // roter Mund
+      teil(new THREE.CylinderGeometry(0.4, 0.4, 0.03, 20), mafiaSchwarz, kopf, 0, 0.3, 0.02);   // Hut: Krempe
+      teil(new THREE.CylinderGeometry(0.22, 0.26, 0.22, 20), mafiaSchwarz, kopf, 0, 0.42, 0.02); // Hut: oben
+      const pistole = bananenPistoleBauen();                                       // die Waffe in der rechten Hand
+      pistole.rotation.x = Math.PI / 2; pistole.scale.setScalar(1.3); pistole.position.set(0, -0.43, 0);
+      g.teile.armR.add(pistole);
+      const schild = namensSchild('🎭 MAFIA'); schild.position.y = 1.55; schild.scale.set(1.6, 0.4, 1);
+      g.gruppe.add(schild);
+      g.gruppe.scale.setScalar(1.05);
+      return g;
+    }
+    function mafiaPlatz(cx, cz, radius) {
+      for (let i = 0; i < 300; i++) {
+        const x = cx + (Math.random() - 0.5) * 2 * radius, z = cz + (Math.random() - 0.5) * 2 * radius;
+        if (frei(x, z) && !stoesstAn(x, 0.5, z)) return { x, z };
+      }
+      return { x: cx, z: cz };
+    }
+    const MAFIA_HEIM = mafiaPlatz(180, 210, 25);
+    const mafia = [];
+    for (let i = 0; i < MAFIA_ANZAHL; i++) {
+      const g = mafiaAffeBauen();
+      const p = mafiaPlatz(MAFIA_HEIM.x, MAFIA_HEIM.z, 8);
+      Object.assign(g, { x: p.x, z: p.z, richtung: Math.random() * 6, tot: false, wiederUm: 0, totUm: 0, ziel: null, laufZeit: Math.random() * 6,
+                         naechsterSchuss: 0, jagt: false, drehung: Math.random() < 0.5 ? 1 : -1 });
+      g.gruppe.position.set(p.x, 0.5, p.z);
+      szene.add(g.gruppe);
+      mafia.push(g);
+    }
+    const mafiaSchuesse = [];
+    let mafiaWarnungBis = 0;
+    function mafiaSchritt(m, wx, wz, tempo, dt) {                   // einen Schritt Richtung (wx, wz), Hindernissen ausweichen
+      const weg = Math.atan2(wx - m.x, wz - m.z);
+      for (const abw of [0, 0.7, -0.7, 1.4, -1.4]) {
+        const nx = m.x + Math.sin(weg + abw) * tempo * dt, nz = m.z + Math.cos(weg + abw) * tempo * dt;
+        if (nx < WIESE.x1 + 3 || nx > WIESE.x2 - 3 || nz < WIESE.z1 + 3 || nz > WIESE.z2 - 3 || stoesstAn(nx, 0.5, nz)) continue;
+        m.x = nx; m.z = nz; return true;
+      }
+      return false;
+    }
+    function mafiaSchiesst(m, ziel, imAuto) {
+      const ox = m.x + Math.sin(m.richtung) * 0.6, oy = 1.0, oz = m.z + Math.cos(m.richtung) * 0.6;
+      const zy = imAuto ? 0.8 : affe.position.y;
+      const dx = ziel.x - ox + (Math.random() - 0.5) * 1.6, dy = zy - oy, dz = ziel.z - oz + (Math.random() - 0.5) * 1.6;
+      const l = Math.hypot(dx, dy, dz) || 1, tempo = 24;
+      const b = new THREE.Mesh(bananenForm, bananenMaterial);
+      b.position.set(ox, oy, oz); b.scale.setScalar(1.2);
+      szene.add(b);
+      mafiaSchuesse.push({ mesh: b, vx: dx / l * tempo, vy: dy / l * tempo, vz: dz / l * tempo, leben: 2.5 });
+      if (m.gruppe.visible) hupen(520);                              // "Peng!"
+    }
+    function mafiaTot(m) {
+      m.tot = true; m.jagt = false;
+      m.totUm = spielZeit; m.wiederUm = spielZeit + 45;
+      punkte += MAFIA_LOHN; punkteZeigen();
+      klang('erfolg');
+      zeigeMeldung(`🎭 Mafia-Gangster erledigt! +${MAFIA_LOHN} 🪙`, 2.5);
+    }
+    function mafiaGetroffen(q) {                                     // trifft meine Banane einen Gangster?
+      for (const m of mafia) {
+        if (!m.tot && Math.hypot(q.x - m.x, q.z - m.z) < 0.8 && q.y < 1.9 && q.y > -0.1) { mafiaTot(m); return true; }
+      }
+      return false;
+    }
+    function spielerVonMafiaGetroffen() {
+      punkte = Math.max(0, punkte - MAFIA_STRAFE); punkteZeigen();
+      Object.assign(inventar, { pistole: false, munition: 0, zielfernrohr: false, rauch: 0, minigun: false, mgMun: 0, bazooka: false, bzMun: 0, schrot: false, srMun: 0 });
+      auswahl = 0;
+      zielfernrohrBenutzen(false);
+      inventarZeigen();
+      if (!aktuellesFahrzeug) selbstLiegtBis = spielZeit + LIEGEZEIT;
+      klang('fehler');
+      zeigeMeldung(`🎭 Von der Mafia getroffen! Alle Waffen weg und −${MAFIA_STRAFE} 🪙`, 3.5);
+    }
+    function mafiaBewegen(dt) {
+      // --- Schüsse der Mafia fliegen ---
+      for (let i = mafiaSchuesse.length - 1; i >= 0; i--) {
+        const s = mafiaSchuesse[i];
+        let weg = false;
+        for (let k = 0; k < 3 && !weg; k++) {
+          const q = s.mesh.position;
+          q.x += s.vx * dt / 3; q.y += s.vy * dt / 3; q.z += s.vz * dt / 3;
+          const f = aktuellesFahrzeug, p = affe.position;
+          if (f ? (punktInFahrzeug(f, q.x, q.z, 0.2) && q.y < f.hoehe + 0.5)
+                : (Math.hypot(q.x - p.x, q.z - p.z) < 0.7 && Math.abs(q.y - p.y) < 0.9)) {
+            if (spielZeit >= selbstLiegtBis) spielerVonMafiaGetroffen();
+            weg = true;
+          } else if (q.y < 0 || bloecke.some(o => o.art !== 'lava' && Math.abs(q.x - o.x) < o.b / 2 && Math.abs(q.z - o.z) < o.t / 2 && q.y < o.oben && q.y > o.unten)) weg = true;
+        }
+        s.mesh.rotation.x += 14 * dt; s.mesh.rotation.y += 9 * dt;
+        s.leben -= dt;
+        if (weg || s.leben < 0) { szene.remove(s.mesh); mafiaSchuesse.splice(i, 1); }
+      }
+      // --- Die Gangster selbst ---
+      const ps = spielerOrt();
+      const ruhig = spielZeit < selbstLiegtBis + 3 || imGefaengnis;  // nach einem Treffer lassen sie dir kurz Zeit
+      for (const m of mafia) {
+        const d = Math.hypot(ps.x - m.x, ps.z - m.z);
+        m.gruppe.visible = d < 110 && (!m.tot || spielZeit < m.totUm + 4);
+        if (m.tot) {                                                  // liegt am Boden, dann kommt ein neuer Gangster
+          m.figur.rotation.x = -Math.PI / 2; m.gruppe.position.set(m.x, 0.25, m.z);
+          if (spielZeit > m.wiederUm && d > 40) {
+            const p = mafiaPlatz(MAFIA_HEIM.x, MAFIA_HEIM.z, 8);
+            m.x = p.x; m.z = p.z; m.tot = false; m.figur.rotation.x = 0; m.ziel = null;
+          }
+          continue;
+        }
+        if (!m.jagt && d < 38 && !ruhig) {
+          m.jagt = true; m.naechsterSchuss = spielZeit + 1 + Math.random();
+          if (spielZeit > mafiaWarnungBis) { mafiaWarnungBis = spielZeit + 20; zeigeMeldung('🎭 Die Mafia hat dich entdeckt! Schieß zuerst – oder lauf weg!', 3); }
+        } else if (m.jagt && (d > 65 || ruhig)) m.jagt = false;
+        let bewegt = false;
+        if (m.jagt) {
+          m.richtung = Math.atan2(ps.x - m.x, ps.z - m.z);
+          if (d > 14) bewegt = mafiaSchritt(m, ps.x, ps.z, 5.5, dt);
+          else if (d < 7) bewegt = mafiaSchritt(m, m.x - (ps.x - m.x), m.z - (ps.z - m.z), 4, dt);
+          else bewegt = mafiaSchritt(m, m.x + Math.cos(m.richtung) * m.drehung * 10, m.z - Math.sin(m.richtung) * m.drehung * 10, 2.5, dt); // seitlich laufen
+          if (d < 32 && spielZeit > m.naechsterSchuss) { mafiaSchiesst(m, ps, ps.imAuto); m.naechsterSchuss = spielZeit + 1.4 + Math.random() * 1.6; }
+        } else {                                                      // Streife rund ums Versteck
+          if (!m.ziel || Math.hypot(m.ziel.x - m.x, m.ziel.z - m.z) < 1 || Math.random() < 0.004) m.ziel = mafiaPlatz(MAFIA_HEIM.x, MAFIA_HEIM.z, 12);
+          const alt = m.richtung;
+          const weg = Math.atan2(m.ziel.x - m.x, m.ziel.z - m.z);
+          m.richtung = alt + Math.atan2(Math.sin(weg - alt), Math.cos(weg - alt)) * Math.min(1, 6 * dt);
+          bewegt = mafiaSchritt(m, m.ziel.x, m.ziel.z, 1.8, dt);
+          if (!bewegt) m.ziel = null;
+        }
+        if (m.gruppe.visible) {
+          m.laufZeit += dt * (m.jagt ? 12 : 7);
+          laufAnimation(m.teile, m.laufZeit, bewegt ? 0.6 : 0);
+          m.teile.armR.rotation.set(-1.5, 0, 0);                       // Waffe zeigt nach vorne
+        }
+        m.gruppe.position.set(m.x, 0.5 + (bewegt ? Math.abs(Math.sin(m.laufZeit)) * 0.04 : 0), m.z);
+        m.gruppe.rotation.y = m.richtung;
+      }
     }
 
     // ================= HANDY-STEUERUNG =================
