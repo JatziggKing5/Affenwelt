@@ -1268,6 +1268,7 @@
       { x: 16, z: 62, r: 13 },                      // Garage
       { x: -135, z: 20, r: 23 },                    // Gefängnis
       { x: 135, z: 145, r: 14 },                    // Ostbank
+      { x: 135, z: 250, r: 20 },                    // Affen-Club
     ];
     const SPIELPLATZ = { x1: -26, x2: 13.5, z1: -26, z2: 16 };      // die alte Wiese mit den Blöcken
     const STADT = [{ x1: -86, x2: 86, z1: 134, z2: 206 }, { x1: -86, x2: 86, z1: 214, z2: 286 }];
@@ -1492,6 +1493,90 @@
     }
     const BANK = bankBauen(-30, 145, -1, 'Stadtbank');
     bankBauen(135, 145, -1, 'Ostbank');
+
+    // ================= AFFEN-CLUB =================
+    // Nachtclub in der Stadt (Osten, an der Querstraße bei z = 210). Drinnen: leuchtende Tanzfläche, Discokugel,
+    // DJ-Pult mit DJ-Affe, Boxen und eine Bar. Alles blinkt im Takt.
+    const CLUB = { x: 135, z: 250, b: 24, t: 18, h: 6, vorne: -1 };
+    const clubTanz = [];     // die Bodenplatten der Tanzfläche
+    const clubStrahlen = []; // leuchtende Lichtbalken an der Decke
+    let clubKugel = null;
+    const CLUB_FARBEN = [0xff1744, 0xff4081, 0xd500f9, 0x651fff, 0x2979ff, 0x00e5ff, 0x1de9b6, 0xffea00];
+    {
+      const { x: cx, z: cz, b: B, t: T, h: H, vorne } = CLUB, W = 0.4;
+      const fz = cz + vorne * T / 2, hz = cz - vorne * T / 2;
+      const wand = 0x1a1033;
+      neuerBlock(cx, hz, B, W, 0, H, 'block', wand);
+      neuerBlock(cx - B / 2, cz, W, T, 0, H, 'block', wand);
+      neuerBlock(cx + B / 2, cz, W, T, 0, H, 'block', wand);
+      neuerBlock(cx - (B / 4 + 1.5), fz, B / 2 - 3, W, 0, H, 'block', wand);
+      neuerBlock(cx + (B / 4 + 1.5), fz, B / 2 - 3, W, 0, H, 'block', wand);
+      neuerBlock(cx, fz, 3, W, 3.2, H, 'block', wand);                                   // Tür 3 m breit
+      neuerBlock(cx, cz, B + 0.6, T + 0.6, H, H + 0.4, 'block', 0x0d0620);               // Dach
+      flach(new THREE.MeshStandardMaterial({ color: 0x120826, roughness: 0.4 }), cx, cz, B - 0.5, T - 0.5, 0.03);
+      // Neon-Schild und Leuchtstreifen an der Fassade
+      schildBauen('🪩 AFFEN-CLUB', 9, 1.5, '#12002b', '#ff4fd8', cx, H - 1, fz + vorne * 0.25, vorne > 0 ? 0 : Math.PI);
+      const neonMat = [0xff4fd8, 0x00e5ff].map(c => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 2.5 }));
+      instanz(einheitsKiste, neonMat[0], cx, H - 1.85, fz + vorne * 0.25, B - 1, 0.12, 0.1, 0, null, false);
+      instanz(einheitsKiste, neonMat[1], cx, 3.7, fz + vorne * 0.25, 3.6, 0.1, 0.1, 0, null, false);
+      for (const sx of [-1, 1]) instanz(einheitsKiste, neonMat[1], cx + sx * 1.75, 1.6, fz + vorne * 0.25, 0.1, 3.2, 0.1, 0, null, false); // Türrahmen
+      // Tanzfläche: 6 x 5 Platten, die ihre Farbe wechseln
+      for (let i = 0; i < 6; i++) for (let j = 0; j < 5; j++) {
+        const mat = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: CLUB_FARBEN[0], emissiveIntensity: 1.2 });
+        const platte = new THREE.Mesh(einheitsKiste, mat);
+        platte.scale.set(1.9, 0.06, 1.9);
+        platte.position.set(cx - 5 + i * 2, 0.06, cz + vorne * 0.5 + (j - 2) * 2);
+        platte.receiveShadow = true;
+        szene.add(platte);
+        clubTanz.push({ mat, i, j });
+      }
+      // Discokugel an der Decke
+      const spiegelMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.1, emissive: 0x666688, emissiveIntensity: 0.8, flatShading: true });
+      clubKugel = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 1), spiegelMat);
+      clubKugel.position.set(cx, H - 1.4, cz + vorne * 0.5);
+      szene.add(clubKugel);
+      instanz(einheitsKiste, new THREE.MeshStandardMaterial({ color: 0x888888 }), cx, H - 0.6, cz + vorne * 0.5, 0.05, 1.2, 0.05, 0, null, false);
+      // Leuchtbalken unter der Decke
+      for (let i = 0; i < 4; i++) {
+        const mat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: CLUB_FARBEN[i], emissiveIntensity: 3 });
+        instanz(einheitsKiste, mat, cx - 9 + i * 6, H - 0.2, cz + vorne * 0.5, 0.25, 0.2, T - 4, 0, null, false);
+        clubStrahlen.push({ mat, i });
+      }
+      // DJ-Pult an der Rückwand mit DJ-Affe, Boxen daneben
+      const pultMat = new THREE.MeshStandardMaterial({ color: 0x37474f, roughness: 0.4 });
+      neuerBlock(cx, hz + vorne * 2.6, 6, 1.2, 0, 1.1, 'block', 0x37474f);
+      instanz(einheitsKiste, new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 1.5 }), cx, 1.15, hz + vorne * 2.6, 5.6, 0.05, 1.0, 0, null, false);
+      const dj = affenKlon(0x7e57c2);
+      dj.gruppe.position.set(cx, 0.5, hz + vorne * 1.2);
+      dj.gruppe.rotation.y = vorne > 0 ? 0 : Math.PI;
+      szene.add(dj.gruppe);
+      NPC_STAND.push({ gruppe: dj.gruppe, art: 'dj' });
+      for (const sx of [-1, 1]) {
+        neuerBlock(cx + sx * 5.2, hz + vorne * 1.4, 1.6, 1.4, 0, 2.4, 'block', 0x212121);
+        instanz(kugelForm, new THREE.MeshStandardMaterial({ color: 0x424242 }), cx + sx * 5.2, 1.5, hz + vorne * 2.15, 0.5, 0.5, 0.15, 0, null, false);
+        instanz(kugelForm, new THREE.MeshStandardMaterial({ color: 0x424242 }), cx + sx * 5.2, 0.7, hz + vorne * 2.15, 0.35, 0.35, 0.12, 0, null, false);
+      }
+      // Bar an der linken Wand mit Barkeeper
+      neuerBlock(cx - B / 2 + 3, cz, 1.2, 9, 0, 1.1, 'block', 0x4e342e);
+      instanz(einheitsKiste, new THREE.MeshStandardMaterial({ color: 0xff4fd8, emissive: 0xff4fd8, emissiveIntensity: 1.5 }), cx - B / 2 + 3, 1.15, cz, 1.3, 0.05, 9.1, 0, null, false);
+      const barkeeper = affenKlon(0xbcaaa4);
+      barkeeper.gruppe.position.set(cx - B / 2 + 1.4, 0.5, cz);
+      barkeeper.gruppe.rotation.y = Math.PI / 2;
+      szene.add(barkeeper.gruppe);
+      NPC_STAND.push({ gruppe: barkeeper.gruppe, art: 'barkeeper' });
+      for (let k = 0; k < 6; k++) instanz(einheitsKiste, new THREE.MeshStandardMaterial({ color: CLUB_FARBEN[k + 1], emissive: CLUB_FARBEN[k + 1], emissiveIntensity: 0.8, transparent: true, opacity: 0.8 }),
+        cx - B / 2 + 1.2, 1.9, cz - 3.5 + k * 1.4, 0.2, 0.5, 0.2, 0, null, false);   // bunte Flaschen am Regal
+    }
+    function clubBewegen(zeit) {
+      const takt = zeit * 2.2;
+      for (const t of clubTanz) {
+        const n = Math.floor(takt + t.i * 0.7 + t.j * 1.3 + ((t.i * 3 + t.j * 5) % 4)) % CLUB_FARBEN.length;
+        t.mat.emissive.setHex(CLUB_FARBEN[n]);
+        t.mat.emissiveIntensity = 0.9 + 0.5 * Math.sin(zeit * 6 + t.i + t.j);
+      }
+      for (const b of clubStrahlen) b.mat.emissive.setHex(CLUB_FARBEN[Math.floor(takt * 0.5 + b.i * 2) % CLUB_FARBEN.length]);
+      if (clubKugel) clubKugel.rotation.y = zeit * 0.8;
+    }
 
     // ================= WAFFENHÄNDLER =================
     // Ein kleiner Laden mit Bananen-Waffen, gleich bei der ersten Kreuzung.
@@ -4266,6 +4351,7 @@
       rechteck('#f48fb1', KABINE.x, KABINE.z, 3.6, 3.6);
       for (const l of LAEDEN) rechteck('#ff9800', l.x, l.z, l.b, l.t);
       for (const b of BANKEN) rechteck('#ffd54f', b.x, b.z, b.b, b.t);
+      rechteck('#d500f9', CLUB.x, CLUB.z, CLUB.b, CLUB.t);
       rechteck('#d32f2f', HAENDLER.x, HAENDLER.z, 8, 6);
       rechteck('#ec407a', KLEIDERLADEN.x, KLEIDERLADEN.z, 16, 12);
       rechteck('#37474f', GEF.x, GEF.z, 26, 26);
@@ -4274,7 +4360,7 @@
     }
     const ORTE = [ // Beschriftungen auf der großen Karte
       { name: '🏁 Start', x: 0, z: 2 }, { name: '🧗 Obby ↑', x: 18, z: -12 }, { name: '🏎 Garage', x: GARAGE.x, z: GARAGE.z },
-      { name: '👕 Umkleide', x: KABINE.x, z: KABINE.z }, ...BANKEN.map(b => ({ name: '🏦 ' + b.name, x: b.x, z: b.z })), { name: '🍌 Waffen', x: HAENDLER.x, z: HAENDLER.z },
+      { name: '👕 Umkleide', x: KABINE.x, z: KABINE.z }, ...BANKEN.map(b => ({ name: '🏦 ' + b.name, x: b.x, z: b.z })), { name: '🪩 Club', x: CLUB.x, z: CLUB.z }, { name: '🍌 Waffen', x: HAENDLER.x, z: HAENDLER.z },
       { name: '👗 Affen-Mode', x: KLEIDERLADEN.x, z: KLEIDERLADEN.z }, { name: '🔒 Gefängnis', x: GEF.x, z: GEF.z },
       ...LAEDEN.map(l => ({ name: '🛒 Supermarkt', x: l.x, z: l.z })),
     ];
@@ -5096,6 +5182,8 @@
       aua: ['Aua! 😵', 'Hey! 😠', 'Was soll das?!', 'Meine Bananen! 🍌', 'Uff!'],
       fahrer: ['Weg da! 🚗', 'Mach Platz!', 'Ich hab\'s eilig!', 'Hallo?! Geh von der Straße!', 'Hup hup! 📯'],
       kassierer: ['Willkommen im Supermarkt! 🍌', 'Frische Bananen im Angebot!', 'Schönen Tag noch!'],
+      dj: ['Seid ihr bereit?! 🎧', 'Dreht die Musik auf! 🎶', 'Tanzt, bis die Sonne aufgeht!'],
+      barkeeper: ['Ein Bananen-Shake? 🍌🥤', 'Heute gibt es Dschungel-Saft!', 'Nur alkoholfrei – hier tanzen Kinder!'],
       bank: ['Willkommen in der Affen-Bank! 🏦', 'Bitte nichts klauen … 😅', 'Der Tresor ist ganz sicher. Glaube ich.'],
       haendler: ['Psst … brauchst du was? 😎', 'Bananen-Waffen, frisch geladen!', 'Ein Zielfernrohr macht dich zum Profi.'],
       kleider: ['Willkommen! Probier doch was an! 👕', 'Das steht dir super!', 'Heute ist alles schick!'],
@@ -5426,6 +5514,7 @@
       geschosseBewegen(dt);          // fliegende Bananen
       rauchBewegen(dt);              // Rauchwolken
       bankBewegen();                 // Alarmglocke
+      clubBewegen(spielZeit);        // Disco-Lichter im Club
       if (fGedrueckt) { fGedrueckt = false; benutzen(); naechsterMiniSchuss = spielZeit + 0.07; }
       // Minigun: solange F, linke Maustaste oder der 🔫-Knopf gedrückt ist, feuert sie weiter
       if (auswahl === 3 && (tasten.KeyF || linkeMausGedrueckt || handySchussGehalten) && spielZeit > naechsterMiniSchuss) { naechsterMiniSchuss = spielZeit + 0.07; benutzen(); }
