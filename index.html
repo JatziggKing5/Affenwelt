@@ -417,6 +417,7 @@
     { "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.webgpu.js",
         "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.webgpu.js",
+        "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.webgpu.js",
         "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
     } }
   </script>
@@ -514,7 +515,20 @@
     // --- Szene, Kamera und Renderer: die "Bühne", das "Auge" und der "Maler" ---
     const szene = new THREE.Scene();
     const NPC_STAND = [];   // Affen, die an einem festen Ort stehen und reden können (Verkäufer usw.)
-    szene.background = new THREE.Color(0x87ceeb); // hellblauer Himmel
+    // Himmel mit Farbverlauf: oben kräftig blau, am Horizont hell – dazu eine leuchtende Sonne
+    const himmelOben = THREE.uniform(new THREE.Color(0x3d8fe0));
+    const himmelUnten = THREE.uniform(new THREE.Color(0xbfe3f5));
+    const sonnenRichtung = THREE.uniform(new THREE.Vector3(0.5, 0.8, 0.3));
+    const sonnenGlanz = THREE.uniform(1);                     // 0 = Sonne unsichtbar (nachts)
+    const sonnenFarbe = THREE.uniform(new THREE.Color(0xfff2d0));
+    {
+      const richtung = THREE.normalize(THREE.positionLocal);
+      const verlauf = THREE.pow(THREE.max(richtung.y, 0), 0.55);
+      const nahSonne = THREE.max(THREE.dot(richtung, THREE.normalize(sonnenRichtung)), 0);
+      const schein = THREE.pow(nahSonne, 12).mul(0.35).add(THREE.pow(nahSonne, 200).mul(1.5));
+      const scheibe = THREE.smoothstep(0.9990, 0.9994, nahSonne).mul(8);
+      szene.backgroundNode = THREE.mix(himmelUnten, himmelOben, verlauf).add(sonnenFarbe.mul(schein.add(scheibe)).mul(sonnenGlanz));
+    }
 
     const kamera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 300);
 
@@ -526,14 +540,28 @@
     if (IST_HANDY) document.body.classList.add('handy');
     const E_TASTE = IST_HANDY ? '✋' : 'E'; // so heißt die Aktions-Taste in den Hinweisen
     // Einstellungen (Lautstärke, Grafik, Maus) – die merkt sich der Browser. Der Spielstand wird NICHT gespeichert.
-    const EINST = { laut: 0.8, musik: 0.4, schatten: true, aufloesung: 1, sicht: 'weit', maus: 1, umkehren: false, tageszeit: 'auto', stimmen: true };
+    const EINST = { laut: 0.8, musik: 0.4, schatten: true, leuchten: !IST_HANDY, aufloesung: 1, sicht: 'weit', maus: 1, umkehren: false, tageszeit: 'auto', stimmen: true };
     try { Object.assign(EINST, JSON.parse(localStorage.getItem('affenEinstellungen') || '{}')); } catch (e) {}
     const einstMerken = () => { try { localStorage.setItem('affenEinstellungen', JSON.stringify(EINST)); } catch (e) {} };
     const aufloesungSetzen = () => renderer.setPixelRatio(Math.min(devicePixelRatio, IST_HANDY ? 1.5 : 2) * EINST.aufloesung); // auf dem Handy etwas sparsamer
     aufloesungSetzen();
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;    // Schatten mit weichen Rändern
+    renderer.toneMapping = THREE.NeutralToneMapping;      // Farben bleiben bunt, sehr helle Stellen werden nicht grell
+    renderer.toneMappingExposure = 1.05;
     document.body.appendChild(renderer.domElement);
     await renderer.init(); // WebGPU starten (dauert einen Moment)
+
+    // Leuchten (Bloom): helle Lampen, Neon und die Sonne bekommen einen weichen Lichtschein
+    let nachbearbeitung = null;
+    try {
+      const { bloom } = await import('three/addons/tsl/display/BloomNode.js');
+      const szenenBild = THREE.pass(szene, kamera, { samples: 4 });   // samples = glatte Kanten
+      const farbe = szenenBild.getTextureNode('output');
+      nachbearbeitung = new THREE.PostProcessing(renderer);
+      nachbearbeitung.outputNode = farbe.add(bloom(farbe, 0.45, 0.35, 1.1));
+    } catch (e) { console.warn('Leuchten geht hier nicht:', e); }
+    const malen = () => nachbearbeitung && EINST.leuchten ? nachbearbeitung.render() : renderer.render(szene, kamera);
 
     // --- Menü: Hilfe-Übersicht und Einstellungen (H oder ❓) ---
     const hilfe = document.getElementById('hilfe');
@@ -577,6 +605,7 @@
         </div>
         <div class="gruppe"><h3>🖥️ Grafik <small>(langsames Gerät? Hier sparen!)</small></h3>
           <div class="einst"><span>Schatten</span><input type="checkbox" data-e="schatten"></div>
+          <div class="einst"><span>Leuchten (Lampen, Neon)</span><input type="checkbox" data-e="leuchten"></div>
           <div class="einst"><span>Bildschärfe</span><select data-e="aufloesung"><option value="0.5">Niedrig (schnell)</option><option value="0.75">Mittel</option><option value="1">Hoch (schön)</option></select></div>
           <div class="einst"><span>Tageszeit</span><select data-e="tageszeit"><option value="auto">Tag und Nacht wechseln</option><option value="tag">Immer Tag</option><option value="nacht">Immer Nacht</option></select></div>
           <div class="einst"><span>Sichtweite</span><select data-e="sicht"><option value="nah">Nah (schnell)</option><option value="weit">Weit (schön)</option></select></div>
@@ -4770,7 +4799,8 @@
 
     // --- Tag und Nacht: ein ganzer Tag dauert etwa 7 Minuten (die Nacht geht schneller vorbei) ---
     let stunde = 9;                                   // Uhrzeit im Spiel (0–24)
-    const HIMMEL_TAG = new THREE.Color(0x87ceeb), HIMMEL_ABEND = new THREE.Color(0xff9a62), HIMMEL_NACHT = new THREE.Color(0x0a1235);
+    const HIMMEL_TAG = new THREE.Color(0xbfe3f5), HIMMEL_ABEND = new THREE.Color(0xff9a62), HIMMEL_NACHT = new THREE.Color(0x0f1a40);
+    const OBEN_TAG = new THREE.Color(0x3d8fe0), OBEN_ABEND = new THREE.Color(0x5b6aa8), OBEN_NACHT = new THREE.Color(0x02061a);
     const _himmel = new THREE.Color();
     // Sterne: viele kleine Punkte auf einer großen Kugel um die Kamera
     const sterne = (() => {
@@ -4848,7 +4878,11 @@
       const hell = THREE.MathUtils.clamp((hoehe + 0.12) / 0.4, 0, 1);    // 0 = Nacht, 1 = Tag
       const abend = THREE.MathUtils.clamp(1 - Math.abs(hoehe) / 0.3, 0, 1) * (hoehe > -0.2 ? 1 : 0);  // Sonnenauf- und -untergang
       _himmel.copy(HIMMEL_NACHT).lerp(HIMMEL_TAG, hell).lerp(HIMMEL_ABEND, abend * 0.6);
-      szene.background.copy(_himmel); szene.fog.color.copy(_himmel);
+      himmelUnten.value.copy(_himmel); szene.fog.color.copy(_himmel);         // Horizont und Nebel haben dieselbe Farbe
+      himmelOben.value.copy(OBEN_NACHT).lerp(OBEN_TAG, hell).lerp(OBEN_ABEND, abend * 0.5);
+      sonnenRichtung.value.set(Math.cos(winkel), hoehe, 0.45);
+      sonnenGlanz.value = THREE.MathUtils.clamp((hoehe + 0.08) / 0.15, 0, 1);
+      sonnenFarbe.value.setRGB(1, 0.75 + 0.2 * (1 - abend), 0.55 + 0.3 * (1 - abend));
       wolkenBewegen(dt, hell);
       himmelLicht.intensity = 0.4 + hell * 0.6;
       himmelLicht.color.setRGB(0.6 + hell * 0.4, 0.65 + hell * 0.35, 0.9 + hell * 0.1);
@@ -6280,7 +6314,7 @@
         const seitlich = inventar.zielfernrohr ? 0 : 0.5; // ohne Fernrohr: etwas rechts über der Schulter
         kamera.position.set(p.x - r.z * seitlich - r.x * 0.2, p.y + 0.45, p.z + r.x * seitlich - r.z * 0.2);
         kamera.lookAt(kamera.position.x + r.x * 50, kamera.position.y + r.y * 50, kamera.position.z + r.z * 50);
-        renderer.render(szene, kamera);
+        malen();
         return;
       }
       // Kamera folgt weich: Der Punkt, auf den sie schaut, gleitet hinter dem Affen her (nach oben/unten noch sanfter,
@@ -6310,7 +6344,7 @@
       kamera.position.set(kz.x + (wunschX - kz.x) * kameraFrei, kz.y + (wunschY - kz.y) * kameraFrei, kz.z + (wunschZ - kz.z) * kameraFrei);
       kamera.lookAt(kz.x, kz.y + 0.3, kz.z);
 
-      renderer.render(szene, kamera);
+      malen();
     }
     // ================= GEHEIMVERSTECK: rein, raus, Waffen nehmen =================
     const MUNITION_VOLL = { minigun: ['mgMun', 300], bazooka: ['bzMun', 12], schrot: ['srMun', 40] };
