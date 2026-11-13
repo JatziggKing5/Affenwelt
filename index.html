@@ -2580,7 +2580,10 @@
 
     // --- Fernbedienung: Codes eingeben (C oder 📟) ---
     // Neue Codes einfach in CODES dazuschreiben: '1234': () => { … was passieren soll … }
+    let superTempo = 1;   // 1 = normal, 3 = Code 5118
     const CODES = {
+      '5118': () => { superTempo = 3; return '⚡ DREIMAL SCHNELL! (0000 = wieder normal)'; },
+      '0000': () => { superTempo = 1; return '🐢 Wieder normale Geschwindigkeit.'; },
       '9909': () => {
         if (!Number.isFinite(punkte)) return '💰 Unendlich Geld ist schon an!';
         punkte = Infinity; punkteZeigen();
@@ -6370,7 +6373,7 @@
         const f = aktuellesFahrzeug;
         if (sprungGedrueckt) { if (f.typ !== 'flugzeug') hupen(f.hupe); sprungGedrueckt = false; } // Leertaste = hupen (Flugzeug: steigen)
         if (f.vorherX === undefined) { f.vorherX = f.x; f.vorherZ = f.z; }
-        fahren(f, dt);
+        fahren(f, dt * superTempo);   // Code 5118: dreimal so schnell
         motorGeraeusch(f);
         ausfahrtPruefen(f);                       // aus dem Geheimversteck hinausfahren
         // --- Verbotenes beim Fahren? ---
@@ -6429,7 +6432,7 @@
         const laenge = Math.hypot(wx, wz);
         if (laenge > 1) { wx /= laenge; wz /= laenge; }                // schräg ist nicht schneller als geradeaus
         const rennt = ((tasten.ShiftLeft || tasten.ShiftRight) && laenge > 0) || (stick.aktiv && laenge > 0.93); // Handy: Stick ganz außen = rennen
-        const laufTempo = (hatJetpack() && !zuletztAmBoden ? TEMPO * 1.7 : rennt ? RENN_TEMPO : TEMPO) * (zielModus ? 0.5 : 1) * (spielZeit < energieBis ? energieFaktor : 1);
+        const laufTempo = (hatJetpack() && !zuletztAmBoden ? TEMPO * 1.7 : rennt ? RENN_TEMPO : TEMPO) * (zielModus ? 0.5 : 1) * (spielZeit < energieBis ? energieFaktor : 1) * superTempo;
         // Sanft schneller und langsamer werden (in der Luft lenkt man etwas weniger)
         const griff = Math.min(1, (zuletztAmBoden ? 12 : 5) * dt);
         laufV.x += (wx * laufTempo - laufV.x) * griff;
