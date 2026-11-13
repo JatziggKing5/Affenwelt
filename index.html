@@ -405,6 +405,22 @@
     #fahrinfo.offen { display: block; }
     #fahrinfo b { font-size: 20px; }
     #fahrinfo small { display: block; margin-top: 4px; font-size: 12px; opacity: 0.8; }
+    #leben {
+      position: fixed; top: 258px; right: 12px; width: 180px; height: 12px; background: rgba(0,0,0,0.6);
+      border-radius: 9px; padding: 3px; box-sizing: content-box; pointer-events: none;
+    }
+    #lebenFuell { height: 100%; width: 100%; border-radius: 7px; background: linear-gradient(#ff5252, #c62828); transition: width 0.2s; }
+    #leben span { position: absolute; left: -22px; top: -3px; font-size: 15px; }
+    #leben.wenig #lebenFuell { animation: blinken 0.4s infinite alternate; }
+    @media (max-width: 500px) { #leben { top: 186px; width: 110px; } }
+    #ohnmacht {
+      position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
+      background: rgba(60, 0, 0, 0.55); color: #fff; pointer-events: none; text-align: center; z-index: 50;
+    }
+    #ohnmacht.offen { display: flex; }
+    #ohnmacht b { font-size: min(13vw, 90px); letter-spacing: 6px; color: #ff5252; text-shadow: 0 4px 0 #000; font-family: Impact, 'Arial Black', sans-serif; }
+    #ohnmacht small { font-size: 18px; margin-top: 10px; }
+    #schadenRand { position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 120px rgba(255, 0, 0, 0.8); opacity: 0; transition: opacity 0.4s; }
     #sterne {
       position: fixed; top: 58px; right: 12px; padding: 4px 12px; background: rgba(0,0,0,0.6);
       border-radius: 10px; font-size: 22px; letter-spacing: 2px; display: none; pointer-events: none;
@@ -431,7 +447,10 @@
 </head>
 <body>
   <div id="punkte"></div>
+  <div id="leben"><div id="lebenFuell"></div><span>❤️</span></div>
   <div id="sterne"></div>
+  <div id="ohnmacht"><b>OHNMÄCHTIG</b><small>Ein Krankenwagen bringt dich ins Krankenhaus …</small></div>
+  <div id="schadenRand"></div>
   <div id="meldung"></div>
   <div id="fahrinfo"></div>
   <div id="fahndung"></div>
@@ -1864,6 +1883,41 @@
     const BANK = bankBauen(-30, 145, -1, 'Stadtbank');
     bankBauen(135, 145, -1, 'Ostbank');
 
+    // ================= KRANKENHAUS =================
+    // Hier wachst du auf, wenn dein Leben leer ist. Weißes Haus mit rotem Kreuz und Betten drinnen.
+    const KRANKENHAUS = { x: -135, z: 225, b: 18, t: 14, h: 8, vorne: -1 };
+    (function krankenhausBauen() {
+      const { x: cx, z: cz, b: B, t: T, h: H, vorne } = KRANKENHAUS, W = 0.4;
+      const fz = cz + vorne * T / 2, hz = cz - vorne * T / 2, weiss = 0xfafafa, rot = 0xe53935;
+      neuerBlock(cx, hz, B, W, 0, H, 'block', weiss);
+      neuerBlock(cx - B / 2, cz, W, T, 0, H, 'block', weiss);
+      neuerBlock(cx + B / 2, cz, W, T, 0, H, 'block', weiss);
+      neuerBlock(cx - (B / 4 + 1.1), fz, B / 2 - 2.2, W, 0, H, 'block', weiss);
+      neuerBlock(cx + (B / 4 + 1.1), fz, B / 2 - 2.2, W, 0, H, 'block', weiss);
+      neuerBlock(cx, fz, 4.4, W, 3.4, H, 'block', weiss);
+      neuerBlock(cx, cz, B + 1, T + 1, H, H + 0.5, 'block', 0xcfd8dc);              // Dach
+      flach(new THREE.MeshStandardMaterial({ color: 0xe0f2f1, roughness: 0.4 }), cx, cz, B - 0.5, T - 0.5, 0.03); // heller Boden
+      // großes rotes Kreuz über der Tür und auf dem Dach
+      const kreuz = new THREE.MeshStandardMaterial({ color: rot, emissive: 0x5a0000, roughness: 0.5 });
+      instanz(einheitsKiste, kreuz, cx, 5.6, fz + vorne * 0.25, 2.6, 0.8, 0.1, 0, null, false);
+      instanz(einheitsKiste, kreuz, cx, 5.6, fz + vorne * 0.25, 0.8, 2.6, 0.1, 0, null, false);
+      instanz(einheitsKiste, kreuz, cx, H + 0.55, cz, 6, 0.1, 2, 0, null, false);
+      instanz(einheitsKiste, kreuz, cx, H + 0.55, cz, 2, 0.1, 6, 0, null, false);
+      schildBauen('🏥 KRANKENHAUS', 7, 1.1, '#ffffff', '#e53935', cx, H - 0.8, fz + vorne * 0.3, vorne > 0 ? 0 : Math.PI);
+      // Betten: weißes Laken, blaues Kissen
+      for (const bx of [-6, -2.5, 2.5, 6]) {
+        neuerBlock(cx + bx, hz + vorne * 2.2, 1.6, 2.8, 0, 0.7, 'block', 0xffffff);
+        instanz(einheitsKiste, new THREE.MeshStandardMaterial({ color: 0x90caf9 }), cx + bx, 0.8, hz + vorne * 1.2, 1.2, 0.2, 0.6);
+      }
+      // Ärztin-Affe mit weißem Fell-Kittel
+      const aerztin = affenKlon(0xeeeeee);
+      aerztin.gruppe.position.set(cx + 4, 0.5, fz - vorne * 3);
+      aerztin.gruppe.rotation.y = vorne > 0 ? 0 : Math.PI;
+      szene.add(aerztin.gruppe);
+      NPC_STAND.push({ gruppe: aerztin.gruppe, art: 'arzt' });
+      KRANKENHAUS.aufwachen = { x: cx, z: fz + vorne * 2.5 };                       // hier stehst du nach dem Aufwachen
+    })();
+
     // ================= AFFEN-CLUB =================
     // Nachtclub in der Stadt (Osten, direkt an der Querstraße bei z = 210). Drinnen: leuchtende Tanzfläche, Discokugel,
     // DJ-Pult mit DJ-Affe, Boxen und eine Bar. Alles blinkt im Takt.
@@ -2252,7 +2306,7 @@
         for (let z = gebiet.z1 + 8; z < gebiet.z2 - 4; z += 14) {
           const b = zwischen(7, 10), t = zwischen(7, 10);
           if (nahAnStrasse(x, z, Math.max(b, t) / 2 + 2.6)) continue;
-          if ([...LAEDEN, ...BANKEN, KLEIDERLADEN, CLUB].some(l => Math.abs(l.x - x) < (l.b + b) / 2 + 3 && Math.abs(l.z - z) < (l.t + t) / 2 + 3)) continue;
+          if ([...LAEDEN, ...BANKEN, KLEIDERLADEN, CLUB, KRANKENHAUS].some(l => Math.abs(l.x - x) < (l.b + b) / 2 + 3 && Math.abs(l.z - z) < (l.t + t) / 2 + 3)) continue;
           const hoch = zufall() < 0.25; // manche sind Hochhäuser
           const h = hoch ? zwischen(12, 22) : zwischen(4, 7);
           const wandFarbe = HAUS_FARBEN[Math.floor(zufall() * HAUS_FARBEN.length)];
@@ -3731,6 +3785,19 @@
           if (spielZeit > f.aufstehenUm) { f.zustand = f.vorher; f.figur.rotation.x = 0; }
           continue;
         }
+        if (f.fliehtBis > spielZeit && f.zustand !== 'einkaufen') {   // Panik! weg vom Spieler rennen
+          const weg = Math.atan2(f.x - affe.position.x, f.z - affe.position.z);
+          for (const abw of [0, 0.8, -0.8, 1.6, -1.6]) {
+            const nx = f.x + Math.sin(weg + abw) * 6 * dt, nz = f.z + Math.cos(weg + abw) * 6 * dt;
+            if (stoesstAn(nx, 0.5, nz) || nx < WIESE.x1 + 2 || nx > WIESE.x2 - 2 || nz < WIESE.z1 + 2 || nz > WIESE.z2 - 2) continue;
+            f.x = nx; f.z = nz; f.richtung = weg + abw; break;
+          }
+          f.laufZeit += dt * 18;
+          if (f.gruppe.visible) { laufAnimation(f.teile, f.laufZeit, 1); f.teile.armL && (f.teile.armL.rotation.z = -2.6); f.teile.armR && (f.teile.armR.rotation.z = 2.6); } // Arme hoch!
+          f.gruppe.position.set(f.x, 0.5 * f.groesse + Math.abs(Math.sin(f.laufZeit)) * 0.06, f.z);
+          f.gruppe.rotation.y = f.richtung;
+          continue;
+        }
         if (f.zustand === 'einkaufen') {     // steht im Laden und sucht etwas aus
           laufAnimation(f.teile, 0, 0);
           if (spielZeit > f.fertigUm) {
@@ -4409,11 +4476,9 @@
     }
     function benutzen() {
       if (auswahl === 2) { rauchbombe(); return; }
-      if (!WAFFEN_NR.includes(auswahl)) {
-        zeigeMeldung(hatWaffe() ? 'Nimm eine Waffe mit 1, 3, 4 oder 5 in die Hand' : 'Du hast keine Waffe – geh zum Waffenhändler 🍌', 1.8);
-        return;
-      }
+      if (!WAFFEN_NR.includes(auswahl)) { if (!aktuellesFahrzeug) schlagen(); return; }   // ohne Waffe: mit der Faust
       if (aktuellesFahrzeug) return;
+      panik(affe.position.x, affe.position.z, 25);              // Schüsse: alle Affen in der Nähe rennen weg
       if (auswahl === 1) {                                      // Bananen-Pistole
         if (inventar.munition <= 0) { zeigeMeldung('Keine Schuss mehr! Beim Waffenhändler gibt es +10 🍌', 1.8); return; }
         inventar.munition--;
@@ -4460,6 +4525,7 @@
       for (const m of mafia) if (!m.tot && nah(m.x, m.z)) { mafiaTot(m); umgeworfen++; }   // die Mafia stirbt durch Explosionen
       let fussgaengerGetroffen = false;
       for (const f of fussgaenger) if (f.zustand !== 'liegt' && f.zustand !== 'einkaufen' && nah(f.x, f.z)) { umwerfen(f, LIEGEZEIT); umgeworfen++; fussgaengerGetroffen = true; }
+      panik(x, z, 30);
       if (fussgaengerGetroffen) straftat('Explosion in der Stadt!');
       if (umgeworfen) zeigeMeldung(`💥 BUMM! ${umgeworfen} umgeworfen!`, 1.5);
     }
@@ -4898,6 +4964,7 @@
       for (const l of LAEDEN) rechteck('#ff9800', l.x, l.z, l.b, l.t);
       for (const b of BANKEN) rechteck('#ffd54f', b.x, b.z, b.b, b.t);
       rechteck('#d500f9', CLUB.x, CLUB.z, CLUB.b, CLUB.t);
+      rechteck('#ef5350', KRANKENHAUS.x, KRANKENHAUS.z, KRANKENHAUS.b, KRANKENHAUS.t);
       rechteck('#d32f2f', HAENDLER.x, HAENDLER.z, 8, 6);
       rechteck('#ec407a', KLEIDERLADEN.x, KLEIDERLADEN.z, 16, 12);
       rechteck('#37474f', GEF.x, GEF.z, 26, 26);
@@ -4907,7 +4974,7 @@
     const ORTE = [ // Beschriftungen auf der großen Karte
       { name: '🏁 Start', x: 0, z: 2 }, { name: '🧗 Obby ↑', x: 18, z: -12 }, { name: '🏎 Garage', x: GARAGE.x, z: GARAGE.z },
       { name: '👕 Umkleide', x: KABINE.x, z: KABINE.z }, ...BANKEN.map(b => ({ name: '🏦 ' + b.name, x: b.x, z: b.z })), { name: '🪩 Club', x: CLUB.x, z: CLUB.z }, { name: '🍌 Waffen', x: HAENDLER.x, z: HAENDLER.z },
-      { name: '👗 Affen-Mode', x: KLEIDERLADEN.x, z: KLEIDERLADEN.z }, { name: '🔒 Gefängnis', x: GEF.x, z: GEF.z },
+      { name: '👗 Affen-Mode', x: KLEIDERLADEN.x, z: KLEIDERLADEN.z }, { name: '🔒 Gefängnis', x: GEF.x, z: GEF.z }, { name: '🏥 Krankenhaus', x: KRANKENHAUS.x, z: KRANKENHAUS.z },
       ...LAEDEN.map(l => ({ name: '🛒 Supermarkt', x: l.x, z: l.z })),
     ];
     // M = große Karte an/aus (Esc schließt sie auch)
@@ -5763,6 +5830,7 @@
       dj: ['Seid ihr bereit?! 🎧', 'Dreht die Musik auf! 🎶', 'Tanzt, bis die Sonne aufgeht!'],
       barkeeper: ['Ein Bananen-Shake? 🍌🥤', 'Heute gibt es Dschungel-Saft!', 'Nur alkoholfrei – hier tanzen Kinder!'],
       bank: ['Willkommen in der Affen-Bank! 🏦', 'Bitte nichts klauen … 😅', 'Der Tresor ist ganz sicher. Glaube ich.'],
+      arzt: ['Willkommen im Krankenhaus! 🏥', 'Pass besser auf dich auf! 🩹', 'Bananen sind die beste Medizin. 🍌'],
       haendler: ['Psst … brauchst du was? 😎', 'Bananen-Waffen, frisch geladen!', 'Ein Zielfernrohr macht dich zum Profi.'],
       kleider: ['Willkommen! Probier doch was an! 👕', 'Das steht dir super!', 'Heute ist alles schick!'],
       tierladen: ['Ein Haustier gefällig? 🐾', 'Der Mini-Drache ist mein Liebling! 🐉', 'Alle Tiere sind ganz lieb!'],
@@ -5832,7 +5900,7 @@
       const n = naechsterStand(p, 3.2);
       if (n) {
         if (n.art === 'auftrag' && nachtAktiv) return false;
-        n.name ??= { kassierer: 'Kassierer', dj: 'DJ', barkeeper: 'Barkeeper', bank: 'Bank-Affe', haendler: 'Händler', kleider: 'Verkäuferin', tierladen: 'Tierhändler', auftrag: 'Auftrags-Affe' }[n.art] || 'Affe';
+        n.name ??= { kassierer: 'Kassierer', dj: 'DJ', barkeeper: 'Barkeeper', bank: 'Bank-Affe', haendler: 'Händler', kleider: 'Verkäuferin', tierladen: 'Tierhändler', auftrag: 'Auftrags-Affe', arzt: 'Ärztin' }[n.art] || 'Affe';
         gespraechAuf(n, zufallsSpruch(n.art));
         return true;
       }
@@ -6330,6 +6398,74 @@
       auftragBox.querySelector('.balken div').style.width = (rest / a.zeit * 100) + '%';
     }
 
+    // ================= LEBEN, KRANKENHAUS, FAUST UND PANIK (wie in GTA) =================
+    let leben = 100, letzterSchadenUm = -99, ohnmachtBis = 0, schlagBis = 0, naechsterSchlag = 0;
+    const KRANKENHAUS_RECHNUNG = 100;
+    const lebenBox = document.getElementById('leben'), lebenFuell = document.getElementById('lebenFuell');
+    const ohnmachtBild = document.getElementById('ohnmacht'), schadenRand = document.getElementById('schadenRand');
+    function lebenZeigen() {
+      lebenFuell.style.width = Math.max(0, leben) + '%';
+      lebenBox.classList.toggle('wenig', leben < 30);
+    }
+    function schaden(menge) {                          // Leben abziehen; bei 0 wirst du ohnmächtig
+      if (ohnmachtBis || imGefaengnis) return;
+      leben = Math.max(0, leben - menge);
+      letzterSchadenUm = spielZeit;
+      lebenZeigen();
+      schadenRand.style.opacity = 1; setTimeout(() => schadenRand.style.opacity = 0, 250);
+      klang('fehler');
+      if (leben <= 0) {
+        ohnmachtBis = spielZeit + 3;
+        selbstLiegtBis = ohnmachtBis;
+        ohnmachtBild.classList.add('offen');
+      }
+    }
+    function imKrankenhausAufwachen() {
+      ohnmachtBis = 0;
+      ohnmachtBild.classList.remove('offen');
+      if (aktuellesFahrzeug) aussteigen();
+      if (fahndung) polizeiBeenden();                  // die Polizei verliert dich
+      const a = KRANKENHAUS.aufwachen;
+      affe.position.set(a.x, 0.5, a.z); fallTempo = 0;
+      blickRichtung = KRANKENHAUS.vorne > 0 ? Math.PI : 0; kameraWinkel = blickRichtung + Math.PI;   // Kamera auf der Straße, Blick aufs Krankenhaus
+      leben = 100; lebenZeigen();
+      if (Number.isFinite(punkte)) { punkte = Math.max(0, punkte - KRANKENHAUS_RECHNUNG); punkteZeigen(); }
+      zeigeMeldung(`🏥 Du bist im Krankenhaus aufgewacht. Arzt-Rechnung: −${KRANKENHAUS_RECHNUNG} 🪙`, 4);
+    }
+    function lebenBewegen(dt) {
+      if (ohnmachtBis) { if (spielZeit > ohnmachtBis) imKrankenhausAufwachen(); return; }
+      if (leben < 100 && spielZeit - letzterSchadenUm > 6) { leben = Math.min(100, leben + 5 * dt); lebenZeigen(); } // langsam heilen
+    }
+    // Panik: alle Fußgänger im Umkreis rennen ein paar Sekunden weg
+    function panik(x, z, radius) {
+      let gerufen = false;
+      for (const f of fussgaenger) {
+        if (f.zustand === 'liegt' || f.zustand === 'einkaufen' || Math.hypot(f.x - x, f.z - z) > radius) continue;
+        if (!(f.fliehtBis > spielZeit) && !gerufen && f.gruppe.visible) { gerufen = true; npcSagt(f.gruppe, ['Hilfe! 😱', 'Lauft! 🙀', 'Nicht schießen!', 'Aaaah!'][Math.floor(Math.random() * 4)], f, 2000); }
+        f.fliehtBis = spielZeit + 4 + Math.random() * 2;
+      }
+    }
+    // Faustschlag (F ohne Waffe): haut den nächsten Affen vor dir um
+    function schlagen() {
+      if (spielZeit < naechsterSchlag || spielZeit < selbstLiegtBis) return;
+      naechsterSchlag = spielZeit + 0.45; schlagBis = spielZeit + 0.3;
+      const p = affe.position;
+      const hx = p.x + Math.sin(blickRichtung) * 0.9, hz = p.z + Math.cos(blickRichtung) * 0.9;   // Punkt vor der Faust
+      const nah = (x, z) => Math.hypot(x - hx, z - hz) < 1.1;
+      rauschen(0.08, 900, 0.25);                                   // "Wusch"
+      let traf = false;
+      for (const m of mafia) if (!m.tot && nah(m.x, m.z)) { mafiaTot(m); traf = true; break; }
+      if (!traf && polizei.aktiv && polizei.laeufer.gruppe.visible && nah(polizei.laeufer.x, polizei.laeufer.z)) { polizei.betaeubtBis = spielZeit + 3; zeigeMeldung('👊 Polizist umgehauen!', 1.5); traf = true; }
+      if (!traf && nah(waerter.x, waerter.z)) { waerter.betaeubtBis = spielZeit + 3; zeigeMeldung('👊 Wärter umgehauen – schnell!', 1.5); traf = true; }
+      if (!traf) for (const f of fussgaenger) {
+        if (f.zustand !== 'liegt' && f.zustand !== 'einkaufen' && nah(f.x, f.z)) {
+          umwerfen(f, 3); panik(f.x, f.z, 12); straftat('Affe verhauen!'); traf = true; break;
+        }
+      }
+      if (traf) ton(140, 60, 0.12, 'square', 0.25);
+    }
+    lebenZeigen();
+
     // --- Spiel-Schleife: läuft ca. 60 Mal pro Sekunde ---
     const uhr = new THREE.Clock();
     function spielSchleife() {
@@ -6360,6 +6496,7 @@
       geschosseBewegen(dt);          // fliegende Bananen
       mafiaBewegen(dt);              // Mafia-Gang: Streife, Schüsse
       rauchBewegen(dt);              // Rauchwolken
+      lebenBewegen(dt);              // Leben heilen, Krankenhaus
       bankBewegen();                 // Alarmglocke
       clubBewegen(spielZeit);        // Disco-Lichter im Club
       if (fGedrueckt) { fGedrueckt = false; benutzen(); naechsterMiniSchuss = spielZeit + 0.07; }
@@ -6517,6 +6654,7 @@
           armLinks.rotation.z = -0.35; armRechts.rotation.z = 0.35;
         }
         if (WAFFEN_NR.includes(auswahl)) armRechts.rotation.set(-Math.PI / 2 + (zielModus ? zielNeigung : 0), 0, 0.1); // Waffe nach vorne halten
+        if (spielZeit < schlagBis) armRechts.rotation.set(-Math.PI / 2 - Math.sin((schlagBis - spielZeit) / 0.3 * Math.PI) * 0.4, 0, -0.15); // Faust nach vorne
         if (spielZeit < trinkenBis) { armRechts.rotation.set(-2.5 + Math.sin(spielZeit * 9) * 0.05, 0, 0.1); kopf.rotation.x = -0.25; } // Glas an den Mund
         // Tanzen: hört auf, sobald man läuft, springt oder umgehauen wird
         if (tanz && (laeuft || !amBoden || liegt)) tanzStoppen();
@@ -7351,6 +7489,7 @@
       const b = new THREE.Mesh(bananenForm, bananenMaterial);
       b.position.set(ox, oy, oz); b.scale.setScalar(1.2);
       szene.add(b);
+      if (Math.random() < 0.3) panik(m.x, m.z, 18);
       mafiaSchuesse.push({ mesh: b, vx: dx / l * tempo, vy: dy / l * tempo, vz: dz / l * tempo, leben: 2.5 });
       if (m.gruppe.visible) hupen(520);                              // "Peng!"
     }
@@ -7367,16 +7506,11 @@
       }
       return false;
     }
-    function spielerVonMafiaGetroffen() {
-      punkte = Math.max(0, punkte - MAFIA_STRAFE); punkteZeigen();
-      Object.assign(inventar, { pistole: false, munition: 0, zielfernrohr: false, rauch: 0, minigun: false, mgMun: 0, bazooka: false, bzMun: 0, schrot: false, srMun: 0 });
-      auswahl = 0;
-      zielfernrohrBenutzen(false);
-      inventarZeigen();
-      if (!aktuellesFahrzeug) selbstLiegtBis = spielZeit + LIEGEZEIT;
-      klang('fehler');
-      zeigeMeldung(`🎭 Von der Mafia getroffen! Alle Waffen weg und −${MAFIA_STRAFE} 🪙`, 3.5);
+    function spielerVonMafiaGetroffen() {             // jeder Treffer kostet Leben (im Auto weniger)
+      schaden(aktuellesFahrzeug ? 8 : 15);
+      if (spielZeit > mafiaTrefferMeldungBis) { mafiaTrefferMeldungBis = spielZeit + 6; zeigeMeldung('🎭 Die Mafia schießt auf dich! Pass auf dein Leben auf ❤️', 2); }
     }
+    let mafiaTrefferMeldungBis = 0;
     function mafiaBewegen(dt) {
       // --- Schüsse der Mafia fliegen ---
       for (let i = mafiaSchuesse.length - 1; i >= 0; i--) {
@@ -7388,7 +7522,7 @@
           const f = aktuellesFahrzeug, p = affe.position;
           if (f ? (punktInFahrzeug(f, q.x, q.z, 0.2) && q.y < f.hoehe + 0.5)
                 : (Math.hypot(q.x - p.x, q.z - p.z) < 0.7 && Math.abs(q.y - p.y) < 0.9)) {
-            if (spielZeit >= selbstLiegtBis) spielerVonMafiaGetroffen();
+            if (!ohnmachtBis) spielerVonMafiaGetroffen();
             weg = true;
           } else if (q.y < 0 || bloecke.some(o => o.art !== 'lava' && Math.abs(q.x - o.x) < o.b / 2 && Math.abs(q.z - o.z) < o.t / 2 && q.y < o.oben && q.y > o.unten)) weg = true;
         }
