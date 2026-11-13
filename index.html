@@ -3926,12 +3926,12 @@
       });
     }
     function helferBewegen(dt, ziel) {
-      let nahster = Infinity;
+      let nahster = Infinity, fang = false;
       for (const h of helfer) {
         if (!h.gruppe.visible) continue;
         const abstand = Math.hypot(ziel.x - h.x, ziel.z - h.z);
         nahster = Math.min(nahster, abstand);
-        if (abstand < (ziel.imAuto ? ziel.laenge / 2 + 0.8 : 1.2)) return { fang: true, nahster };
+        if (abstand < (ziel.imAuto ? ziel.laenge / 2 + 0.8 : 1.2)) { fang = true; continue; } // berührt – bleibt bei dir stehen
         const wunsch = Math.atan2(ziel.x - h.x, ziel.z - h.z), schritt = 7.2 * dt;
         for (const versatz of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8]) {
           const w = wunsch + versatz, nx = h.x + Math.sin(w) * schritt, nz = h.z + Math.cos(w) * schritt;
@@ -3942,7 +3942,7 @@
         h.gruppe.position.set(h.x, 0.5, h.z);
         h.gruppe.rotation.y = h.richtung;
       }
-      return { fang: false, nahster };
+      return { fang, nahster };
     }
 
     // Ab 2 Sternen schießt die Polizei mit blauen Polizei-Bananen zurück – je mehr Sterne, desto öfter
@@ -4242,7 +4242,7 @@
         polizei.tempo += THREE.MathUtils.clamp(wunschTempo * Math.max(0.3, Math.cos(u)) - polizei.tempo, -15 * dt, 8 * dt);
         polizei.x = THREE.MathUtils.clamp(polizei.x + Math.sin(polizei.richtung) * polizei.tempo * dt, WIESE.x1 + 2, WIESE.x2 - 2);
         polizei.z = THREE.MathUtils.clamp(polizei.z + Math.cos(polizei.richtung) * polizei.tempo * dt, WIESE.z1 + 2, WIESE.z2 - 2);
-        if (ziel.imAuto && direkt < (polizei.laenge + ziel.laenge) / 2 + 0.8) { verhaften(); return; }
+        if (ziel.imAuto && direkt < (polizei.laenge + ziel.laenge) / 2 + 0.8 && verhaften()) return;
         if (!ziel.imAuto && direkt < 27 && polizei.tempo < 3) {
           // Aussteigen und hinterherrennen!
           polizei.zustand = 'rennen';
@@ -4257,7 +4257,7 @@
         l.figur.rotation.x = 0;
         const hin = polizei.zustand === 'rennen' ? ziel : polizei;
         const abstand = Math.hypot(hin.x - l.x, hin.z - l.z);
-        if (polizei.zustand === 'rennen' && !ziel.imAuto && abstand < 1.2) { verhaften(); return; }
+        if (polizei.zustand === 'rennen' && !ziel.imAuto && abstand < 1.2 && verhaften()) return;
         if (polizei.zustand === 'rennen' && ziel.imAuto) polizei.zustand = 'zurueck'; // Spieler fährt weg → zurück zum Auto
         if (polizei.zustand === 'zurueck' && abstand < 1.8) {
           polizei.zustand = 'fahren'; l.gruppe.visible = false; polizei.gruppe.visible = true;
@@ -4281,7 +4281,7 @@
 
       // Sirene: je näher, desto lauter
       const hf = helferBewegen(dt, ziel);
-      if (hf.fang) { verhaften(); return; }
+      if (hf.fang && verhaften()) return;
       const heliAbstand = heliBewegen(dt, ziel);
       const nah = Math.min(hf.nahster, heliAbstand, polizei.gruppe.visible ? Math.hypot(ziel.x - polizei.x, ziel.z - polizei.z) : Infinity,
         polizei.laeufer.gruppe.visible ? Math.hypot(ziel.x - polizei.laeufer.x, ziel.z - polizei.laeufer.z) : Infinity);
@@ -4324,7 +4324,13 @@
       imGefaengnis = true;
       zeigeMeldung(text, 3);
     }
+    // Die Polizei kann dich nur verhaften, wenn du höchstens noch ein Zehntel Leben hast
+    let verhaftenHinweisUm = -99;
     function verhaften() {
+      if (leben > 10) {
+        if (spielZeit - verhaftenHinweisUm > 3) { verhaftenHinweisUm = spielZeit; zeigeMeldung('👮 Erwischt – aber du bist noch zu stark! Erst bei wenig ❤️ kann er dich verhaften.', 2); }
+        return false;
+      }
       if (aktuellesFahrzeug) aussteigen();
       const alles = !!(fahndung && fahndung.bankraub);   // nach einem Banküberfall ist das ganze Geld weg
       const verloren = punkte;
@@ -4339,6 +4345,7 @@
       inventarZeigen();
       lockereStelleZu();
       inDieZelle(alles ? '🚔 Erwischt! Dein ganzes Geld (' + (Number.isFinite(verloren) ? verloren : '∞') + ') ist weg' + (hatteSachen ? ', Waffen weg' : '') + '. Ab ins Gefängnis!' : '🚔 Verhaftet! −20 Punkte' + (hatteSachen ? ', Waffen weg' : '') + '. Ab ins Gefängnis!');
+      return true;
     }
     // E-Taste in der Zelle: an der lockeren Stelle graben
     function graben(p) {
