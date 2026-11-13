@@ -1267,6 +1267,7 @@
       { x: 0, z: 0, r: 4 },                         // Startplatz
       { x: 16, z: 62, r: 13 },                      // Garage
       { x: -135, z: 20, r: 23 },                    // Gefängnis
+      { x: 135, z: 145, r: 14 },                    // Ostbank
     ];
     const SPIELPLATZ = { x1: -26, x2: 13.5, z1: -26, z2: 16 };      // die alte Wiese mit den Blöcken
     const STADT = [{ x1: -86, x2: 86, z1: 134, z2: 206 }, { x1: -86, x2: 86, z1: 214, z2: 286 }];
@@ -1446,9 +1447,11 @@
 
     // ================= BANK =================
     // Groß, mit Säulen. Hinten steht der Tresor – den kann man knacken (E drücken) …
-    const BANK = { x: -30, z: 145, b: 18, t: 14, h: 7, vorne: -1, geraubtUm: -999, zaehler: 0 };
-    {
-      const { x: cx, z: cz, b: B, t: T, h: H, vorne } = BANK, W = 0.4;
+    const BANKEN = [];
+    function bankBauen(x, z, vorne, name) {
+      const BANK = { x, z, b: 18, t: 14, h: 7, vorne, name, geraubtUm: -999, zaehler: 0 };
+      BANKEN.push(BANK);
+      const { x: cx, z: cz, b: B, t: T, h: H } = BANK, W = 0.4;
       const fz = cz + vorne * T / 2, hz = cz - vorne * T / 2;
       const stein = 0xeceff1;
       neuerBlock(cx, hz, B, W, 0, H, 'block', stein);
@@ -1485,7 +1488,10 @@
       const gold = new THREE.MeshStandardMaterial({ color: 0xffc107, metalness: 0.9, roughness: 0.2, emissive: 0x3e2a00 });
       for (let i = 0; i < 12; i++) instanz(einheitsKiste, gold, cx - 3 + (i % 4) * 0.5, 0.12 + Math.floor(i / 4) * 0.15, hz + vorne * 1.0, 0.4, 0.14, 0.22);
       BANK.tresor = { x: cx, z: hz + vorne * 1.8 }; // hier muss man stehen
+      return BANK;
     }
+    const BANK = bankBauen(-30, 145, -1, 'Stadtbank');
+    bankBauen(135, 145, -1, 'Ostbank');
 
     // ================= WAFFENHÄNDLER =================
     // Ein kleiner Laden mit Bananen-Waffen, gleich bei der ersten Kreuzung.
@@ -1709,7 +1715,7 @@
         for (let z = gebiet.z1 + 8; z < gebiet.z2 - 4; z += 14) {
           const b = zwischen(7, 10), t = zwischen(7, 10);
           if (nahAnStrasse(x, z, Math.max(b, t) / 2 + 2.6)) continue;
-          if ([...LAEDEN, BANK, KLEIDERLADEN].some(l => Math.abs(l.x - x) < (l.b + b) / 2 + 3 && Math.abs(l.z - z) < (l.t + t) / 2 + 3)) continue;
+          if ([...LAEDEN, ...BANKEN, KLEIDERLADEN].some(l => Math.abs(l.x - x) < (l.b + b) / 2 + 3 && Math.abs(l.z - z) < (l.t + t) / 2 + 3)) continue;
           const hoch = zufall() < 0.25; // manche sind Hochhäuser
           const h = hoch ? zwischen(12, 22) : zwischen(4, 7);
           const wandFarbe = HAUS_FARBEN[Math.floor(zufall() * HAUS_FARBEN.length)];
@@ -3871,10 +3877,12 @@
 
     // ================= BANKÜBERFALL =================
     const BANK_PAUSE = 90; // Sekunden, bis die Bank wieder Geld hat
-    const amTresor = p => Math.hypot(p.x - BANK.tresor.x, p.z - BANK.tresor.z) < 2.2 && p.y < 2;
+    const bankAm = p => p.y < 2 ? BANKEN.find(b => Math.hypot(p.x - b.tresor.x, p.z - b.tresor.z) < 2.2) : null;
+    const amTresor = p => !!bankAm(p);
     let alarmBis = 0;
     function tresorKnacken(p) {
-      if (!amTresor(p)) return false;
+      const BANK = bankAm(p);
+      if (!BANK) return false;
       if (spielZeit - BANK.geraubtUm < BANK_PAUSE) { zeigeMeldung('Der Tresor ist leer. Komm später wieder!', 1.5); return true; }
       BANK.zaehler++;
       BANK.tresorRad.rotation.z += 0.6;
@@ -4211,7 +4219,7 @@
       rechteck('#ffca28', GARAGE.x, GARAGE.z, 16, 10);
       rechteck('#f48fb1', KABINE.x, KABINE.z, 3.6, 3.6);
       for (const l of LAEDEN) rechteck('#ff9800', l.x, l.z, l.b, l.t);
-      rechteck('#ffd54f', BANK.x, BANK.z, BANK.b, BANK.t);
+      for (const b of BANKEN) rechteck('#ffd54f', b.x, b.z, b.b, b.t);
       rechteck('#d32f2f', HAENDLER.x, HAENDLER.z, 8, 6);
       rechteck('#ec407a', KLEIDERLADEN.x, KLEIDERLADEN.z, 16, 12);
       rechteck('#37474f', GEF.x, GEF.z, 26, 26);
@@ -4220,7 +4228,7 @@
     }
     const ORTE = [ // Beschriftungen auf der großen Karte
       { name: '🏁 Start', x: 0, z: 2 }, { name: '🧗 Obby ↑', x: 18, z: -12 }, { name: '🏎 Garage', x: GARAGE.x, z: GARAGE.z },
-      { name: '👕 Umkleide', x: KABINE.x, z: KABINE.z }, { name: '🏦 Bank', x: BANK.x, z: BANK.z }, { name: '🍌 Waffen', x: HAENDLER.x, z: HAENDLER.z },
+      { name: '👕 Umkleide', x: KABINE.x, z: KABINE.z }, ...BANKEN.map(b => ({ name: '🏦 ' + b.name, x: b.x, z: b.z })), { name: '🍌 Waffen', x: HAENDLER.x, z: HAENDLER.z },
       { name: '👗 Affen-Mode', x: KLEIDERLADEN.x, z: KLEIDERLADEN.z }, { name: '🔒 Gefängnis', x: GEF.x, z: GEF.z },
       ...LAEDEN.map(l => ({ name: '🛒 Supermarkt', x: l.x, z: l.z })),
     ];
@@ -5553,6 +5561,7 @@
           fahrInfo.innerHTML = geheimHinweis(p);
           fahrInfo.classList.add('offen');
         } else if (amTresor(p)) {
+          const BANK = bankAm(p);
           fahrInfo.innerHTML = spielZeit - BANK.geraubtUm < BANK_PAUSE ? '<b>Der Tresor ist leer.</b><small>In ein paar Minuten ist wieder Geld drin …</small>'
             : `<b>💰 ${E_TASTE} drücken: Tresor knacken (${BANK.zaehler}/10)</b><small>Achtung: Danach kommt die Polizei!</small>`;
           fahrInfo.classList.add('offen');
