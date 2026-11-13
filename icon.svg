@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="himmel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4fc3f7"/>
+      <stop offset="1" stop-color="#b3e9ff"/>
+    </linearGradient>
+    <radialGradient id="sonne" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff59d"/>
+      <stop offset="1" stop-color="#ffd54f"/>
+    </radialGradient>
+    <linearGradient id="fell" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9c6234"/>
+      <stop offset="1" stop-color="#7a4624"/>
+    </linearGradient>
+    <clipPath id="rund"><rect width="512" height="512" rx="115"/></clipPath>
+  </defs>
+  <g clip-path="url(#rund)">
+    <rect width="512" height="512" fill="url(#himmel)"/>
+    <circle cx="410" cy="100" r="62" fill="url(#sonne)"/>
+    <!-- Huegel -->
+    <ellipse cx="90" cy="470" rx="260" ry="110" fill="#2e9e4f"/>
+    <ellipse cx="440" cy="490" rx="260" ry="110" fill="#43b55f"/>
+    <!-- Palmblaetter -->
+    <g fill="#1f7a3a">
+      <path d="M40 40 Q130 40 200 120 Q110 90 40 100Z"/>
+      <path d="M40 40 Q90 110 110 200 Q60 130 20 110Z"/>
+    </g>
+    <!-- Ohren -->
+    <circle cx="140" cy="270" r="52" fill="url(#fell)"/>
+    <circle cx="372" cy="270" r="52" fill="url(#fell)"/>
+    <circle cx="140" cy="270" r="30" fill="#f2b98a"/>
+    <circle cx="372" cy="270" r="30" fill="#f2b98a"/>
+    <!-- Kopf -->
+    <ellipse cx="256" cy="262" rx="125" ry="118" fill="url(#fell)"/>
+    <!-- Gesicht -->
+    <path d="M256 200 C200 170 140 215 150 280 C158 340 205 385 256 385 C307 385 354 340 362 280 C372 215 312 170 256 200Z" fill="#f2b98a"/>
+    <!-- Augen -->
+    <circle cx="214" cy="262" r="27" fill="#fff"/>
+    <circle cx="298" cy="262" r="27" fill="#fff"/>
+    <circle cx="220" cy="266" r="14" fill="#2b1a10"/>
+    <circle cx="304" cy="266" r="14" fill="#2b1a10"/>
+    <circle cx="225" cy="260" r="5" fill="#fff"/>
+    <circle cx="309" cy="260" r="5" fill="#fff"/>
+    <!-- Augenbrauen -->
+    <path d="M186 228 Q214 212 240 228" stroke="#5a3118" stroke-width="10" stroke-linecap="round" fill="none"/>
+    <path d="M272 228 Q298 212 326 228" stroke="#5a3118" stroke-width="10" stroke-linecap="round" fill="none"/>
+    <!-- Nase -->
+    <ellipse cx="244" cy="308" rx="7" ry="9" fill="#8a5a3a"/>
+    <ellipse cx="268" cy="308" rx="7" ry="9" fill="#8a5a3a"/>
+    <!-- Mund -->
+    <path d="M205 335 Q256 385 307 335" stroke="#5a3118" stroke-width="10" stroke-linecap="round" fill="none"/>
+    <path d="M222 345 Q256 372 290 345 Q256 360 222 345Z" fill="#c4534a"/>
+    <!-- Banane -->
+    <g transform="translate(330 395) rotate(-25)">
+      <path d="M0 0 C40 -70 140 -60 170 -10 C120 -40 50 -30 18 30 C10 40 -6 20 0 0Z" fill="#ffd93b" stroke="#c99a00" stroke-width="6" stroke-linejoin="round"/>
+      <path d="M168 -12 L182 -22" stroke="#6b4a1a" stroke-width="10" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>
