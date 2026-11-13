@@ -4047,7 +4047,7 @@
           mafiaSchiesst({ x: heli.x, y: heli.y - 1.6, z: heli.z, richtung: heli.richtung, gruppe: heli.gruppe }, ziel, ziel.imAuto, 'polizei');
         }
         // Rotor-Geräusch, je näher desto lauter
-        if (spielZeit > (heli.tonUm || 0) && nahAm < 90) { heli.tonUm = spielZeit + 0.11; rauschen(0.06, 160, 0.12 * (1 - nahAm / 90)); }
+        if (spielZeit > (heli.tonUm || 0) && nahAm < 90) { heli.tonUm = spielZeit + 0.11; rauschen(0.06, ['lowpass', 160], 0.12 * (1 - nahAm / 90)); }
       }
       heli.gruppe.position.set(heli.x, heli.y, heli.z);
       heli.gruppe.rotation.y = heli.richtung;
@@ -6600,7 +6600,7 @@
         const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
         return d < 2.2 && (d < 0.8 || (dx * fx + dz * fz) / d > 0.2);
       };
-      rauschen(0.1, 1100, 0.3);                                    // "Wusch"
+      rauschen(0.1, ['highpass', 1100], 0.3);                      // "Wusch"
       let traf = false, tx = p.x + fx * 1.2, tz = p.z + fz * 1.2;
       for (const m of mafia) if (!m.tot && nah(m.x, m.z)) { tx = m.x; tz = m.z; mafiaTot(m); traf = true; break; }
       if (!traf && polizei.aktiv && polizei.laeufer.gruppe.visible && nah(polizei.laeufer.x, polizei.laeufer.z)) { tx = polizei.laeufer.x; tz = polizei.laeufer.z; polizei.betaeubtBis = spielZeit + 3; zeigeMeldung('👊 Polizist umgehauen!', 1.5); traf = true; }
@@ -6624,7 +6624,7 @@
         gross();
       }
     }
-    lebenZeigen(); window.__test = { straftat, schleife: spielSchleife, heli, get leben() { return leben; }, get f() { return fahndung; }, affe }; //TESTWEG
+    lebenZeigen();
 
     // --- Spiel-Schleife: läuft ca. 60 Mal pro Sekunde ---
     const uhr = new THREE.Clock();
