@@ -3912,9 +3912,29 @@
       szene.add(h.gruppe);
       return h;
     });
+    // ----- Leben der Polizisten: jeder hat 100, bei 0 ist er erledigt -----
+    const POLIZIST_LEBEN = 100;
+    const SCHADEN_AN_POLIZIST = { normal: 34, mini: 12, schrot: 25, bazooka: 100, faust: 20 };
+    function polizistLebendig(o) { o.leben = POLIZIST_LEBEN; o.tot = false; o.betaeubtBis = 0; o.figur.rotation.x = 0; }
+    function polizistHinlegen(o) { o.figur.rotation.x = -Math.PI / 2; o.gruppe.position.set(o.x, 0.25, o.z); }
+    function polizistTreffen(o, art, istLaeufer) {
+      if (o.tot) return;
+      o.leben = (o.leben ?? POLIZIST_LEBEN) - (SCHADEN_AN_POLIZIST[art] || 34);
+      if (o.leben > 0) {
+        if (istLaeufer) polizei.betaeubtBis = spielZeit + 1.5; else o.betaeubtBis = spielZeit + 1.5;  // kurz umgefallen
+        zeigeMeldung(`👮 Polizist getroffen! ❤️ ${Math.round(o.leben)} %`, 1.2);
+        return;
+      }
+      o.tot = true; o.leben = 0; o.totBis = spielZeit + 6;          // liegt 6 Sekunden, dann ist er weg
+      polizistHinlegen(o);
+      ton(220, 70, 0.4, 'sawtooth', 0.25);
+      straftatPause = 0; straftat('Polizist erledigt! 💀');         // gibt einen Stern mehr
+    }
+
     function helferStarten() {
       const p = spielerOrt();
       helfer.forEach((h, i) => {
+        polizistLebendig(h);
         // einer von links-vorne, einer von rechts-hinten, etwa 30 m entfernt (an einer freien Stelle)
         for (let versuch = 0; versuch < 12; versuch++) {
           const w = (i ? 2.4 : 0.7) + versuch * 0.5, x = p.x + Math.sin(w) * 30, z = p.z + Math.cos(w) * 30;
@@ -3929,6 +3949,9 @@
       let nahster = Infinity, fang = false;
       for (const h of helfer) {
         if (!h.gruppe.visible) continue;
+        if (h.tot) { if (spielZeit > h.totBis) h.gruppe.visible = false; continue; }   // erledigt: liegt da, dann weg
+        if (spielZeit < (h.betaeubtBis || 0)) { polizistHinlegen(h); continue; }
+        h.figur.rotation.x = 0;
         const abstand = Math.hypot(ziel.x - h.x, ziel.z - h.z);
         nahster = Math.min(nahster, abstand);
         if (abstand < (ziel.imAuto ? ziel.laenge / 2 + 0.8 : 1.2)) { fang = true; continue; } // berührt – bleibt bei dir stehen
@@ -3954,8 +3977,8 @@
       const pause = 2.6 - fahndung.sterne * 0.4;                    // 2 Sterne: alle 1,8 s · 5 Sterne: alle 0,6 s
       const schuetzen = [];
       const l = polizei.laeufer;
-      if (l.gruppe.visible && polizei.zustand === 'rennen' && spielZeit > (polizei.betaeubtBis || 0)) schuetzen.push(l);
-      for (const h of helfer) if (h.gruppe.visible) schuetzen.push(h);
+      if (l.gruppe.visible && !l.tot && polizei.zustand === 'rennen' && spielZeit > (polizei.betaeubtBis || 0)) schuetzen.push(l);
+      for (const h of helfer) if (h.gruppe.visible && !h.tot && spielZeit > (h.betaeubtBis || 0)) schuetzen.push(h);
       if (polizei.gruppe.visible && polizei.zustand === 'fahren' && spielZeit > (polizei.betaeubtBis || 0))  // aus dem Autofenster
         schuetzen.push(polizei);
       for (const s of schuetzen) {
@@ -4150,6 +4173,7 @@
       Object.assign(polizei, { aktiv: true, zustand: 'rennen', x: GEF.x, z: GEF.z + 16, richtung: 0, tempo: 0, entkommen: 0, losUm: spielZeit + 2.5 });
       polizei.gruppe.visible = false; // das Polizeiauto wartet unsichtbar am Tor
       polizei.laeufer.x = GEF.x; polizei.laeufer.z = GEF.z + 14.5;
+      polizistLebendig(polizei.laeufer);
       polizei.laeufer.gruppe.visible = true;
       sireneAn();
     }
@@ -4163,12 +4187,14 @@
       polizei.richtung = Math.atan2(p.x - start.x, p.z - start.z);
       polizei.gruppe.visible = true;
       polizei.laeufer.gruppe.visible = false;
+      polizistLebendig(polizei.laeufer);
       sireneAn();
     }
     function polizeiBeenden() {
       polizei.aktiv = false;
       polizei.gruppe.visible = false;
       polizei.laeufer.gruppe.visible = false;
+      polizistLebendig(polizei.laeufer);
       for (const h of helfer) h.gruppe.visible = false;
       fahndung = null;
       sireneAus();
@@ -4205,7 +4231,11 @@
 
       const betaeubt = spielZeit < (polizei.betaeubtBis || 0);   // ausgerutscht oder hustet im Rauch
       const vMax = fahndung && fahndung.stark ? 27 : 22;           // beim Banküberfall schneller
-      if (polizei.zustand === 'fahren' && betaeubt) {
+      if (polizei.laeufer.tot) {
+        const l = polizei.laeufer;                                  // erledigt: liegt da
+        polizistHinlegen(l);
+        if (spielZeit > l.totBis) { l.gruppe.visible = false; polizeiStarten(); zeigeMeldung('🚓 Ein neues Polizeiauto kommt!', 2); }
+      } else if (polizei.zustand === 'fahren' && betaeubt) {
         polizei.tempo *= 0.9;
         polizei.richtung += 5 * dt;                                 // dreht sich auf der Banane
         polizei.x += Math.sin(polizei.richtung) * polizei.tempo * dt;
@@ -4764,7 +4794,8 @@
       mpSenden('knall', { x, y, z });                               // Mitspieler sehen den Knall (und fallen um, wenn sie nah dran sind)
       const nah = (px, pz) => Math.hypot(px - x, pz - z) < KNALL_RADIUS;
       let umgeworfen = 0;
-      if (polizei.aktiv && polizei.laeufer.gruppe.visible && nah(polizei.laeufer.x, polizei.laeufer.z)) { polizei.betaeubtBis = spielZeit + LIEGEZEIT; umgeworfen++; }
+      if (polizei.aktiv && polizei.laeufer.gruppe.visible && !polizei.laeufer.tot && nah(polizei.laeufer.x, polizei.laeufer.z)) { polizistTreffen(polizei.laeufer, 'bazooka', true); umgeworfen++; }
+      for (const h of helfer) if (h.gruppe.visible && !h.tot && nah(h.x, h.z)) { polizistTreffen(h, 'bazooka', false); umgeworfen++; }
       if (polizei.aktiv && nah(polizei.x, polizei.z)) { polizei.betaeubtBis = spielZeit + LIEGEZEIT; umgeworfen++; }
       if (nah(waerter.x, waerter.z)) { waerter.betaeubtBis = spielZeit + LIEGEZEIT; umgeworfen++; }
       for (const m of mafia) if (!m.tot && nah(m.x, m.z)) { mafiaTot(m); umgeworfen++; }   // die Mafia stirbt durch Explosionen
@@ -4791,9 +4822,10 @@
       if (mafiaGetroffen(q)) return true;
       if (heliGetroffen(q, g.art === 'bazooka')) return true;
       if (leopardGetroffen(q)) return true;
-      if (polizei.aktiv && polizei.laeufer.gruppe.visible && nah(polizei.laeufer.x, polizei.laeufer.z, 0.7)) {
-        polizei.betaeubtBis = spielZeit + LIEGEZEIT; zeigeMeldung('🍌 Polizist getroffen!', 1.5); return true;
+      if (polizei.aktiv && polizei.laeufer.gruppe.visible && !polizei.laeufer.tot && nah(polizei.laeufer.x, polizei.laeufer.z, 0.7)) {
+        polizistTreffen(polizei.laeufer, g.art, true); return true;
       }
+      for (const h of helfer) if (h.gruppe.visible && !h.tot && nah(h.x, h.z, 0.7)) { polizistTreffen(h, g.art, false); return true; }
       if (polizei.aktiv && punktInFahrzeug(polizei, q.x, q.z, 0.2) && q.y < polizei.hoehe) {
         polizei.betaeubtBis = spielZeit + LIEGEZEIT; zeigeMeldung('🍌 Polizeiauto rutscht weg!', 1.5); return true;
       }
@@ -6707,7 +6739,8 @@
       rauschen(0.1, ['highpass', 1100], 0.3);                      // "Wusch"
       let traf = false, tx = p.x + fx * 1.2, tz = p.z + fz * 1.2;
       for (const m of mafia) if (!m.tot && nah(m.x, m.z)) { tx = m.x; tz = m.z; mafiaTot(m); traf = true; break; }
-      if (!traf && polizei.aktiv && polizei.laeufer.gruppe.visible && nah(polizei.laeufer.x, polizei.laeufer.z)) { tx = polizei.laeufer.x; tz = polizei.laeufer.z; polizei.betaeubtBis = spielZeit + 3; zeigeMeldung('👊 Polizist umgehauen!', 1.5); traf = true; }
+      if (!traf && polizei.aktiv && polizei.laeufer.gruppe.visible && !polizei.laeufer.tot && nah(polizei.laeufer.x, polizei.laeufer.z)) { tx = polizei.laeufer.x; tz = polizei.laeufer.z; polizistTreffen(polizei.laeufer, 'faust', true); traf = true; }
+      if (!traf) for (const h of helfer) if (h.gruppe.visible && !h.tot && nah(h.x, h.z)) { tx = h.x; tz = h.z; polizistTreffen(h, 'faust', false); traf = true; break; }
       if (!traf && nah(waerter.x, waerter.z)) { tx = waerter.x; tz = waerter.z; waerter.betaeubtBis = spielZeit + 3; zeigeMeldung('👊 Wärter umgehauen – schnell!', 1.5); traf = true; }
       if (!traf) {
         let best = null, bd = 99;
