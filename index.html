@@ -192,6 +192,8 @@
     #gespraech .wahl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     #gespraech .wahl button { font-size: 14px; padding: 8px; border-radius: 9px; border: none; background: #333; color: #fff; cursor: pointer; text-align: left; }
     #gespraech .wahl button:hover { background: #ffd600; color: #000; }
+    #gespraech .wahl button.hoert { background: #e53935; color: #fff; animation: hoertBlink 0.8s infinite alternate; }
+    @keyframes hoertBlink { to { background: #ff8a80; } }
     #gespraech form { display: none; gap: 6px; margin-top: 6px; }
     #gespraech form.offen { display: flex; }
     #gespraech input { flex: 1; font-size: 16px; padding: 8px 10px; border-radius: 9px; border: 2px solid #ffd600; background: #111; color: #fff; outline: none; }
@@ -458,7 +460,8 @@
     <div class="wahl">
       <button data-w="plaudern">1 👋 Plaudern</button><button data-w="witz">2 😂 Witz erzählen</button>
       <button data-w="weg">3 🗺️ Nach dem Weg fragen</button><button data-w="frech">4 😠 Frech sein</button>
-      <button data-w="schreiben">5 ✍️ Selbst schreiben</button><button data-w="tschuess">0 👋 Tschüss</button>
+      <button data-w="schreiben">5 ✍️ Selbst schreiben</button><button data-w="mikro">6 🎤 Selbst sprechen</button>
+      <button data-w="tschuess">0 👋 Tschüss</button>
     </div>
     <form autocomplete="off"><input maxlength="80" placeholder="Was willst du sagen? (Enter)"><button>➤</button></form>
   </div>
@@ -555,7 +558,7 @@
       ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🐾 Tierhandlung', 'rechts neben der Hauptstraße beim Start'], ['🏡 Affen-Siedlung', 'Häuser kaufen und einrichten (rechts vom Start)'], ['🏁 Straßenrennen', 'mit einem Fahrzeug unters Start-Tor fahren'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
       ['🔫 Waffenhändler', 'Bananen-Pistole & Zielfernrohr'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
       ['🚔 Polizei', 'nicht über Rot fahren, nichts Verbotenes tun'], ['🔒 Gefängnis', 'man kann ausbrechen …'],
-      ['💬 Mit Affen reden', 'neben einen Affen stellen und ' + E_TASTE + ' drücken – dann Antwort wählen (1–5) oder selbst schreiben'],
+      ['💬 Mit Affen reden', 'neben einen Affen stellen und ' + E_TASTE + ' drücken – dann Antwort wählen (1–5), selbst schreiben (5) oder mit deiner Stimme sprechen (6 oder V)'],
       ['📟 Fernbedienung', 'Codes eingeben' + (IST_HANDY ? '' : ' mit ' + k('C'))],
       ['🐆 Nachts: Leopard!', 'renn weg, steig in ein Auto oder flüchte in ein Haus'],
       ['🤫 Geheimversteck', 'irgendwo gibt es eins – nicht auf der Karte!'],
@@ -5447,6 +5450,7 @@
       gespraechSatz(ersterSatz);
     }
     function gespraechZu() {
+      if (hoerer) { hoerer.onend = null; hoerer.abort(); hoerer = null; mikroKnopf.classList.remove('hoert'); mikroKnopf.textContent = '6 🎤 Selbst sprechen'; }
       gespraechBox.classList.remove('offen');
       gespraechForm.classList.remove('offen');
       gespraechText.blur();
@@ -5457,6 +5461,7 @@
       const wer = gespraechMit;
       if (!wer) return;
       if (w === 'tschuess') { gespraechSatz(['Tschüss! 👋', 'Bis bald!', 'Mach\'s gut! 🍌'][Math.floor(Math.random() * 3)]); gespraechZu(); return; }
+      if (w === 'mikro') { mikroZuhoeren(); return; }
       if (w === 'schreiben') { gespraechForm.classList.add('offen'); gespraechText.value = ''; gespraechText.focus(); return; }
       if (w === 'plaudern') gespraechSatz(wer.art ? zufallsSpruch(wer.art) : gespraechsSpruch());
       if (w === 'witz') gespraechSatz(WITZE_ANTWORT[Math.floor(Math.random() * WITZE_ANTWORT.length)]);
@@ -5501,6 +5506,10 @@
       e.preventDefault();
       const text = gespraechText.value.trim().slice(0, 80);
       gespraechText.value = '';
+      npcHoert(text);
+    });
+    // Der Affe hört deinen Satz (geschrieben oder gesprochen) und antwortet
+    function npcHoert(text) {
       if (!text || !gespraechMit) return;
       sprechblase(affe, text);
       const wer = gespraechMit;
@@ -5510,7 +5519,34 @@
         if (antwort) gespraechSatz(antwort);
         if (/tsch(ü|ue)ss|bye|ciao/.test(text.toLowerCase()) || wer.sauerBis > spielZeit) gespraechZu();
       }, 700);
-    });
+    }
+    // Mit der eigenen Stimme sprechen: der Browser hört übers Mikrofon zu und macht daraus Text
+    const Erkenner = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let hoerer = null;
+    const mikroKnopf = gespraechBox.querySelector('[data-w="mikro"]');
+    function mikroZuhoeren() {
+      if (!Erkenner) { gespraechBox.querySelector('.satz').textContent = '🎤 Dein Browser kann leider nicht zuhören. Probier Chrome oder Safari – oder schreib (5).'; return; }
+      if (hoerer) { hoerer.stop(); return; }            // nochmal drücken = aufhören
+      hoerer = new Erkenner();
+      hoerer.lang = 'de-DE'; hoerer.interimResults = true; hoerer.maxAlternatives = 1;
+      let gehoert = '';
+      mikroKnopf.classList.add('hoert'); mikroKnopf.textContent = '6 🔴 Ich höre zu …';
+      hoerer.onresult = e => {
+        gehoert = [...e.results].map(r => r[0].transcript).join(' ');
+        gespraechBox.querySelector('.satz').textContent = '🎤 „' + gehoert + '“';
+      };
+      hoerer.onerror = e => {
+        const was = { 'not-allowed': 'Du musst das Mikrofon erlauben (Symbol oben in der Adressleiste).', 'no-speech': 'Ich hab nichts gehört … nochmal?', 'network': 'Zum Zuhören braucht der Browser Internet.' }[e.error] || 'Mikrofon-Fehler: ' + e.error;
+        gespraechBox.querySelector('.satz').textContent = '🎤 ' + was;
+      };
+      hoerer.onend = () => {
+        hoerer = null;
+        mikroKnopf.classList.remove('hoert'); mikroKnopf.textContent = '6 🎤 Selbst sprechen';
+        if (gehoert.trim()) npcHoert(gehoert.trim().slice(0, 80));
+      };
+      try { if (window.speechSynthesis) speechSynthesis.cancel(); hoerer.start(); }   // Affe still, damit er sich nicht selbst hört
+      catch (e) { hoerer = null; mikroKnopf.classList.remove('hoert'); }
+    }
     gespraechText.addEventListener('keydown', e => { e.stopPropagation(); if (e.code === 'Escape') { gespraechForm.classList.remove('offen'); gespraechText.blur(); } });
     gespraechText.addEventListener('keyup', e => e.stopPropagation());
     gespraechBox.querySelectorAll('.wahl button').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); gespraechWahl(b.dataset.w); }));
@@ -5519,7 +5555,7 @@
     addEventListener('keydown', e => {
       if (!gespraechMit || document.activeElement === gespraechText) return;
       const nr = /^(Digit|Numpad)(\d)$/.exec(e.code)?.[2];
-      const wahl = { 1: 'plaudern', 2: 'witz', 3: 'weg', 4: 'frech', 5: 'schreiben', 0: 'tschuess' }[nr];
+      const wahl = { 1: 'plaudern', 2: 'witz', 3: 'weg', 4: 'frech', 5: 'schreiben', 6: 'mikro', 0: 'tschuess' }[nr] ?? (e.code === 'KeyV' ? 'mikro' : null);
       if (wahl) { if (!e.repeat) gespraechWahl(wahl); }
       else if (e.code === 'Enter' || e.code === 'KeyT') { if (!e.repeat) gespraechWahl('schreiben'); }
       else if (e.code === 'Escape' || e.code === 'KeyE') { if (!e.repeat) gespraechWahl('tschuess'); }
