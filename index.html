@@ -654,7 +654,7 @@
     HILFE.push(['🗺️ Zum Entdecken', [
       ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🐾 Tierhandlung', 'rechts neben der Hauptstraße beim Start'], ['🏡 Affen-Siedlung', 'Häuser kaufen und einrichten (rechts vom Start)'], ['🏁 Straßenrennen', 'mit einem Fahrzeug unters Start-Tor fahren'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
       ['🎭 Mafia-Gang', 'maskierte Banden überall auf der Karte: +300 🪙 pro Abschuss – aber wenn sie dich treffen, sind Waffen und 200 🪙 weg!'],
-            ['🔫 Waffenhändler', 'Pistole, Zielfernrohr, Gewehr, Granaten & Laser'], ['🏀 Basketball', 'zum Korb schauen, dann ' + (IST_HANDY ? '✋' : k('E')) + ' = werfen'], ['🛹 Skatepark', 'schnell über Schanzen & Halfpipe = Tricks'], ['⚽ Fußball', 'Ball ins rechte Tor: schieben oder ' + (IST_HANDY ? '✋' : k('E')) + ' = Schuss dorthin, wo du hinschaust = +10 🪙'], ['🎤 Karaoke-Bar', 'drinnen ' + (IST_HANDY ? '✋' : k('E')) + ' – mit echtem Mikrofon singen'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
+            ['🔫 Waffenhändler', 'Pistole, Zielfernrohr, Gewehr, Granaten & Laser'], ['🏀 Basketball', 'linke Maus halten = zielen, loslassen = werfen (oder ' + (IST_HANDY ? '✋' : k('E')) + ')'], ['🛹 Skatepark', 'schnell über Schanzen & Halfpipe = Tricks'], ['⚽ Fußball', 'Ball ins rechte Tor: linke Maus halten = zielen (länger = fester), loslassen = Schuss (oder ' + (IST_HANDY ? '✋' : k('E')) + ') = +10 🪙'], ['🎤 Karaoke-Bar', 'drinnen ' + (IST_HANDY ? '✋' : k('E')) + ' – mit echtem Mikrofon singen'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
       ['🚔 Polizei', 'nicht über Rot fahren, nichts Verbotenes tun'], ['🔒 Gefängnis', 'man kann ausbrechen …'],
       ['💬 Mit Affen reden', 'neben einen Affen stellen und ' + E_TASTE + ' drücken – dann Antwort wählen (1–5), selbst schreiben (5) oder mit deiner Stimme sprechen (6 oder V)'],
       ['📟 Fernbedienung', 'Codes eingeben' + (IST_HANDY ? '' : ' mit ' + k('C'))],
@@ -2538,13 +2538,53 @@
     }
     // E auf dem Fußballplatz nah am Ball: kräftiger Schuss genau dorthin, wo der Affe hinschaut (selber zielen!)
     let naechsterSchuss = 0;
-    function fussballAktion(p) {
+    function fussballAktion(p, kraft = 17) {
       const b = fussBall;
       if (!imFeld(FUSS, p.x, p.z, 2) || p.y > 2 || Math.hypot(p.x - b.x, p.z - b.z) > 2.2) return false;
       if (spielZeit < naechsterSchuss) return true;
       naechsterSchuss = spielZeit + 0.6;
-      ballTreten(blickRichtung, 17, 2.6);
+      ballTreten(blickRichtung, kraft, 1 + kraft * 0.1);
       return true;
+    }
+    // Linke Maustaste halten auf dem Basketball- oder Fußballplatz: Zielpunkte zeigen die Richtung, loslassen = werfen/schießen
+    const sportZiel = { an: false, start: 0, art: null };
+    const zielPunkte = new THREE.Group(); zielPunkte.visible = false; szene.add(zielPunkte);
+    {
+      const pm = new THREE.MeshBasicMaterial({ color: 0xffeb3b, transparent: true, opacity: 0.9, depthTest: false });
+      for (let i = 0; i < 16; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.09 + i * 0.006, 8, 6), pm); m.renderOrder = 999; zielPunkte.add(m); }
+    }
+    function sportFeldArt(p) {
+      if (aktuellesFahrzeug) return null;
+      if (imFeld(BASKET, p.x, p.z, 1) && p.y < 2) return 'basket';
+      if (imFeld(FUSS, p.x, p.z, 2) && p.y < 2) return 'fuss';
+      return null;
+    }
+    function sportZielStart() {
+      const art = sportFeldArt(affe.position);
+      if (!art) return false;
+      sportZiel.an = true; sportZiel.start = spielZeit; sportZiel.art = art;
+      return true;
+    }
+    function sportZielLos() {
+      if (!sportZiel.an) return;
+      sportZiel.an = false; zielPunkte.visible = false;
+      const p = affe.position;
+      if (sportZiel.art === 'basket') basketAktion(p);
+      else {
+        const kraft = THREE.MathUtils.clamp(8 + (spielZeit - sportZiel.start) * 16, 8, 24);   // länger halten = fester
+        if (!fussballAktion(p, kraft) && spielZeit > meldungBis) zeigeMeldung('⚽ Stell dich näher an den Ball!', 1.2);
+      }
+    }
+    function sportZielBild(p) {                          // jedes Bild: Affe schaut in Zielrichtung, Punkte zeigen sie
+      if (!sportZiel.an) return;
+      if (!sportFeldArt(p)) { sportZiel.an = false; zielPunkte.visible = false; return; }
+      blickRichtung = kameraWinkel + Math.PI;
+      const laenge = sportZiel.art === 'basket' ? 10 : 4 + Math.min(1.2, spielZeit - sportZiel.start) * 12;
+      zielPunkte.visible = true;
+      zielPunkte.children.forEach((m, i) => {
+        const t = (i + 1) / zielPunkte.children.length;
+        m.position.set(p.x + Math.sin(blickRichtung) * (1 + t * laenge), p.y - 0.2, p.z + Math.cos(blickRichtung) * (1 + t * laenge));
+      });
     }
     function ballAnstoss() { Object.assign(fussBall, { x: FUSS.x, z: FUSS.z, y: 0.35, vx: 0, vy: 0, vz: 0 }); }
     function fussballBewegen(dt) {
@@ -6078,6 +6118,7 @@
     renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
     let rechteMausGedrueckt = false;
     renderer.domElement.addEventListener('mousedown', e => {
+      if (e.button === 0 && sportZielStart()) return;             // Sportplatz: Ziellinie statt Schlag/Schuss
       if (e.button === 2) { rechteMausGedrueckt = true; zielfernrohrBenutzen(true); }
       if (e.button === 0 && !hatWaffe() && !aktuellesFahrzeug && auswahl !== 2) fGedrueckt = true;   // ohne Waffe: linke Maustaste = Faustschlag
       if (e.button === 0 && hatWaffe() && !aktuellesFahrzeug) {   // linke Maustaste = schießen
@@ -6088,12 +6129,14 @@
     });
     let linkeMausGedrueckt = false;
     addEventListener('mouseup', e => {
-      if (e.button === 0) linkeMausGedrueckt = false;
+      if (e.button === 0) { linkeMausGedrueckt = false; sportZielLos(); }
       if (e.button === 2) { rechteMausGedrueckt = false; zielfernrohrBenutzen(false); }
     });
-    addEventListener('blur', () => { rechteMausGedrueckt = false; });   // Fenster verlassen: Maus gilt als losgelassen
+    addEventListener('blur', () => { rechteMausGedrueckt = false; sportZiel.an = false; zielPunkte.visible = false; });   // Fenster verlassen: Maus gilt als losgelassen
     addEventListener('mousemove', e => {
-      if (zielModus) {                       // beim Zielen: Fadenkreuz bewegen
+      if (sportZiel.an) {                    // Sportplatz-Zielen: Maus bewegen = Richtung drehen
+        kameraWinkel -= e.movementX * 0.004 * EINST.maus;
+      } else if (zielModus) {                       // beim Zielen: Fadenkreuz bewegen
         kameraWinkel -= e.movementX * 0.0025 * EINST.maus;
         zielNeigung = THREE.MathUtils.clamp(zielNeigung - e.movementY * 0.0025 * EINST.maus * (EINST.umkehren ? -1 : 1), -0.6, 0.8);
       } else if (rechteMausGedrueckt) {      // sonst: rechte Maustaste halten = Kamera drehen
@@ -8621,7 +8664,8 @@
         // Affe dreht sich in die Laufrichtung (sanft, nicht ruckartig)
         const tempo = Math.hypot(laufV.x, laufV.z);
         const laeuft = tempo > 0.4;
-        if (laeuft && !zielModus) {
+        sportZielBild(p);
+        if (laeuft && !zielModus && !sportZiel.an) {
           const ziel = Math.atan2(laufV.x, laufV.z);
           let unterschied = ziel - blickRichtung;
           unterschied = Math.atan2(Math.sin(unterschied), Math.cos(unterschied)); // kürzester Weg herum
