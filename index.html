@@ -5132,11 +5132,34 @@
 
     // Leute am Strand und am Flughafen: bummeln in ihrem Bereich von Punkt zu Punkt (kleine Hüpfer, nie in Wände)
     const BUMMEL_ZONEN = [
-      { name: 'strand', anzahl: 30, x1: MEER_X - 28, x2: MEER_X - 4, z1: 100, z2: 1800 },
+      { name: 'strand', anzahl: 110, x1: MEER_X - 28, x2: MEER_X - 4, z1: 100, z2: 1800, bade: true },
+      { name: 'wasser', anzahl: 80, x1: MEER_X - 3, x2: MEER_X + 10, z1: 100, z2: 1800, bade: true },   // planschen im flachen Wasser
       { name: 'parkplatz', anzahl: 8, x1: -444, x2: -412, z1: 256, z2: 324 },
       { name: 'terminal-vorne', anzahl: 6, x1: -448, x2: -436, z1: 215, z2: 365 },
       { name: 'vorfeld', anzahl: 8, x1: -640, x2: -490, z1: 205, z2: 375 },
     ];
+    // Badesachen: Badehose (alle) oder Bikini (jeder zweite) in bunten Farben – wird an den Affen-Körper geklebt
+    const BADE_FARBEN = [0xff4081, 0x00e5ff, 0xffeb3b, 0x76ff03, 0xff6e40, 0xb388ff, 0xffffff, 0x2962ff, 0xff1744];
+    const badeMaterialien = BADE_FARBEN.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.5 }));
+    function badesachenAnziehen(f) {
+      const m = badeMaterialien[Math.floor(Math.random() * badeMaterialien.length)];
+      const hose = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.24, 0.15, 20), m);   // Hose um den unteren Bauch
+      hose.position.set(0, -0.27, 0);
+      hose.scale.z = 0.92;
+      f.figur.add(hose);
+      if (Math.random() < 0.5) {                                                           // Bikini-Oberteil: Band + zwei Körbchen
+        const band = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 20), m);
+        band.position.set(0, 0.02, 0);
+        band.scale.z = 0.92;
+        f.figur.add(band);
+        for (const s of [-1, 1]) {
+          const korb = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 10), m);
+          korb.position.set(0.1 * s, 0.03, 0.2);
+          korb.scale.set(1, 0.9, 0.6);
+          f.figur.add(korb);
+        }
+      }
+    }
     function bummelZiel(f) {
       const z = f.zone;
       for (let i = 0; i < 12; i++) {
@@ -5159,6 +5182,7 @@
         f.tuete = new THREE.Mesh(einheitsKiste, tueteMaterial);
         f.tuete.visible = false;
         f.teile.armR.add(f.tuete);
+        if (zone.bade) badesachenAnziehen(f);
         szene.add(f.gruppe);
         bummelZiel(f);
         fussgaenger.push(f);
