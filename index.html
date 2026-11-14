@@ -393,6 +393,18 @@
     #haendler .ware small { opacity: 0.75; font-size: 11px; }
     #haendler button { background: #ffd600; border: none; border-radius: 8px; padding: 8px 12px; font-weight: bold; cursor: pointer; white-space: nowrap; }
     #haendler button:hover { background: #ffea00; }
+    #autohaus {
+      position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); z-index: 5;
+      width: min(440px, calc(100vw - 32px)); max-height: calc(100vh - 200px); overflow-y: auto; box-sizing: border-box;
+      padding: 14px 16px; background: rgba(10, 30, 60, 0.93); color: #fff; border-radius: 14px; display: none;
+    }
+    #autohaus.offen { display: block; }
+    #autohaus h2 { margin: 0 0 4px; font-size: 22px; text-align: center; }
+    #autohaus p { margin: 4px 0 8px; font-size: 13px; text-align: center; }
+    #autohaus .ware { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid rgba(255,255,255,0.15); }
+    #autohaus .ware small { opacity: 0.75; font-size: 11px; }
+    #autohaus button { background: #ffd600; border: none; border-radius: 8px; padding: 8px 12px; font-weight: bold; cursor: pointer; white-space: nowrap; }
+    body.handy #autohaus { bottom: auto; top: 12px; max-height: 55vh; }
     #auftrag {
       position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 4; display: none; pointer-events: none;
       width: min(340px, calc(100vw - 420px)); min-width: 200px; box-sizing: border-box; padding: 8px 12px; border-radius: 12px;
@@ -488,6 +500,7 @@
   <div id="zielfernrohr"></div>
   <div id="einrichten"><h2>🛠️ Haus einrichten</h2><p>Das Möbelstück kommt dorthin, wo du stehst (vor dich). Du kannst auf Sofa, Bett und Trampolin springen!</p><div class="waren"></div><button class="zurueck">↩️ Letztes Teil zurückgeben (halber Preis zurück)</button></div>
   <div id="tierladen"><h2>🐾 Tierhandlung</h2><p>Ein Haustier läuft (oder fliegt) dir überall hinterher. Bezahlt wird mit Punkten.</p><div class="waren"></div></div>
+  <div id="autohaus"><h2>🚘 Affen-Autohaus</h2><p>Kauf dir ein Fahrzeug! Es wartet dann draußen auf dem Parkplatz. Bezahlt wird mit Punkten.</p><div class="waren"></div></div>
   <div id="haendler">
     <h2>🍌 Bananen-Waffen</h2>
     <p>Bezahlt wird mit deinen Punkten.</p>
@@ -627,12 +640,14 @@
       ['🐒 Bewegen', [['Laufen', 'Stick links'], ['Rennen', 'Stick ganz nach außen'], ['Springen / Doppelsprung', '⬆️ / 2× ⬆️'], ['Jetpack fliegen', '⬆️ halten'], ['Tanzen', '🕺 links']]],
       ['🎥 Kamera & Karte', [['Umschauen', 'rechts wischen'], ['Große Karte', 'Karte antippen'], ['Wegpunkt setzen', 'auf große Karte tippen']]],
       ['🚗 Fahren', [['Einsteigen / Aussteigen', '✋'], ['Gas, Bremse, Lenken', 'Stick'], ['Hupen', '📯']]],
+      ['🗺️ Große Welt', [['Laden ausrauben', 'an die Kasse, ✋'], ['Fahrzeug kaufen', '🚘 Autohaus (Oststadt)'], ['Flugzeug fliegen', '✈️ Flughafen im Westen'], ['Schwimmen', '🏖️ Meer im Osten']]],
       ['🍌 Waffen', [['Schießen', '🔫'], ['Zielen', '🎯'], ['Rauchbombe', '💨'], ['Waffe wählen', 'Leiste oben links oder 🎯 (Waffen-Rad)']]],
       ['👥 Mehrspieler', [['Bei einem Freund mitfahren', 'neben sein Auto, ✋'], ['Mini-Spiele: Fangen & Bananen-Duell', 'im 👥-Menü'], ['Raum öffnen / beitreten', '👥'], ['Chat schreiben', '💬'], ['Funkgerät', '🎙️ halten']]],
     ] : [
       ['🐒 Bewegen', [['Laufen', k('W','A','S','D')], ['Rennen', k('Shift')], ['Springen / Doppelsprung', k('Leertaste') + ' / 2×'], ['Jetpack fliegen', k('Leertaste') + ' halten'], ['Tanzen', k('B') + ' halten']]],
       ['🎥 Kamera & Karte', [['Kamera drehen', k('←','→','↑','↓')], ['Kamera mit der Maus', 'rechte Maustaste halten'], ['Große Karte', k('M')], ['Wegpunkt setzen', 'Klick auf die große Karte']]],
       ['🚗 Fahren', [['Einsteigen / Aussteigen', k('E')], ['Gas / Bremse / Lenken', k('W','S','A','D')], ['Hupen', k('Leertaste')], ['Garage', 'an der ersten Kreuzung']]],
+      ['🗺️ Große Welt', [['Laden ausrauben (Kiosk, Tankstelle, Juwelier, Supermarkt)', 'an der Kasse ' + k('E')], ['Fahrzeug kaufen', '🚘 Autohaus in der Oststadt'], ['Flugzeug fliegen', '✈️ Flughafen im Westen'], ['Schwimmen', '🏖️ Meer im Osten']]],
       ['🍌 Waffen', [['Waffe wählen', k('1','2','3','4','5','6','7','8')], ['Waffen-Rad (Zeitlupe)', k('Tab') + ' halten'], ['Schießen', 'Linksklick oder ' + k('F')], ['Zielen', 'rechte Maustaste oder ' + k('Z')], ['Rauchbombe', k('G')]]],
       ['👥 Mehrspieler', [['Bei einem Freund mitfahren', 'neben sein Auto stellen, ' + k('E')], ['Mini-Spiele: Fangen & Bananen-Duell', 'im 👥-Menü ' + k('P')], ['Raum öffnen / beitreten', k('P')], ['Chat schreiben', k('T') + ' oder ' + k('Enter')], ['Funkgerät', k('V') + ' halten']]],
     ];
@@ -1858,6 +1873,8 @@
     // ================= SUPERMÄRKTE =================
     // Drei Supermärkte in der Stadt. Die Fußgänger-Affen gehen dort einkaufen – du kannst auch hinein.
     const LAEDEN = [];
+    // Alle Läden mit Kasse, die man ausrauben kann (Supermärkte, Kioske, Tankstellen, Juweliere)
+    const RAUB_LAEDEN = [];
     const ladenWand = new THREE.MeshStandardMaterial({ color: 0xfff3e0, roughness: 0.9 });
     const schaufenster = new THREE.MeshStandardMaterial({ color: 0x81d4fa, roughness: 0.1, metalness: 0.3, transparent: true, opacity: 0.55 });
     const fliesen = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.6 });
@@ -1909,6 +1926,7 @@
       kassierer.gruppe.rotation.y = vorne > 0 ? 0 : Math.PI; // schaut zur Tür
       szene.add(kassierer.gruppe);
       NPC_STAND.push({ gruppe: kassierer.gruppe, art: 'kassierer' });
+      RAUB_LAEDEN.push({ name: 'Supermarkt', emoji: '🛒', kasse: { x: cx + 5, z: fz - vorne * 1.8 }, kassierer, beute: 250, extraSterne: 0, geraubtUm: -999 });
       schildBauen('🍌 SUPERMARKT', 8, 1.4, '#2e7d32', '#ffeb3b', cx, H - 0.9, fz + vorne * 0.2, vorne > 0 ? 0 : Math.PI);
       const laden = {
         x: cx, z: cz, b: B, t: T, vorne,
@@ -3337,6 +3355,234 @@
       if (schiff.position.z < -100) { schiff.userData.richtung = 1; schiff.rotation.y = 0; }
     }
 
+    // ================= FLUGHAFEN =================
+    // Im Westen: eine lange Landebahn, ein Terminal zum Reingehen, ein Tower, ein Hangar und Flugzeuge.
+    const FLUGHAFEN = { x1: -945, x2: -406, z1: 60, z2: 505 };
+    const PISTE = { x: -760, z1: 90, z2: 480, b: 30 };
+    const betonMaterial = echtesMaterial(new THREE.MeshStandardMaterial({ color: 0x8a8a8a, roughness: 0.95 }), 'stein');
+    const glasFassade = new THREE.MeshStandardMaterial({ color: 0x81d4fa, roughness: 0.1, metalness: 0.4, transparent: true, opacity: 0.5 });
+    const bauMaterial = echtesMaterial(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 }), 'putz');
+    // Ein fester Klotz: sichtbar (als Instanz) und man kann nicht hindurch
+    function klotz(mat, x, z, b, t, unten, oben, farbe = null) {
+      instanz(einheitsKiste, mat, x, (unten + oben) / 2, z, b, oben - unten, t, 0, farbe);
+      bloecke.push({ x, z, b, t, unten, oben, art: 'block' });
+    }
+    {
+      // Landebahn mit Markierungen und Lichtern am Rand
+      const laenge = PISTE.z2 - PISTE.z1, mz = (PISTE.z1 + PISTE.z2) / 2;
+      flach(asphalt, PISTE.x, mz, PISTE.b, laenge, 0.015);
+      for (let z = PISTE.z1 + 30; z < PISTE.z2 - 30; z += 20) flach(linie, PISTE.x, z, 0.8, 10, 0.03);
+      for (const s of [-1, 1]) flach(linie, PISTE.x + s * (PISTE.b / 2 - 1), mz, 0.5, laenge - 4, 0.03);
+      for (const ende of [PISTE.z1 + 8, PISTE.z2 - 8]) for (let i = -5; i <= 5; i++) if (i) flach(linie, PISTE.x + i * 2.4, ende, 1.2, 12, 0.03);
+      for (let z = PISTE.z1; z <= PISTE.z2; z += 15) for (const s of [-1, 1])
+        instanz(kugelForm, lampenLicht, PISTE.x + s * (PISTE.b / 2 + 1), 0.25, z, 0.25, 0.25, 0.25, 0, null, false);
+      // Rollwege zum Vorfeld und zum Hangar, und das Vorfeld aus Beton
+      flach(betonMaterial, -692, 290, 106, 18, 0.014);
+      flach(betonMaterial, -662, 150, 166, 18, 0.014);
+      flach(betonMaterial, -565, 290, 150, 180, 0.013);
+      for (let x = -740; x < -640; x += 6) flach(gelb, x, 290, 3, 0.3, 0.03);   // gelbe Rollweg-Linie
+      // Parkplatz vor dem Terminal (an der Straße)
+      flach(asphalt, -428, 290, 36, 70, 0.012);
+      for (let z = 260; z <= 320; z += 5) flach(linie, -428, z, 14, 0.15, 0.03);
+    }
+    // Terminal: großes Haus mit Glaswand, vorne und hinten eine Tür
+    const TERMINAL = { x: -468, z: 290, b: 36, t: 80, h: 10 };
+    {
+      const { x, z, b, t, h } = TERMINAL, W = 0.5, TUER = 8;
+      const seite = (wx, mat, farbe) => {   // Wand mit Tür in der Mitte
+        const stueck = (t - TUER) / 2;
+        klotz(mat, wx, z - TUER / 2 - stueck / 2, W, stueck, 0, h, farbe);
+        klotz(mat, wx, z + TUER / 2 + stueck / 2, W, stueck, 0, h, farbe);
+        klotz(mat, wx, z, W, TUER, 4, h, farbe);
+      };
+      seite(x + b / 2, glasFassade, null);           // zur Straße: Glas
+      seite(x - b / 2, bauMaterial, 0xeceff1);       // zum Vorfeld
+      klotz(bauMaterial, x, z - t / 2, b, W, 0, h, 0xeceff1);
+      klotz(bauMaterial, x, z + t / 2, b, W, 0, h, 0xeceff1);
+      klotz(bauMaterial, x, z, b + 2, t + 2, h, h + 0.6, 0x90a4ae);   // Dach
+      flach(fliesen, x, z, b - 0.6, t - 0.6, 0.03);
+      for (let i = 0; i < 5; i++) klotz(bauMaterial, x - 6, z - 30 + i * 6, 2, 4, 0, 1.1, 0x1565c0);   // Check-in-Schalter
+      for (let r = 0; r < 4; r++) for (let i = 0; i < 6; i++) klotz(bauMaterial, x + 4 + r * 3, z + 10 + i * 4, 1.6, 2.6, 0, 0.5, 0x546e7a); // Sitzbänke
+      schildBauen('✈️ AFFEN-AIRPORT', 16, 2.4, '#0d47a1', '#ffffff', x + b / 2 + 0.4, h + 1.8, z, Math.PI / 2);
+      schildBauen('ABFLUG  🛫  Bananen-Insel 14:05', 12, 1.2, '#111', '#ffd600', x - b / 2 + 0.4, 6.5, z, Math.PI / 2);
+      SONDERBAUTEN.push({ x, z, b, t });
+    }
+    // Tower: hoher Turm mit Glaskanzel
+    {
+      const tx = -520, tz = 420;
+      instanz(new THREE.CylinderGeometry(1, 1, 1, 16), bauMaterial, tx, 15, tz, 2.4, 30, 2.4, 0, 0xeceff1);
+      instanz(new THREE.CylinderGeometry(1, 0.8, 1, 16), glasFassade, tx, 32, tz, 5, 4, 5);
+      instanz(new THREE.CylinderGeometry(1, 1, 1, 16), bauMaterial, tx, 34.3, tz, 5.4, 0.6, 5.4, 0, 0x37474f);
+      bloecke.push({ x: tx, z: tz, b: 5, t: 5, unten: 0, oben: 34.6, art: 'block' });
+      SONDERBAUTEN.push({ x: tx, z: tz, b: 10, t: 10 });
+    }
+    // Hangar: offen zur Landebahn (Westen)
+    const HANGAR = { x: -560, z: 150, b: 40, t: 34, h: 14 };
+    {
+      const { x, z, b, t, h } = HANGAR;
+      klotz(bauMaterial, x + b / 2, z, 0.6, t, 0, h, 0x78909c);
+      klotz(bauMaterial, x, z - t / 2, b, 0.6, 0, h, 0x78909c);
+      klotz(bauMaterial, x, z + t / 2, b, 0.6, 0, h, 0x78909c);
+      klotz(bauMaterial, x, z, b + 1, t + 1, h, h + 0.8, 0x546e7a);
+      flach(betonMaterial, x, z, b, t, 0.016);
+      schildBauen('HANGAR 1', 10, 2, '#263238', '#ffca28', x - b / 2 - 0.1, h - 2, z, -Math.PI / 2);
+      SONDERBAUTEN.push({ x, z, b, t });
+    }
+    // Großer Passagier-Jet (aus einfachen Formen). Die Nase zeigt nach +z.
+    function jetBauen(farbe = 0x1565c0) {
+      const g = new THREE.Group();
+      const weissM = new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.4, metalness: 0.2 });
+      const farbM = new THREE.MeshStandardMaterial({ color: farbe, roughness: 0.4 });
+      const dunkelM = new THREE.MeshStandardMaterial({ color: 0x263238, roughness: 0.3 });
+      const teil = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.castShadow = true; g.add(m); return m; };
+      teil(new THREE.CylinderGeometry(2.2, 2.2, 32, 20), weissM, 0, 4, 0, Math.PI / 2);                  // Rumpf
+      teil(new THREE.SphereGeometry(2.2, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), weissM, 0, 4, 16, Math.PI / 2); // Nase
+      teil(new THREE.ConeGeometry(2.2, 8, 20), weissM, 0, 4.6, -20, -Math.PI / 2);                        // Heck
+      teil(new THREE.BoxGeometry(0.15, 0.7, 26), dunkelM, 2.15, 4.8, 1);                                  // Fenster rechts
+      teil(new THREE.BoxGeometry(0.15, 0.7, 26), dunkelM, -2.15, 4.8, 1);                                 // Fenster links
+      teil(new THREE.BoxGeometry(4.45, 0.5, 30), farbM, 0, 3.3, 0);                                       // Streifen
+      teil(new THREE.BoxGeometry(34, 0.5, 6), weissM, 0, 3, -1);                                          // Flügel
+      teil(new THREE.BoxGeometry(12, 0.35, 3), weissM, 0, 5.3, -21);                                      // Höhenleitwerk
+      teil(new THREE.BoxGeometry(0.4, 7, 5), farbM, 0, 8.5, -20.5);                                       // Seitenleitwerk
+      for (const s of [-1, 1]) {
+        teil(new THREE.CylinderGeometry(1.1, 1.1, 4.5, 14), farbM, s * 7, 1.9, 0.5, Math.PI / 2);         // Triebwerke
+        teil(new THREE.CylinderGeometry(0.2, 0.2, 1.8, 8), dunkelM, s * 3, 0.9, -2);                      // Fahrwerk
+      }
+      teil(new THREE.CylinderGeometry(0.2, 0.2, 1.8, 8), dunkelM, 0, 0.9, 12);
+      return g;
+    }
+    // Ein Jet steht am Gate …
+    {
+      const j = jetBauen(0xd32f2f);
+      j.position.set(-560, 0, 345); j.rotation.y = -Math.PI / 2;
+      szene.add(j);
+      bloecke.push({ x: -560, z: 345, b: 36, t: 5, unten: 0, oben: 6.2, art: 'block' });    // Rumpf
+      bloecke.push({ x: -561, z: 345, b: 6, t: 34, unten: 2.5, oben: 3.3, art: 'block' });   // Flügel (darauf stehen!)
+      FERN_AUS.push({ o: j, x: -560, z: 345 });
+    }
+    // … und einer startet immer wieder auf der Landebahn
+    const startJet = { g: jetBauen(0x1565c0), zeit: 0 };
+    startJet.g.position.set(PISTE.x, 0, PISTE.z1 + 20);
+    szene.add(startJet.g);
+    function flughafenBewegen(dt, p) {
+      const j = startJet, g = j.g;
+      j.zeit = (j.zeit + dt) % 100;
+      const t = j.zeit;
+      const start = PISTE.z1 + 20;
+      if (t < 12) { g.position.set(PISTE.x, 0, start); g.rotation.x = 0; g.visible = true; }            // wartet
+      else if (t < 32) { const s = t - 12; g.position.z = start + 0.7 * s * s; }                       // rollt immer schneller
+      else if (t < 70) {                                                                                // hebt ab
+        const s = t - 32;
+        g.position.z = start + 0.7 * 400 + 28 * s + 0.4 * s * s;
+        g.position.y = Math.min(150, 0.12 * s * s + 1.5 * s);
+        g.rotation.x = -Math.min(0.22, s * 0.04);
+      } else g.visible = false;
+      // Lautes Dröhnen, wenn du in der Nähe bist und der Jet rollt
+      if (t > 12 && t < 45 && Math.random() < dt * 6) {
+        const d = Math.hypot(p.x - g.position.x, p.z - g.position.z, (p.y || 0) - g.position.y);
+        if (d < 150 && tonMaschine) rauschen(0.3, ['lowpass', 300], 0.25 * (1 - d / 150));
+      }
+    }
+
+    // ================= NEUE LÄDEN ZUM AUSRAUBEN =================
+    // Kiosk, Tankstelle und Juwelier. strasseZ = an welcher Querstraße, seite = +1 nördlich (Tür nach -z), -1 südlich
+    const LADEN_ARTEN = {
+      kiosk:      { name: 'Kiosk',      emoji: '📰', b: 8,  t: 6,  h: 3.6, wand: 0xffcc80, dach: 0xe65100, schild: '#e65100', beute: 120, extraSterne: 0 },
+      tankstelle: { name: 'Tankstelle', emoji: '⛽', b: 12, t: 9,  h: 4,   wand: 0xeceff1, dach: 0xc62828, schild: '#c62828', beute: 250, extraSterne: 0 },
+      juwelier:   { name: 'Juwelier',   emoji: '💎', b: 12, t: 10, h: 5,   wand: 0x37474f, dach: 0x212121, schild: '#212121', beute: 700, extraSterne: 1 },
+    };
+    const NEUE_LAEDEN = [];
+    const zapfMaterial = new THREE.MeshStandardMaterial({ color: 0xc62828, roughness: 0.5 });
+    const edelstein = new THREE.MeshStandardMaterial({ color: 0x80deea, emissive: 0x00bcd4, emissiveIntensity: 0.6, metalness: 0.5, roughness: 0.1 });
+    function raubLaden(art, cx, strasseZ, seite) {
+      const A = LADEN_ARTEN[art], { b: B, t: T, h: H } = A, W = 0.3;
+      const vorne = -seite, extra = art === 'tankstelle' ? 10 : 0;      // Tankstelle: Platz für die Zapfsäulen vorne
+      const cz = strasseZ + seite * (7 + extra + T / 2);
+      const fz = cz + vorne * T / 2, hz = cz - vorne * T / 2;
+      klotz(bauMaterial, cx, hz, B, W, 0, H, A.wand);
+      klotz(bauMaterial, cx - B / 2, cz, W, T, 0, H, A.wand);
+      klotz(bauMaterial, cx + B / 2, cz, W, T, 0, H, A.wand);
+      klotz(bauMaterial, cx - (B / 4 + 0.75), fz, B / 2 - 1.5, W, 0, H, A.wand);
+      klotz(bauMaterial, cx + (B / 4 + 0.75), fz, B / 2 - 1.5, W, 0, H, A.wand);
+      klotz(bauMaterial, cx, fz, 3, W, 3, H, A.wand);
+      klotz(bauMaterial, cx, cz, B + 0.6, T + 0.6, H, H + 0.3, A.dach);
+      for (const s of [-1, 1]) instanz(einheitsKiste, schaufenster, cx + s * (B / 4 + 0.75), 1.7, fz + vorne * 0.17, B / 2 - 2.4, 1.8, 0.05, 0, null, false);
+      flach(fliesen, cx, cz, B - 0.4, T - 0.4, 0.03);
+      // Theke mit Kasse, dahinter der Verkäufer-Affe
+      const kasse = { x: cx + B / 2 - 2.2, z: cz };
+      klotz(bauMaterial, kasse.x, kasse.z, 0.8, 2.6, 0, 1.0, 0x5d4037);
+      instanz(einheitsKiste, schwarz, kasse.x, 1.15, kasse.z + 0.6, 0.4, 0.3, 0.5, 0, null, false);
+      const kassierer = affenKlon(art === 'juwelier' ? 0xbdbdbd : 0x8d6e63);
+      kassierer.gruppe.position.set(kasse.x + 1.0, 0.5, kasse.z);
+      kassierer.gruppe.rotation.y = -Math.PI / 2;                         // schaut zur Theke
+      szene.add(kassierer.gruppe);
+      NPC_STAND.push({ gruppe: kassierer.gruppe, art: 'kassierer' });
+      // Waren
+      if (art === 'juwelier') {
+        for (let i = 0; i < 3; i++) {
+          klotz(glasFassade, cx - 3 + i * 2.6, cz - vorne * 1.5, 1.6, 1.0, 0, 1.1);
+          for (let k = 0; k < 4; k++) instanz(new THREE.OctahedronGeometry(0.12), edelstein, cx - 3.5 + i * 2.6 + k * 0.3, 1.2, cz - vorne * 1.5, 1, 1, 1, k, null, false);
+        }
+      } else {
+        for (const rx of [-B / 2 + 1.2, -B / 2 + 3.4]) {
+          klotz(bauMaterial, cx + rx, cz, 0.9, T - 3, 0, 1.6, 0x8d6e63);
+          for (let i = 0; i < 8; i++) instanz(einheitsKiste, warenMaterial, cx + rx, 0.4 + (i % 3) * 0.45, cz - T / 2 + 2.2 + Math.floor(i / 3) * 1.3, 0.7, 0.3, 0.9, 0, WAREN_FARBEN[(i * 3 + art.length) % WAREN_FARBEN.length], false);
+        }
+      }
+      if (art === 'tankstelle') {   // Dach auf Säulen und zwei Zapfsäulen
+        const dz = fz + vorne * 5;
+        for (const sx of [-5, 5]) for (const sz of [-2.5, 2.5]) klotz(bauMaterial, cx + sx, dz + sz, 0.4, 0.4, 0, 4.5, 0xeceff1);
+        instanz(einheitsKiste, bauMaterial, cx, 4.7, dz, 13, 0.5, 8, 0, 0xc62828);
+        for (const sx of [-2.5, 2.5]) { klotz(zapfMaterial, cx + sx, dz, 0.8, 0.6, 0, 1.6); }
+        flach(betonMaterial, cx, dz, 14, 9, 0.012);
+      }
+      schildBauen(`${A.emoji} ${A.name.toUpperCase()}`, Math.min(B - 1, 7), 1.2, A.schild, art === 'juwelier' ? '#ffd54f' : '#fff', cx, H - 0.8, fz + vorne * 0.2, vorne > 0 ? 0 : Math.PI);
+      const laden = { art, name: A.name, emoji: A.emoji, x: cx, z: cz, b: B, t: T + extra * 2, vorne, kasse, kassierer, beute: A.beute, extraSterne: A.extraSterne, geraubtUm: -999 };
+      RAUB_LAEDEN.push(laden); NEUE_LAEDEN.push(laden); SONDERBAUTEN.push(laden);
+      return laden;
+    }
+    raubLaden('kiosk', 330, 130, 1);         // Oststadt
+    raubLaden('juwelier', 480, 290, 1);
+    raubLaden('tankstelle', 640, 210, 1);
+    raubLaden('kiosk', 620, 440, -1);
+    raubLaden('juwelier', 135, 880, 1);      // Hochhaus-Viertel
+    raubLaden('kiosk', 45, 1060, 1);
+    raubLaden('tankstelle', 330, 700, -1);
+    raubLaden('tankstelle', -500, 1240, 1);  // Vororte
+    raubLaden('kiosk', -700, 1420, 1);
+    raubLaden('kiosk', 640, 880, 1);         // Nordost
+    raubLaden('tankstelle', 480, 1420, 1);
+    raubLaden('tankstelle', -330, 520, 1);   // an der Flughafen-Straße
+    supermarkt(480, 1073, -1);               // neue Supermärkte
+    supermarkt(-500, 1613, -1);
+    supermarkt(330, 373, -1);
+
+    // ================= AUTOHAUS =================
+    // Ein großer Glas-Laden mit Autos im Schaufenster. Drinnen kann man Fahrzeuge kaufen.
+    const AUTOHAUS = { x: 480, z: 67, b: 26, t: 20, h: 6, vorne: -1 };
+    const AUTOHAUS_PLATZ = { x: 506, z: 70 };   // Parkplatz daneben: hier wartet das gekaufte Fahrzeug
+    {
+      const { x, z, b, t, h } = AUTOHAUS, W = 0.4, fz = z - t / 2;
+      klotz(bauMaterial, x, z + t / 2, b, W, 0, h, 0xeceff1);
+      klotz(bauMaterial, x - b / 2, z, W, t, 0, h, 0xeceff1);
+      klotz(bauMaterial, x + b / 2, z, W, t, 0, h, 0xeceff1);
+      klotz(glasFassade, x - b / 4 - 1.5, fz, b / 2 - 3, W, 0, h);
+      klotz(glasFassade, x + b / 4 + 1.5, fz, b / 2 - 3, W, 0, h);
+      klotz(glasFassade, x, fz, 6, W, 3.5, h);
+      klotz(bauMaterial, x, z, b + 1, t + 1, h, h + 0.5, 0x1565c0);
+      flach(fliesen, x, z, b - 0.6, t - 0.6, 0.03);
+      schildBauen('🚘 AUTOHAUS', 10, 1.6, '#1565c0', '#fff', x, h + 1.1, fz - 0.3, Math.PI);
+      flach(asphalt, AUTOHAUS_PLATZ.x, AUTOHAUS_PLATZ.z, 14, 20, 0.012);
+      for (const lx of [-3.5, 0, 3.5]) flach(linie, AUTOHAUS_PLATZ.x + lx, AUTOHAUS_PLATZ.z, 0.12, 6, 0.03);
+      // Verkäufer-Affe im Anzug (dunkles Fell)
+      const verkaeufer = affenKlon(0x424242);
+      verkaeufer.gruppe.position.set(x + 8, 0.5, z + 6);
+      verkaeufer.gruppe.rotation.y = Math.PI;
+      szene.add(verkaeufer.gruppe);
+      NPC_STAND.push({ gruppe: verkaeufer.gruppe, art: 'autohaus' });
+      SONDERBAUTEN.push({ x, z, b: b + 30, t });
+    }
+
     // ================= DIE GROSSE NEUE WELT =================
     // Eigener Zufall für die neuen Gebiete, damit die alte Stadt genau so bleibt, wie sie war.
     const alteSaat = saat; saat = 98765;
@@ -3350,7 +3596,7 @@
     stadtBauen([NEUE_STADT[1]], 14, 0.6, 18, 45);   // richtige Wolkenkratzer!
     stadtBauen([NEUE_STADT[2]], 16, 0.15);
     stadtBauen([NEUE_STADT[3]], 20, 0.03);
-    const KEIN_WALD = [ALTE_WELT, ...NEUE_STADT, STRAND];   // hier wächst kein neuer Wald (Meer, Flughafen … kommen dazu)
+    const KEIN_WALD = [ALTE_WELT, ...NEUE_STADT, STRAND, FLUGHAFEN];   // hier wächst kein neuer Wald (Meer, Flughafen … kommen dazu)
     // Wald in Flecken: eine Wellen-Formel sagt, wo dichter Wald ist und wo Wiese
     const waldDichte = (x, z) => Math.sin(x * 0.013) + Math.sin(z * 0.017 + 1.3) + Math.sin((x + z) * 0.007 + 0.5);
     const NEU_RASTER = 9;
@@ -4090,6 +4336,9 @@
     neuesFahrzeug('motorrad', gx + 3.4, gz + 0.5, Math.PI);
     neuesFahrzeug('kart',     gx + 5.9, gz + 0.5, Math.PI);
     neuesFahrzeug('rakete', GEHEIM.ausfahrt.x, GEHEIM.z + 2, Math.PI); // im Geheimversteck, Nase zur Ausfahrt
+    // Flugzeuge am Flughafen: auf dem Vorfeld und im Hangar (Nase zur Landebahn = Richtung -x)
+    for (const z of [235, 255, 275]) neuesFahrzeug('flugzeug', -600, z, -Math.PI / 2);
+    neuesFahrzeug('flugzeug', HANGAR.x, HANGAR.z, -Math.PI / 2);
 
     // Liegt ein Punkt (mit Abstand r) in einem Fahrzeug? Rechnet in die Sicht des Fahrzeugs um.
     function punktInFahrzeug(f, px, pz, r) {
@@ -6026,6 +6275,103 @@
       if (spielZeit < alarmBis && spielZeit > naechsterAlarmTon) { hupen(1250); naechsterAlarmTon = spielZeit + 0.3; }
     }
 
+    // ================= LÄDEN AUSRAUBEN =================
+    // An der Kasse E drücken: "Hände hoch!" – dann 6 Sekunden in der Nähe bleiben, bis die Kasse leer ist.
+    const RAUB_DAUER = 6, RAUB_PAUSE = 180;
+    let raub = null;   // { laden, bis } – der Überfall, der gerade läuft
+    const ladenAnKasse = p => p.y < 2 ? RAUB_LAEDEN.find(l => Math.hypot(p.x - l.kasse.x, p.z - l.kasse.z) < 2.6) : null;
+    function haendeHoch(l, hoch) {
+      l.kassierer.teile.armL.rotation.z = hoch ? -2.6 : 0;
+      l.kassierer.teile.armR.rotation.z = hoch ? 2.6 : 0;
+    }
+    function raubStarten(p) {
+      if (raub) return false;
+      const l = ladenAnKasse(p);
+      if (!l) return false;
+      if (spielZeit - l.geraubtUm < RAUB_PAUSE) { zeigeMeldung(`Die Kasse ist leer. Komm in ${Math.ceil((RAUB_PAUSE - (spielZeit - l.geraubtUm)) / 60)} Minuten wieder!`, 2); return true; }
+      raub = { laden: l, bis: spielZeit + RAUB_DAUER };
+      haendeHoch(l, true);
+      npcSagt(l.kassierer.gruppe, ['Nicht schießen! 😱', 'Hier, nimm alles! 💸', 'Hilfe, ein Überfall!'][Math.floor(Math.random() * 3)], { name: 'Kassierer' }, 3000, true);
+      zeigeMeldung(`🔫 Hände hoch! Bleib ${RAUB_DAUER} Sekunden an der Kasse!`, 2);
+      klang('kasse'); hupen(1500);
+      panik(l.kasse.x, l.kasse.z, 20);
+      return true;
+    }
+    function raubBewegen(p) {
+      if (!raub) return;
+      const l = raub.laden;
+      if (Math.random() < 0.15) hupen(1250);                                 // Alarm piept
+      if (aktuellesFahrzeug || Math.hypot(p.x - l.kasse.x, p.z - l.kasse.z) > 6) {
+        zeigeMeldung('❌ Überfall abgebrochen – du bist weggelaufen!', 2);
+        haendeHoch(l, false); raub = null;
+        straftatPause = 0; straftat('Versuchter Überfall!');
+        return;
+      }
+      if (spielZeit < raub.bis) return;
+      raub = null;
+      l.geraubtUm = spielZeit;
+      punkte += l.beute; punkteZeigen();
+      klang('kasse');
+      zeigeMeldung(`💰 ${l.emoji} ${l.name} ausgeraubt! +${l.beute} Münzen – lauf weg, die Polizei kommt!`, 3);
+      straftatPause = 0; straftat(`${l.name} überfallen!`);
+      if (fahndung && l.extraSterne) { fahndung.sterne = Math.min(5, (fahndung.sterne || 1) + l.extraSterne); if (fahndung.sterne >= 3 && !fahndung.verstaerkung) { fahndung.verstaerkung = true; helferStarten(); } }
+      setTimeout(() => haendeHoch(l, false), 8000);
+    }
+    function raubHinweis(p) {
+      if (raub) {
+        const rest = Math.max(0, raub.bis - spielZeit);
+        return `<b>💰 Kasse wird geleert … noch ${rest.toFixed(1)} s</b><small>Bleib in der Nähe der Kasse! Weglaufen = abgebrochen</small>`;
+      }
+      const l = ladenAnKasse(p);
+      if (!l) return null;
+      if (spielZeit - l.geraubtUm < RAUB_PAUSE) return `<b>${l.emoji} Die Kasse ist leer.</b><small>In ein paar Minuten ist wieder Geld drin …</small>`;
+      return `<b>🔫 ${E_TASTE} drücken: ${l.name} ausrauben (+${l.beute} Münzen)</b><small>Die Polizei kommt${l.extraSterne ? ' – und zwar mit 2 Sternen!' : '!'} Wirst du erwischt, ist die Beute weg.</small>`;
+    }
+
+    // ================= AUTOHAUS: Fahrzeuge kaufen =================
+    const AUTOHAUS_WAREN = [
+      { typ: 'kart',     preis: 150,  text: 'klein, flink, macht Spaß' },
+      { typ: 'motorrad', preis: 300,  text: 'schnell und wendig' },
+      { typ: 'auto',     preis: 400,  text: 'Cabrio – offen, mit Wind im Fell' },
+      { typ: 'sport',    preis: 900,  text: 'superschnell' },
+      { typ: 'monster',  preis: 1200, text: 'fährt über alles drüber' },
+      { typ: 'flugzeug', preis: 2000, text: 'Leertaste = steigen – ab in die Luft!' },
+      { typ: 'rakete',   preis: 5000, text: 'das schnellste Auto der Welt' },
+    ];
+    const autohausMenue = document.getElementById('autohaus');
+    const imAutohaus = p => Math.abs(p.x - AUTOHAUS.x) < AUTOHAUS.b / 2 && Math.abs(p.z - AUTOHAUS.z) < AUTOHAUS.t / 2 && p.y < 2;
+    let gekauftesFahrzeug = null;
+    {
+      const liste = autohausMenue.querySelector('.waren');
+      for (const w of AUTOHAUS_WAREN) {
+        const T = FAHRZEUG_TYPEN[w.typ];
+        const zeile = document.createElement('div');
+        zeile.className = 'ware';
+        zeile.innerHTML = `<span>${T.emoji} ${T.name}<br><small>${w.text} · ${Math.round(T.maxTempo * 3.6)} km/h</small></span><button>${w.preis} Punkte</button>`;
+        const knopf = zeile.querySelector('button');
+        knopf.addEventListener('mousedown', e => e.preventDefault());
+        knopf.addEventListener('click', () => fahrzeugKaufen(w));
+        liste.appendChild(zeile);
+      }
+      // Ausstellungs-Fahrzeuge im Schaufenster (nur zum Anschauen)
+      [['sport', -7, -4], ['monster', 0, 2], ['motorrad', 7, -4], ['kart', -7, 5]].forEach(([typ, dx, dz], i) => {
+        const f = neuesFahrzeug(typ, AUTOHAUS.x + dx, AUTOHAUS.z + dz, Math.PI + (i % 2 ? 0.5 : -0.5), true);
+        bloecke.push({ x: f.x, z: f.z, b: f.breite, t: f.breite, unten: 0, oben: f.hoehe, art: 'block' });
+      });
+    }
+    function fahrzeugKaufen(w) {
+      if (punkte < w.preis) { zeigeMeldung(`Zu wenig Punkte! (${w.preis} nötig)`, 1.5); return; }
+      punkte -= w.preis; punkteZeigen(); klang('kasse');
+      // Das alte gekaufte Fahrzeug verschwindet (außer du sitzt gerade drin)
+      if (gekauftesFahrzeug && gekauftesFahrzeug !== aktuellesFahrzeug) {
+        szene.remove(gekauftesFahrzeug.gruppe);
+        const i = fahrzeuge.indexOf(gekauftesFahrzeug); if (i >= 0) fahrzeuge.splice(i, 1);
+      }
+      gekauftesFahrzeug = neuesFahrzeug(w.typ, AUTOHAUS_PLATZ.x, AUTOHAUS_PLATZ.z, Math.PI);
+      zeigeMeldung(`🔑 ${gekauftesFahrzeug.emoji} ${gekauftesFahrzeug.name} gekauft! Es steht draußen auf dem Parkplatz.`, 3);
+      hupen(gekauftesFahrzeug.hupe);
+    }
+
     // ================= KLEIDER: 32 Sachen zum Anziehen =================
     // Jedes Kleidungsstück wird aus einfachen Formen gebaut und an den Affen geheftet:
     // Hüte und Brillen an den Kopf, Oberteile, Halssachen und Rucksäcke an den Körper, Schuhe an die Beine.
@@ -6353,10 +6699,19 @@
       rechteck('#1e88e5', (MEER_X + WIESE.x2) / 2, (WIESE.z1 + WIESE.z2) / 2, WIESE.x2 - MEER_X, WIESE.z2 - WIESE.z1); // Meer
       rechteck('#8d6e63', (STEG.x1 + STEG.x2) / 2, STEG.z, STEG.x2 - STEG.x1, STEG.b);
       rechteck('#f0d58c', LEUCHTTURM.x, LEUCHTTURM.z, 22, 22);
+      rechteck('#9e9e9e', -565, 290, 150, 180);                                                          // Vorfeld
+      rechteck('#9e9e9e', -692, 290, 106, 18); rechteck('#9e9e9e', -662, 150, 166, 18);
+      rechteck('#333', PISTE.x, (PISTE.z1 + PISTE.z2) / 2, PISTE.b, PISTE.z2 - PISTE.z1);               // Landebahn
+      rechteck('#90caf9', TERMINAL.x, TERMINAL.z, TERMINAL.b, TERMINAL.t);
+      rechteck('#78909c', HANGAR.x, HANGAR.z, HANGAR.b, HANGAR.t);
+      for (const l of NEUE_LAEDEN) rechteck({ kiosk: '#ffb74d', tankstelle: '#e53935', juwelier: '#26c6da' }[l.art], l.x, l.z, l.b, l.t);
+      rechteck('#1565c0', AUTOHAUS.x, AUTOHAUS.z, AUTOHAUS.b, AUTOHAUS.t);
       p.strokeStyle = '#ffffff'; p.lineWidth = 3;
       p.strokeRect((GEF.x - 13 - WIESE.x1) * HG_MASSSTAB, (GEF.z - 13 - WIESE.z1) * HG_MASSSTAB, 26 * HG_MASSSTAB, 26 * HG_MASSSTAB);
     }
     const ORTE = [ // Beschriftungen auf der großen Karte
+      { name: '✈️ Flughafen', x: TERMINAL.x - 60, z: TERMINAL.z }, { name: '🚘 Autohaus', x: AUTOHAUS.x, z: AUTOHAUS.z },
+      ...NEUE_LAEDEN.map(l => ({ name: `${l.emoji} ${l.name}`, x: l.x, z: l.z })), { name: '🛫 Landebahn', x: PISTE.x, z: PISTE.z2 + 12 },
       { name: '🏖️ Strand', x: MEER_X - 15, z: 700 }, { name: '⚓ Steg', x: STEG.x2 - 20, z: STEG.z - 12 }, { name: '🗼 Leuchtturm', x: LEUCHTTURM.x, z: LEUCHTTURM.z - 18 },
       { name: '🏙️ Hochhäuser', x: 150, z: 970 }, { name: '🏘️ Vororte', x: -450, z: 1300 }, { name: '🏢 Oststadt', x: 500, z: 280 },
       { name: '🏁 Start', x: 0, z: 2 }, { name: '🧗 Obby ↑', x: 18, z: -12 }, { name: '🏎 Garage', x: GARAGE.x, z: GARAGE.z },
@@ -7221,6 +7576,7 @@
       barkeeper: ['Ein Bananen-Shake? 🍌🥤', 'Heute gibt es Dschungel-Saft!', 'Nur alkoholfrei – hier tanzen Kinder!'],
       bank: ['Willkommen in der Affen-Bank! 🏦', 'Bitte nichts klauen … 😅', 'Der Tresor ist ganz sicher. Glaube ich.'],
       arzt: ['Willkommen im Krankenhaus! 🏥', 'Pass besser auf dich auf! 🩹', 'Bananen sind die beste Medizin. 🍌'],
+      autohaus: ['Na, Lust auf ein neues Auto? 🚘', 'Heute im Angebot: der Monstertruck!', 'Ein Flugzeug? Haben wir auch! ✈️'],
       haendler: ['Psst … brauchst du was? 😎', 'Bananen-Waffen, frisch geladen!', 'Ein Zielfernrohr macht dich zum Profi.'],
       kleider: ['Willkommen! Probier doch was an! 👕', 'Das steht dir super!', 'Heute ist alles schick!'],
       tierladen: ['Ein Haustier gefällig? 🐾', 'Der Mini-Drache ist mein Liebling! 🐉', 'Alle Tiere sind ganz lieb!'],
@@ -7357,7 +7713,7 @@
       const n = naechsterStand(p, 3.2);
       if (n) {
         if (n.art === 'auftrag' && nachtAktiv) return false;
-        n.name ??= { kassierer: 'Kassierer', dj: 'DJ', barkeeper: 'Barkeeper', bank: 'Bank-Affe', haendler: 'Händler', kleider: 'Verkäuferin', tierladen: 'Tierhändler', auftrag: 'Auftrags-Affe', arzt: 'Ärztin' }[n.art] || 'Affe';
+        n.name ??= { kassierer: 'Kassierer', dj: 'DJ', barkeeper: 'Barkeeper', bank: 'Bank-Affe', haendler: 'Händler', autohaus: 'Autoverkäufer', kleider: 'Verkäuferin', tierladen: 'Tierhändler', auftrag: 'Auftrags-Affe', arzt: 'Ärztin' }[n.art] || 'Affe';
         gespraechAuf(n, zufallsSpruch(n.art));
         return true;
       }
@@ -7377,7 +7733,9 @@
       return [
         ...LAEDEN.map(l => vorDie(l, 'zum Supermarkt 🛒')), ...BANKEN.map(b => vorDie(b, 'zur Bank 🏦')),
         vorDie(CLUB, 'zum Club 🪩'), vorDie(HAENDLER, 'zum geheimen Händler 😎'), vorDie(KLEIDERLADEN, 'zum Kleiderladen 👕'),
-        { name: 'zur Tierhandlung 🐾', x: TIERLADEN.x, z: TIERLADEN.z + 4 }, { name: 'zum Auftrags-Affen ❗', x: AUFTRAGGEBER.x, z: AUFTRAGGEBER.z + 2 },
+        { name: 'zur Tierhandlung 🐾', x: TIERLADEN.x, z: TIERLADEN.z + 4 },
+        ...NEUE_LAEDEN.map(l => vorDie(l, { kiosk: 'zum Kiosk 📰', tankstelle: 'zur Tankstelle ⛽', juwelier: 'zum Juwelier 💎' }[l.art])),
+        vorDie(AUTOHAUS, 'zum Autohaus 🚘'), { name: 'zum Flughafen ✈️', x: TERMINAL.x + TERMINAL.b / 2 + 4, z: TERMINAL.z }, { name: 'zum Strand 🏖️', x: MEER_X - 15, z: 1000 }, { name: 'zum Auftrags-Affen ❗', x: AUFTRAGGEBER.x, z: AUFTRAGGEBER.z + 2 },
       ];
     }
     function richtungsWort(x, z) {   // grob: in welche Himmelsrichtung vom Spieler aus?
@@ -7982,6 +8340,8 @@
       lebenBewegen(dt);              // Leben heilen, Krankenhaus
       bankBewegen();                 // Alarmglocke
       meerBewegen(dt);               // Wellen, Leuchtturm, Schiff
+      flughafenBewegen(dt, p);       // der große Jet startet
+      raubBewegen(p);                // Ladenüberfall läuft?
       clubBewegen(spielZeit);        // Disco-Lichter im Club
       sportBewegen(dt);              // Basketball, Skatepark, Fußball
       karaokeBewegen(dt);            // Karaoke-Bar: Lied, Text, Mikrofon
@@ -8001,7 +8361,7 @@
       if (eGedrueckt) {
         eGedrueckt = false;
         if (mitfahrt) mitfahrtEnde();                                   // beim Freund aussteigen
-        else if (!aktuellesFahrzeug && (auftragAktion(p) || hausAktion(p) || graben(p) || tresorKnacken(p) || barAktion(p) || basketAktion(p) || karaokeAktion(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
+        else if (!aktuellesFahrzeug && (auftragAktion(p) || hausAktion(p) || graben(p) || raubStarten(p) || tresorKnacken(p) || barAktion(p) || basketAktion(p) || karaokeAktion(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
         else if (aktuellesFahrzeug) { if ((aktuellesFahrzeug.hoeheJetzt || 0) > 0.3) zeigeMeldung('✈️ Erst landen, dann aussteigen!', 1.5); else aussteigen(); }
         else if (!imGefaengnis) { const mf = mitfahrKandidat(p); if (mf) mitfahrtStarten(mf); else { const f = naechstesFahrzeug(p); if (f) einsteigen(f); else if (!autoKlauen(p)) npcAnsprechen(p); } }
       }
@@ -8194,6 +8554,9 @@
         } else if (amBar(p)) {
           fahrInfo.innerHTML = `<b>🍹 ${E_TASTE} drücken: Getränk kaufen</b><small>Bananen-Shake, Dschungel-Saft, Kokos-Eis & Goldener Cocktail</small>`;
           fahrInfo.classList.add('offen');
+        } else if (raubHinweis(p)) {
+          fahrInfo.innerHTML = raubHinweis(p);
+          fahrInfo.classList.add('offen');
         } else if (amTresor(p)) {
           const BANK = bankAm(p);
           fahrInfo.innerHTML = spielZeit - BANK.geraubtUm < BANK_PAUSE ? '<b>Der Tresor ist leer.</b><small>In ein paar Minuten ist wieder Geld drin …</small>'
@@ -8259,6 +8622,7 @@
       // Umkleidekabine: Menü zeigen, solange der Affe (zu Fuß) drin steht
       kabinenMenue.classList.toggle('offen', !aktuellesFahrzeug && inKabine(p));
       haendlerMenue.classList.toggle('offen', !aktuellesFahrzeug && imHaendlerLaden(p));
+      autohausMenue.classList.toggle('offen', !aktuellesFahrzeug && imAutohaus(p));
       kleiderladenPruefen(p);
       handyKnoepfeZeigen();
       jetpackFlammen(dt);
