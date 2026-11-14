@@ -607,8 +607,9 @@
     if (IST_HANDY) document.body.classList.add('handy');
     const E_TASTE = IST_HANDY ? '✋' : 'E'; // so heißt die Aktions-Taste in den Hinweisen
     // Einstellungen (Lautstärke, Grafik, Maus) – die merkt sich der Browser. Der Spielstand wird NICHT gespeichert.
-    const EINST = { laut: 0.8, musik: 0.4, schatten: true, leuchten: !IST_HANDY, aufloesung: 1, sicht: 'weit', maus: 1, umkehren: false, tageszeit: 'auto', stimmen: true, kiAffen: false };
+    const EINST = { laut: 0.8, musik: 0.4, schatten: true, leuchten: !IST_HANDY, aufloesung: 1, sicht: 'weit', maus: 1, umkehren: false, tageszeit: 'auto', stimmen: true, kiAffen: !IST_HANDY };
     try { Object.assign(EINST, JSON.parse(localStorage.getItem('affenEinstellungen') || '{}')); } catch (e) {}
+    let kiText = '(KI, lädt einmal ca. 2 GB)';   // Lade-Anzeige für die schlauen Affen
     const einstMerken = () => { try { localStorage.setItem('affenEinstellungen', JSON.stringify(EINST)); } catch (e) {} };
     const aufloesungSetzen = () => renderer.setPixelRatio(Math.min(devicePixelRatio, IST_HANDY ? 1.5 : 2) * EINST.aufloesung); // auf dem Handy etwas sparsamer
     aufloesungSetzen();
@@ -672,7 +673,7 @@
           <div class="einst"><span>Lautstärke</span><input type="range" min="0" max="1" step="0.05" data-e="laut"></div>
           <div class="einst"><span>Musik</span><input type="range" min="0" max="1" step="0.05" data-e="musik"></div>
           <div class="einst"><span>Affen sprechen laut 🗣️</span><input type="checkbox" data-e="stimmen"></div>
-          <div class="einst"><span>Schlaue Affen 🧠 <small id="kiStatus">(KI, lädt einmal ca. 2 GB)</small></span><input type="checkbox" data-e="kiAffen"></div>
+          <div class="einst"><span>Schlaue Affen 🧠 <small id="kiStatus">${kiText}</small></span><input type="checkbox" data-e="kiAffen"></div>
         </div>
         <div class="gruppe"><h3>🖥️ Grafik <small>(langsames Gerät? Hier sparen!)</small></h3>
           <div class="einst"><span>Schatten</span><input type="checkbox" data-e="schatten"></div>
@@ -8370,26 +8371,26 @@
     }
     // ================= SCHLAUE AFFEN: eine kleine KI läuft direkt im Browser (WebGPU, ohne Schlüssel) =================
     const KI_MODELL = 'Qwen2.5-3B-Instruct-q4f16_1-MLC';
-    let ki = null, kiLaedt = null;
-    function kiStatus(text) { const el = document.getElementById('kiStatus'); if (el) el.textContent = text; }
+    let ki = null, kiLaedt = null, kiProzent = 0;
+    function kiStatus(text) { kiText = text; const el = document.getElementById('kiStatus'); if (el) el.textContent = text; }
     function kiLaden() {   // lädt das KI-Gehirn einmal (danach merkt es sich der Browser)
       if (ki || kiLaedt) return kiLaedt;
       kiLaedt = import('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.88/+esm')
-        .then(w => w.CreateMLCEngine(KI_MODELL, { initProgressCallback: f => kiStatus(`(lädt … ${Math.round(f.progress * 100)} %)`) }))
+        .then(w => w.CreateMLCEngine(KI_MODELL, { initProgressCallback: f => { kiProzent = Math.round(f.progress * 100); kiStatus(`(lädt … ${kiProzent} %)`); } }))
         .then(e => { ki = e; kiStatus('(bereit ✅)'); return e; })
         .catch(e => { console.warn('KI geht nicht:', e); kiLaedt = null; kiStatus('(geht hier leider nicht ❌)'); return null; });
       return kiLaedt;
     }
     function kiWelt(wer) {   // was der Affe über die Welt weiß
       const uhr = Math.floor(stunde);
-      return `Du bist ${wer.name}, ein freundlicher, schlauer Affe in der Stadt "Affenwelt". In Affenwelt sind alle Bewohner Affen, sie leben wie Menschen: mit Autos, Läden, Häusern und Polizei.
+      return `Du bist ${wer.name || 'ein Affe'}, ein freundlicher, schlauer Affe in der Stadt "Affenwelt". In Affenwelt sind alle Bewohner Affen, sie leben wie Menschen: mit Autos, Läden, Häusern und Polizei.
 Es ist gerade ${uhr} Uhr (${uhr >= 20 || uhr < 6 ? 'Nacht' : 'Tag'}). ${fahndung ? 'Die Polizei sucht gerade den Spieler!' : ''}
 In der Stadt gibt es: einen Strand und das Meer im Osten (das Wasser ist ziemlich kühl, ca. 18 Grad), Supermarkt, Bank, Club, Kleiderladen, Tierhandlung, Kiosk, Tankstelle, Juwelier, Autohaus, Flughafen, eine Affen-Siedlung mit Häusern und ein Gefängnis. Nachts schleicht ein gefährlicher Leopard herum. Wer über Rot fährt oder klaut, wird von der Polizei gesucht. Beim Auftrags-Affen bekommt man Aufträge und verdient Punkte.
 Regeln: Antworte immer auf Deutsch, in 1 bis 2 kurzen Sätzen, locker und freundlich, wie ein schlauer Mensch. Gib echte, richtige Antworten auf Fragen (auch Wissensfragen). Sag nie "uh uh ah ah". Bleib kinderfreundlich. Du darfst ein Emoji benutzen.`;
     }
     async function kiAntwort(wer, text) {
-      const e = await kiLaden();
-      if (!e) return null;
+      if (!ki) return null;   // noch nicht fertig geladen: nicht warten
+      const e = ki;
       wer.verlauf ??= [];
       const nachrichten = [{ role: 'system', content: kiWelt(wer) }, ...wer.verlauf.slice(-6), { role: 'user', content: text }];
       const r = await e.chat.completions.create({ messages: nachrichten, max_tokens: 70, temperature: 0.7 });
@@ -8412,6 +8413,11 @@ Regeln: Antworte immer auf Deutsch, in 1 bis 2 kurzen Sätzen, locker und freund
       setTimeout(async () => {
         if (gespraechMit !== wer) return;
         let antwort = EINST.kiAffen ? npcAntwortAuf(text, true) : npcAntwortAuf(text);
+        if (antwort === undefined && !ki) {   // KI lädt noch: gleich mit den alten Regeln antworten
+          kiLaden();
+          antwort = npcAntwortAuf(text);
+          if (antwort && kiLaedt) antwort += ` (Psst: mein Schlau-Gehirn lädt noch … ${kiProzent} %)`;
+        }
         if (antwort === undefined) {   // die KI denkt nach
           gespraechBox.querySelector('.satz').textContent = '🤔 ' + wer.name + ' denkt nach …';
           try { antwort = await kiAntwort(wer, text); } catch (e) { console.warn(e); antwort = null; }
