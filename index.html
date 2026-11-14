@@ -742,8 +742,10 @@
     }
 
     // --- Grüner Boden: eine riesige flache Fläche ---
-    // Die Welt geht von links -300 bis rechts 300 und von hinten -25 (dort beginnt die Obby) bis vorne 575.
-    const WIESE = { x1: -300, x2: 300, z1: -25, z2: 575 };
+    // Die Welt geht von links -950 bis rechts 950 und von hinten -25 (dort beginnt die Obby) bis vorne 1875.
+    // (Früher nur -300 bis 300 und bis 575 – jetzt ist sie 10-mal so groß.)
+    const ALTE_WELT = { x1: -300, x2: 300, z1: -25, z2: 575 };
+    const WIESE = { x1: -950, x2: 950, z1: -25, z2: 1875 };
     const boden = new THREE.Mesh(
       new THREE.PlaneGeometry(WIESE.x2 - WIESE.x1, WIESE.z2 - WIESE.z1),
       new THREE.MeshStandardMaterial({ color: 0x4caf50, map: grasTextur(), roughness: 1 })
@@ -1034,8 +1036,11 @@
     const instanzGruppen = new Map();
     const einheitsKiste = new THREE.BoxGeometry(1, 1, 1);
     const _pos = new THREE.Vector3(), _gross = new THREE.Vector3(), _dreh = new THREE.Quaternion(), _euler = new THREE.Euler();
+    // Die Welt wird in Kacheln (200 × 200 m) geteilt: Was hinter dir oder weit weg ist, muss die Grafikkarte nicht zeichnen.
+    const KACHEL = 200;
+    const kachel = (x, z) => Math.floor(x / KACHEL) + ',' + Math.floor(z / KACHEL);
     function instanz(form, material, x, y, z, sx = 1, sy = 1, sz = 1, drehY = 0, farbe = null, schatten = true, drehX = 0, drehZ = 0) {
-      const schluessel = form.uuid + material.uuid + schatten;
+      const schluessel = form.uuid + material.uuid + schatten + kachel(x, z);
       let g = instanzGruppen.get(schluessel);
       if (!g) { g = { form, material, schatten, matrizen: [], farben: [] }; instanzGruppen.set(schluessel, g); }
       _pos.set(x, y, z); _gross.set(sx, sy, sz); _dreh.setFromEuler(_euler.set(drehX, drehY, drehZ));
@@ -1057,7 +1062,7 @@
       const [sx, sy, sz] = Array.isArray(gross) ? gross : [gross, gross, gross];
       const platz = new THREE.Matrix4().compose(_pos.set(x, y, z), _dreh.setFromEuler(_euler.set(0, drehY, 0)), _gross.set(sx, sy, sz));
       for (const t of m.userData.teile) {
-        const schluessel = t.form.uuid + t.material.uuid + 'modell';
+        const schluessel = t.form.uuid + t.material.uuid + 'modell' + kachel(x, z);
         let g = instanzGruppen.get(schluessel);
         if (!g) { g = { form: t.form, material: t.material, schatten: true, matrizen: [], farben: [] }; instanzGruppen.set(schluessel, g); }
         g.matrizen.push(platz.clone().multiply(t.lage));
@@ -1065,6 +1070,8 @@
       }
       return true;
     }
+    const kachelnZumStart = [];
+    let bilderBisher = 0;
     function instanzenBauen() {
       const farbe = new THREE.Color();
       for (const g of instanzGruppen.values()) {
@@ -1080,7 +1087,9 @@
         if (g.farben.some(f => f !== null)) g.farben.forEach((f, i) => im.setColorAt(i, farbe.set(f ?? 0xffffff)));
         im.castShadow = g.schatten;
         im.receiveShadow = true;
-        im.frustumCulled = false;
+        im.computeBoundingSphere();   // damit unsichtbare Kacheln übersprungen werden
+        im.frustumCulled = false;     // beim allerersten Bild trotzdem alles zur Grafikkarte schicken (sonst ruckelt es später)
+        kachelnZumStart.push(im);
         szene.add(im);
       }
       instanzGruppen.clear();
@@ -1090,12 +1099,20 @@
     // Längsstraßen (gehen nach vorne/hinten) und Querstraßen (gehen nach links/rechts).
     // Wo sie sich treffen, sind Kreuzungen mit Ampeln.
     const BREITE = 8, HALB = BREITE / 2, SPUR = 2; // Straße 8 breit, jede Fahrspur 4 breit
+    const NORD = 1780;   // so weit nach vorne gehen die Straßen in der großen Welt
     const LAENGS = [
-      { x: -270, z1: 50, z2: 520 }, { x: -180, z1: 50, z2: 520 }, { x: -90, z1: 50, z2: 520 },
-      { x: 0,    z1: 6,  z2: 520 },                                // Hauptstraße: fängt beim Start an
-      { x: 90,   z1: 50, z2: 520 }, { x: 180, z1: 50, z2: 520 }, { x: 270, z1: 50, z2: 520 },
+      { x: -270, z1: 50, z2: NORD }, { x: -180, z1: 50, z2: NORD }, { x: -90, z1: 50, z2: NORD },
+      { x: 0,    z1: 6,  z2: NORD },                               // Hauptstraße: fängt beim Start an
+      { x: 90,   z1: 50, z2: NORD }, { x: 180, z1: 50, z2: NORD }, { x: 270, z1: 50, z2: NORD },
+      // neu: Ostviertel bis zum Meer, Flughafen-Straße im Westen, Vororte im Nordwesten
+      { x: 400, z1: 50, z2: NORD }, { x: 560, z1: 50, z2: NORD }, { x: 720, z1: 50, z2: NORD },
+      { x: -400, z1: 50, z2: NORD }, { x: -600, z1: 520, z2: NORD }, { x: -800, z1: 520, z2: NORD },
     ];
-    const QUER = [50, 130, 210, 290, 360, 440, 520].map(z => ({ z, x1: -270, x2: 270 }));
+    const QUER = [
+      { z: 50, x1: -400, x2: 720 },
+      ...[130, 210, 290, 360, 440].map(z => ({ z, x1: -400, x2: 720 })),
+      ...[520, 700, 880, 1060, 1240, 1420, 1600, NORD].map(z => ({ z, x1: -800, x2: 720 })),
+    ];
     // Jede Straße als Rechteck (für Asphalt, und um zu prüfen, ob etwas auf der Straße steht)
     const STRASSEN = [
       ...LAENGS.map(s => ({ x1: s.x - HALB, x2: s.x + HALB, z1: s.z1 === 6 ? 6 : s.z1 - HALB, z2: s.z2 + HALB, richtung: 'z', mitte: s.x })),
@@ -1537,6 +1554,39 @@
     // Jeder Block: x/z = Mitte, b = Breite, t = Tiefe, unten/oben = Höhe von Unterkante und Oberkante,
     // art = 'block' (normal), 'lava' (tödlich), 'checkpoint' (Speicherpunkt), 'ziel' (Ende der Obby)
     const bloecke = [];
+    // Gitter für schnelles Suchen: statt alle Blöcke der riesigen Welt durchzugehen, schauen wir nur in die Felder in der Nähe.
+    const GITTER = 16, gitter = new Map();
+    let gitterAlt = true, gitterBeweglich = [], gitterStempel = 0;
+    bloecke.push = function (...neu) { gitterAlt = true; return Array.prototype.push.apply(this, neu); };
+    bloecke.splice = function (...a) { gitterAlt = true; return Array.prototype.splice.apply(this, a); };
+    function gitterBauen() {
+      gitter.clear(); gitterBeweglich = [];
+      for (const o of bloecke) {
+        if (o.bewegung) { gitterBeweglich.push(o); continue; }   // fahrende Plattformen immer prüfen
+        const x1 = Math.floor((o.x - o.b / 2) / GITTER), x2 = Math.floor((o.x + o.b / 2) / GITTER);
+        const z1 = Math.floor((o.z - o.t / 2) / GITTER), z2 = Math.floor((o.z + o.t / 2) / GITTER);
+        for (let gx = x1; gx <= x2; gx++) for (let gz = z1; gz <= z2; gz++) {
+          const k = gx * 100000 + gz;
+          let feld = gitter.get(k);
+          if (!feld) gitter.set(k, feld = []);
+          feld.push(o);
+        }
+      }
+      gitterAlt = false;
+    }
+    // Alle Blöcke, die das Quadrat (x ± r, z ± r) berühren könnten
+    function bloeckeBei(x, z, r = 1) {
+      if (gitterAlt) gitterBauen();
+      const stempel = ++gitterStempel, liste = [];
+      for (const o of gitterBeweglich) { o._st = stempel; liste.push(o); }
+      const x1 = Math.floor((x - r) / GITTER), x2 = Math.floor((x + r) / GITTER);
+      const z1 = Math.floor((z - r) / GITTER), z2 = Math.floor((z + r) / GITTER);
+      for (let gx = x1; gx <= x2; gx++) for (let gz = z1; gz <= z2; gz++) {
+        const feld = gitter.get(gx * 100000 + gz);
+        if (feld) for (const o of feld) if (o._st !== stempel) { o._st = stempel; liste.push(o); }
+      }
+      return liste;
+    }
     const FARBEN = { lava: 0xff3300, checkpoint: 0x2196f3, ziel: 0xffd700 };
     function neuerBlock(x, z, b, t, unten, oben, art = 'block', farbe = 0x9e9e9e) {
       const material = new THREE.MeshStandardMaterial({
@@ -1729,6 +1779,16 @@
     const ampelKasten = new THREE.MeshStandardMaterial({ color: 0x212121 });
     const lampenForm = new THREE.SphereGeometry(0.13, 12, 8);
     const ampelKoepfe = []; // alle Ampel-Köpfe, damit wir sie umschalten können
+    // Dinge, die weit weg aus der Szene genommen werden (spart viel Arbeit in der großen Welt)
+    const FERN_AUS = [];
+    function fernesPruefen() {
+      const kx = kamera.position.x, kz = kamera.position.z;
+      for (const f of FERN_AUS) {
+        const nah = (f.x - kx) ** 2 + (f.z - kz) ** 2 < 300 ** 2;
+        if (nah && !f.o.parent) szene.add(f.o);
+        else if (!nah && f.o.parent === szene) szene.remove(f.o);
+      }
+    }
 
     // Welche Farbe zeigt die Ampel für eine Richtung ('ns' = vorne/hinten, 'ew' = links/rechts)?
     // Ein Durchgang dauert 22 Sekunden: 9 grün, 2 gelb für die eine Richtung, 1 Sekunde alle rot,
@@ -1757,6 +1817,7 @@
           m.position.set(x, 0, z);
           m.rotation.y = Math.atan2(-dx, -dz);
           szene.add(m);
+          FERN_AUS.push({ o: m, x, z });
           ampelKoepfe.push({ k, achse, lampen: blenderLampen });
           continue;
         }
@@ -1777,6 +1838,7 @@
           lampen[farbe] = l;
         });
         szene.add(kopf);
+        FERN_AUS.push({ o: kopf, x, z });
         ampelKoepfe.push({ k, achse, lampen });
       }
     }
@@ -2143,7 +2205,7 @@
     // Ein alter, hohler Baum im Wald (nicht auf der Karte!). Wer davor E drückt, kriecht hinein
     // und landet im Geheimbunker – der liegt weit draußen, außerhalb der Welt.
     const GEHEIM_BAUM = { x: -60, z: 40 };           // das Loch im Stamm zeigt zur Straße (+z)
-    const GEHEIM = { x: 600, z: 600, b: 30, t: 20, h: 6 };
+    const GEHEIM = { x: 3000, z: 3000, b: 30, t: 20, h: 6 };   // weit draußen, außerhalb der Welt
     freiHalten.push({ x: GEHEIM_BAUM.x, z: GEHEIM_BAUM.z, r: 5 });
     // Affen-Siedlung: drei Häuser zum Kaufen (hier sollen keine Bäume wachsen)
     const GRUNDSTUECKE = [30, 48, 66].map((x, nr) => ({ nr, x, z: 30 }));
@@ -2325,14 +2387,17 @@
     const fensterMaterial = new THREE.MeshStandardMaterial({ color: 0x4f8fb7, roughness: 0.05, metalness: 0.6 });
     const tuerMaterial = echtesMaterial(new THREE.MeshStandardMaterial({ color: 0x6d4c41 }), 'holzWelt');
     const haeuser = []; // für die Mini-Karte
-    for (const gebiet of STADT) {
-      for (let x = gebiet.x1 + 8; x < gebiet.x2 - 4; x += 14) {
-        for (let z = gebiet.z1 + 8; z < gebiet.z2 - 4; z += 14) {
+    const SONDERBAUTEN = [];   // große Gebäude der neuen Welt (Läden, Autohaus, Flughafen …): dort keine Häuser
+    // Häuser in Reihen bauen. abstand = wie weit die Häuser auseinander stehen, hochAnteil = wie viele Hochhäuser
+    function stadtBauen(gebiete, abstand = 14, hochAnteil = 0.25, hochVon = 12, hochBis = 22) {
+    for (const gebiet of gebiete) {
+      for (let x = gebiet.x1 + 8; x < gebiet.x2 - 4; x += abstand) {
+        for (let z = gebiet.z1 + 8; z < gebiet.z2 - 4; z += abstand) {
           const b = zwischen(7, 10), t = zwischen(7, 10);
           if (nahAnStrasse(x, z, Math.max(b, t) / 2 + 2.6)) continue;
-          if ([...LAEDEN, ...BANKEN, KLEIDERLADEN, CLUB, KRANKENHAUS].some(l => Math.abs(l.x - x) < (l.b + b) / 2 + 3 && Math.abs(l.z - z) < (l.t + t) / 2 + 3)) continue;
-          const hoch = zufall() < 0.25; // manche sind Hochhäuser
-          const h = hoch ? zwischen(12, 22) : zwischen(4, 7);
+          if ([...LAEDEN, ...BANKEN, KLEIDERLADEN, CLUB, KRANKENHAUS, ...SONDERBAUTEN].some(l => Math.abs(l.x - x) < (l.b + b) / 2 + 3 && Math.abs(l.z - z) < (l.t + t) / 2 + 3)) continue;
+          const hoch = zufall() < hochAnteil; // manche sind Hochhäuser
+          const h = hoch ? zwischen(hochVon, hochBis) : zwischen(4, 7);
           const wandFarbe = HAUS_FARBEN[Math.floor(zufall() * HAUS_FARBEN.length)];
           bloecke.push({ x, z, b, t, unten: 0, oben: h, art: 'block' });
           haeuser.push({ x, z, b, t });
@@ -2357,19 +2422,21 @@
         }
       }
     }
+    }
+    stadtBauen(STADT);
 
     // --- Wald: auf einem Raster verteilt, jedes Feld bekommt vielleicht einen Baum ---
     const RASTER = 7; // Wald: Größe eines Rasterfelds
     let baumZahl = 0;
-    for (let zx = WIESE.x1 + RASTER / 2; zx < WIESE.x2; zx += RASTER) {
-      for (let zz = WIESE.z1 + RASTER / 2; zz < WIESE.z2; zz += RASTER) {
+    for (let zx = ALTE_WELT.x1 + RASTER / 2; zx < ALTE_WELT.x2; zx += RASTER) {
+      for (let zz = ALTE_WELT.z1 + RASTER / 2; zz < ALTE_WELT.z2; zz += RASTER) {
         if (zufall() > 0.72) continue;                                  // manche Felder bleiben leer
         const x = zx + zwischen(-2.5, 2.5), z = zz + zwischen(-2.5, 2.5);
-        if (x < WIESE.x1 + 1 || x > WIESE.x2 - 1 || z < WIESE.z1 + 1 || z > WIESE.z2 - 1) continue;
+        if (x < ALTE_WELT.x1 + 1 || x > ALTE_WELT.x2 - 1 || z < ALTE_WELT.z1 + 1 || z > ALTE_WELT.z2 - 1) continue;
         if (inRechteck(SPIELPLATZ, x, z) || STADT.some(s => inRechteck(s, x, z, 4))) continue;
         if (freiHalten.some(o => Math.hypot(o.x - x, o.z - z) < o.r)) continue;
         if (nahAnStrasse(x, z, 2.5)) continue;                         // nicht auf die Straße pflanzen
-        if (bloecke.some(o => Math.abs(o.x - x) < o.b / 2 + 1 && Math.abs(o.z - z) < o.t / 2 + 1)) continue;
+        if (bloeckeBei(x, z, 2).some(o => Math.abs(o.x - x) < o.b / 2 + 1 && Math.abs(o.z - z) < o.t / 2 + 1)) continue;
         const groesse = zwischen(0.8, 1.4);
         const hoehe = zufall() < 0.5 ? tanne(x, z, groesse) : laubbaum(x, z, groesse);
         // Unsichtbarer Klotz am Stamm: man kann nicht durch Bäume laufen
@@ -2380,7 +2447,7 @@
 
     // Büsche und Pilze zwischen den Bäumen (nur Deko, man kann durchlaufen)
     for (let i = 0; i < 900; i++) {
-      const x = zwischen(WIESE.x1 + 1, WIESE.x2 - 1), z = zwischen(WIESE.z1 + 1, WIESE.z2 - 1);
+      const x = zwischen(ALTE_WELT.x1 + 1, ALTE_WELT.x2 - 1), z = zwischen(ALTE_WELT.z1 + 1, ALTE_WELT.z2 - 1);
       if (inRechteck(SPIELPLATZ, x, z) || STADT.some(s => inRechteck(s, x, z, 2))) continue;
       if (freiHalten.some(o => Math.hypot(o.x - x, o.z - z) < o.r)) continue;
       if (nahAnStrasse(x, z, 0.5)) continue;
@@ -2395,6 +2462,47 @@
         instanz(kugelForm, pilzPunkt, x + 0.08 * s, 0.36 * s, z, 0.03 * s, 0.03 * s, 0.03 * s, 0, null, false);
       }
     }
+
+    // ================= DIE GROSSE NEUE WELT =================
+    // Eigener Zufall für die neuen Gebiete, damit die alte Stadt genau so bleibt, wie sie war.
+    const alteSaat = saat; saat = 98765;
+    const NEUE_STADT = [
+      { x1: 274, x2: 716, z1: 54, z2: 516 },        // Oststadt zwischen Altstadt und Meer
+      { x1: -86, x2: 396, z1: 704, z2: 1236 },      // Hochhaus-Viertel im Norden
+      { x1: 404, x2: 716, z1: 524, z2: 1596 },      // Nordost
+      { x1: -796, x2: -104, z1: 884, z2: 1776 },    // Vororte im Nordwesten
+    ];
+    stadtBauen([NEUE_STADT[0]], 14, 0.3);
+    stadtBauen([NEUE_STADT[1]], 14, 0.6, 18, 45);   // richtige Wolkenkratzer!
+    stadtBauen([NEUE_STADT[2]], 16, 0.15);
+    stadtBauen([NEUE_STADT[3]], 20, 0.03);
+    const KEIN_WALD = [ALTE_WELT, ...NEUE_STADT];   // hier wächst kein neuer Wald (Meer, Flughafen … kommen dazu)
+    // Wald in Flecken: eine Wellen-Formel sagt, wo dichter Wald ist und wo Wiese
+    const waldDichte = (x, z) => Math.sin(x * 0.013) + Math.sin(z * 0.017 + 1.3) + Math.sin((x + z) * 0.007 + 0.5);
+    const NEU_RASTER = 9;
+    for (let zx = WIESE.x1 + NEU_RASTER / 2; zx < WIESE.x2; zx += NEU_RASTER) {
+      for (let zz = WIESE.z1 + NEU_RASTER / 2; zz < WIESE.z2; zz += NEU_RASTER) {
+        if (zufall() > 0.75 || waldDichte(zx, zz) < -0.2) continue;
+        const x = zx + zwischen(-3, 3), z = zz + zwischen(-3, 3);
+        if (x < WIESE.x1 + 1 || x > WIESE.x2 - 1 || z < WIESE.z1 + 1 || z > WIESE.z2 - 1) continue;
+        if (KEIN_WALD.some(r => inRechteck(r, x, z, 4)) || SONDERBAUTEN.some(l => Math.abs(l.x - x) < l.b / 2 + 4 && Math.abs(l.z - z) < l.t / 2 + 4)) continue;
+        if (freiHalten.some(o => Math.hypot(o.x - x, o.z - z) < o.r)) continue;
+        if (nahAnStrasse(x, z, 3)) continue;
+        if (bloeckeBei(x, z, 2).some(o => Math.abs(o.x - x) < o.b / 2 + 1 && Math.abs(o.z - z) < o.t / 2 + 1)) continue;
+        const groesse = zwischen(0.8, 1.5);
+        const hoehe = zufall() < 0.5 ? tanne(x, z, groesse) : laubbaum(x, z, groesse);
+        bloecke.push({ x, z, b: 0.5 * groesse, t: 0.5 * groesse, unten: 0, oben: hoehe, art: 'block', krone: 1.5 * groesse });
+        baumZahl++;
+      }
+    }
+    for (let i = 0; i < 2500; i++) {   // Büsche in der neuen Welt
+      const x = zwischen(WIESE.x1 + 1, WIESE.x2 - 1), z = zwischen(WIESE.z1 + 1, WIESE.z2 - 1);
+      if (KEIN_WALD.some(r => inRechteck(r, x, z, 2)) || nahAnStrasse(x, z, 0.5)) continue;
+      if (SONDERBAUTEN.some(l => Math.abs(l.x - x) < l.b / 2 + 2 && Math.abs(l.z - z) < l.t / 2 + 2)) continue;
+      const g = zwischen(0.4, 0.9);
+      if (!modellAlsInstanz('Busch', x, 0, z, x % 6, g)) instanz(kugelForm, busch, x, g * 0.5, z, g, g * 0.8, g);
+    }
+    saat = alteSaat;
 
     // Ist der Affe in der Kabine?
     function inKabine(p) {
@@ -2540,7 +2648,7 @@
 
     // Prüft: Steht ein fester Block im Weg? (Lava hält dich nicht auf – sie ist tödlich)
     function stoesstAn(px, py, pz) {
-      return bloecke.some(o => o.art !== 'lava' && ueberlappt(o, px, py, pz)) ||
+      return bloeckeBei(px, pz, 1).some(o => o.art !== 'lava' && ueberlappt(o, px, py, pz)) ||
         // geparkte Fahrzeuge sind auch im Weg (außer man steht schon oben drauf)
         fahrzeuge.some(f => f !== aktuellesFahrzeug && py - 0.5 < f.hoehe - 0.05 && punktInFahrzeug(f, px, pz, 0.45)) ||
         // Autos im Straßenverkehr auch (wenn man schon drin "steckt", darf man raus)
@@ -2554,7 +2662,7 @@
       if (px >= WIESE.x1 - 0.5 && px <= WIESE.x2 + 0.5 && pz >= WIESE.z1 - 0.5 && pz <= WIESE.z2 + 0.5 && py - 0.5 >= -0.05) {
         hoehe = 0; // auf der Wiese
       }
-      for (const o of bloecke) {
+      for (const o of bloeckeBei(px, pz, 1)) {
         if (o.art === 'lava') continue;
         const drueber = Math.abs(px - o.x) < (o.b + 1) / 2 - 0.001 &&
                         Math.abs(pz - o.z) < (o.t + 1) / 2 - 0.001;
@@ -2571,7 +2679,7 @@
 
     // Berührt der Affe Lava?
     function inLava(px, py, pz) {
-      return bloecke.some(o => o.art === 'lava' &&
+      return bloeckeBei(px, pz, 1).some(o => o.art === 'lava' &&
         Math.abs(px - o.x) < (o.b + 1) / 2 - 0.001 &&
         Math.abs(pz - o.z) < (o.t + 1) / 2 - 0.001 &&
         py - 0.5 <= o.oben + 0.01 && py + 0.5 >= o.unten);
@@ -3136,7 +3244,7 @@
       for (const [px, pz] of fahrzeugPunkte(f, x, z, richtung)) {
         const imBunker = Math.abs(px - GEHEIM.x) < GEHEIM.b / 2 && Math.abs(pz - GEHEIM.z) < GEHEIM.t / 2;
         if (!imBunker && (px < WIESE.x1 + halb || px > WIESE.x2 - halb || pz < WIESE.z1 + halb || pz > WIESE.z2 - halb)) return true;
-        for (const o of bloecke) {
+        for (const o of bloeckeBei(px, pz, halb + 0.5)) {
           if (o.art === 'lava' || o.unten > f.hoehe || o.oben < Math.max(0.1, boden)) continue;
           if (Math.abs(px - o.x) < o.b / 2 + halb && Math.abs(pz - o.z) < o.t / 2 + halb) return true;
         }
@@ -3651,7 +3759,7 @@
     for (const k of knotenListe.values()) for (const n of k.nachbarn) strecken.push([k, n]);
     const FAHRER_SITZ = { limo: [0.42, 0.85, 0.1, 0.8], van: [0.45, 1.3, 1.3, 0.85], bus: [0.7, 1.75, 3.9, 0.9], laster: [0.5, 1.75, 2.7, 0.9] };
     const artenMix = ['limo', 'limo', 'limo', 'limo', 'limo', 'limo', 'van', 'van', 'laster', 'bus'];
-    for (let versuch = 0; verkehr.length < 80 && versuch < 1000; versuch++) {
+    for (let versuch = 0; verkehr.length < 230 && versuch < 8000; versuch++) {
       const [A, B] = strecken[Math.floor(zufall() * strecken.length)];
       const d = richtungVon(A, B), r = rechtsVon(d);
       const laenge = Math.hypot(B.x - A.x, B.z - A.z) - A.hw - B.hw - 12;
@@ -3659,6 +3767,7 @@
       const s = A.hw + 6 + zufall() * laenge;
       const x = A.x + d.x * s + r.x * SPUR, z = A.z + d.z * s + r.z * SPUR;
       if (verkehr.some(o => Math.hypot(o.x - x, o.z - z) < 14) || Math.hypot(x, z) < 20) continue;
+      if (verkehr.length < 100 && !inRechteck(ALTE_WELT, x, z)) continue;   // die Hälfte der Autos fährt in der alten Stadt
       const art = artenMix[Math.floor(zufall() * artenMix.length)];
       const a = ARTEN[art];
       const farbe = art === 'bus' ? 0xffb300 : AUTO_FARBEN[Math.floor(zufall() * AUTO_FARBEN.length)];
@@ -3711,7 +3820,12 @@
       let stoertGrund = null;
       for (const auto of verkehr) {
         // Fahrer-Affen nur zeigen, wenn das Auto nah genug ist (spart Arbeit)
-        auto.fahrer.gruppe.visible = (auto.x - kamera.position.x) ** 2 + (auto.z - kamera.position.z) ** 2 < 70 ** 2;
+        const abstand2 = (auto.x - kamera.position.x) ** 2 + (auto.z - kamera.position.z) ** 2;
+        auto.fahrer.gruppe.visible = abstand2 < 70 ** 2;
+        // ganz weit weg (im Nebel): Auto aus der Szene nehmen, dann muss der Computer es gar nicht anschauen
+        const nahDran = abstand2 < 280 ** 2;
+        if (nahDran && !auto.gruppe.parent) szene.add(auto.gruppe);
+        else if (!nahDran && auto.gruppe.parent === szene) szene.remove(auto.gruppe);
         let wunsch = auto.maxTempo;
         const ziel = auto.weg[auto.ziel];
         const bisZiel = Math.hypot(ziel.x - auto.x, ziel.z - auto.z);
@@ -3799,9 +3913,9 @@
       f.ziel = 0; f.von = A; f.nach = B; f.danach = N;
     }
     const inDerStadt = k => Math.abs(k.x) <= 270 && k.z >= 130 && k.z <= 520;
-    for (let versuch = 0; fussgaenger.length < 44 && versuch < 800; versuch++) {
+    for (let versuch = 0; fussgaenger.length < 100 && versuch < 3000; versuch++) {
       const [A, B] = strecken[Math.floor(zufall() * strecken.length)];
-      if (fussgaenger.length < 34 && !(inDerStadt(A) && inDerStadt(B))) continue; // die meisten in der Stadt
+      if (fussgaenger.length < 50 && !(inDerStadt(A) && inDerStadt(B))) continue; // die meisten in der Stadt
       const d = richtungVon(A, B), r = rechtsVon(d);
       const laenge = Math.hypot(B.x - A.x, B.z - A.z) - A.hw - B.hw - 4;
       const s = A.hw + 2 + zufall() * laenge;
@@ -4249,7 +4363,7 @@
     }
     // Ist für einen Polizisten zu Fuß an dieser Stelle frei? (Bäume, Wände)
     function frei(x, z) {
-      return !bloecke.some(o => o.art !== 'lava' && o.unten < 1 && o.oben > 0.1 &&
+      return !bloeckeBei(x, z, 1).some(o => o.art !== 'lava' && o.unten < 1 && o.oben > 0.1 &&
         Math.abs(x - o.x) < o.b / 2 + 0.4 && Math.abs(z - o.z) < o.t / 2 + 0.4);
     }
 
@@ -4888,7 +5002,7 @@
         for (let s = 0; s < schritte && !weg; s++) {
           g.mesh.position.x += g.vx * dt / schritte; g.mesh.position.y += g.vy * dt / schritte; g.mesh.position.z += g.vz * dt / schritte;
           const q = g.mesh.position;
-          const inWand = bloecke.some(o => o.art !== 'lava' && Math.abs(q.x - o.x) < o.b / 2 && Math.abs(q.z - o.z) < o.t / 2 && q.y < o.oben && q.y > o.unten);
+          const inWand = bloeckeBei(q.x, q.z, 0.5).some(o => o.art !== 'lava' && Math.abs(q.x - o.x) < o.b / 2 && Math.abs(q.z - o.z) < o.t / 2 && q.y < o.oben && q.y > o.unten);
           weg = (g.fremd ? triffMich(g) : (getroffen(g) || triffMitspieler(g))) || inWand || q.y < 0;
         }
         g.mesh.rotation.x += 14 * dt; g.mesh.rotation.y += 9 * dt;
@@ -5260,7 +5374,7 @@
     let karteGross = false;
     const MINI_AUSSCHNITT = 140;   // so viele Meter zeigt die kleine Karte rund um dich
     // Der Hintergrund der ganzen Welt wird einmal in hoher Auflösung gemalt (4 Pixel pro Meter)
-    const HG_MASSSTAB = 4;
+    const HG_MASSSTAB = Math.min(4, 4096 / Math.max(WIESE.x2 - WIESE.x1, WIESE.z2 - WIESE.z1)); // nicht zu groß fürs Handy
     const kartenHintergrund = document.createElement('canvas');
     kartenHintergrund.width = (WIESE.x2 - WIESE.x1) * HG_MASSSTAB;
     kartenHintergrund.height = (WIESE.z2 - WIESE.z1) * HG_MASSSTAB;
@@ -6034,7 +6148,7 @@
     const LEO_JAGD = 8.5, LEO_SCHLEICHEN = 3.2;      // zum Vergleich: Affe läuft 6, rennt 10
     function leopardBlockiert(x, z) {
       const L = leopard;
-      return bloecke.some(o => o.art !== 'lava' && !o.krone && Math.abs(x - o.x) < o.b / 2 + 0.35 && Math.abs(z - o.z) < o.t / 2 + 0.35 && o.unten < L.y + 0.9 && o.oben > L.y + 0.6);
+      return bloeckeBei(x, z, 1).some(o => o.art !== 'lava' && !o.krone && Math.abs(x - o.x) < o.b / 2 + 0.35 && Math.abs(z - o.z) < o.t / 2 + 0.35 && o.unten < L.y + 0.9 && o.oben > L.y + 0.6);
     }
     function spielerSicher() {
       const p = affe.position;
@@ -6878,6 +6992,9 @@
     function spielSchleife() {
       const dt = Math.min(uhr.getDelta(), 0.05) * (waffenRadOffen ? 0.2 : 1); // Zeit seit dem letzten Bild (Waffen-Rad: Zeitlupe)
       spielZeit += dt;
+      // Nach den ersten Bildern: Kacheln, die man nicht sieht, ab jetzt überspringen
+      if (++bilderBisher === 3) { for (const im of kachelnZumStart) im.frustumCulled = true; kachelnZumStart.length = 0; }
+      if (bilderBisher % 20 === 3) fernesPruefen();
 
       // Kamera drehen mit den Pfeiltasten
       const drehTempo = zielModus ? 0.5 : DREH_TEMPO;          // beim Zielen langsamer und genauer
@@ -7228,7 +7345,7 @@
       const wunschZ = kz.z + Math.cos(kameraWinkel) * flach;
       // Ist ein Baum oder Haus zwischen Affe und Kamera? Dann rückt die Kamera näher heran.
       const reichweite = kameraAbstand + 4;
-      const nahe = bloecke.filter(o => Math.abs(o.x - kz.x) < reichweite + o.b / 2 && Math.abs(o.z - kz.z) < reichweite + o.t / 2 && o.art !== 'lava');
+      const nahe = bloeckeBei(kz.x, kz.z, reichweite).filter(o => Math.abs(o.x - kz.x) < reichweite + o.b / 2 && Math.abs(o.z - kz.z) < reichweite + o.t / 2 && o.art !== 'lava');
       let erlaubt = 1;
       for (let t = 0.2; t <= 1.001; t += 0.05) {
         const x = kz.x + (wunschX - kz.x) * t, y = kz.y + (wunschY - kz.y) * t, z = kz.z + (wunschZ - kz.z) * t;
@@ -7839,7 +7956,7 @@
     // ================= MAFIA-GANG =================
     // Maskierte Gangster in der Oststadt. Sie haben Waffen und schießen auf dich, wenn du ihnen zu nah kommst.
     // Triffst du einen, ist er tot: +300 Münzen. Treffen sie dich: alle Waffen weg und −200 Münzen.
-    const MAFIA_LOHN = 300, MAFIA_STRAFE = 200, MAFIA_PRO_BANDE = 3;
+    const MAFIA_LOHN = 300, MAFIA_STRAFE = 200, MAFIA_PRO_BANDE = 4;
     const mafiaSchwarz = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 });
     const mafiaAnzug = new THREE.MeshStandardMaterial({ color: 0x1c1c24, roughness: 0.6 });
     const mafiaWeiss = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
@@ -7878,7 +7995,7 @@
     }
     // Mehrere Banden, verteilt über die ganze Karte (Städte und Wiesen)
     const MAFIA_HEIME = [[180, 210], [-180, 210], [0, 250], [-180, 325], [180, 325], [0, 400], [-150, 480], [150, 480], [0, 540],
-                         [120, 80], [-100, 100], [220, 40], [-230, 60], [0, 160]]
+                         [120, 80], [-100, 100], [220, 40], [-230, 60], [0, 160], [-90, 360], [90, 440], [-220, 420], [220, 480]]
       .map(([x, z]) => mafiaPlatz(x, z, 20));
     const mafia = [];
     for (const heim of MAFIA_HEIME) for (let i = 0; i < MAFIA_PRO_BANDE; i++) {
@@ -7945,7 +8062,7 @@
                 : (Math.hypot(q.x - p.x, q.z - p.z) < 0.7 && Math.abs(q.y - p.y) < 0.9)) {
             if (!ohnmachtBis) { if (s.von === 'polizei') schaden(aktuellesFahrzeug ? 5 : 10); else spielerVonMafiaGetroffen(); }
             weg = true;
-          } else if (q.y < 0 || bloecke.some(o => o.art !== 'lava' && Math.abs(q.x - o.x) < o.b / 2 && Math.abs(q.z - o.z) < o.t / 2 && q.y < o.oben && q.y > o.unten)) weg = true;
+          } else if (q.y < 0 || bloeckeBei(q.x, q.z, 0.5).some(o => o.art !== 'lava' && Math.abs(q.x - o.x) < o.b / 2 && Math.abs(q.z - o.z) < o.t / 2 && q.y < o.oben && q.y > o.unten)) weg = true;
         }
         s.mesh.rotation.x += 14 * dt; s.mesh.rotation.y += 9 * dt;
         s.leben -= dt;
@@ -8265,6 +8382,8 @@
     leuchtSachenSammeln();
     hilfe.classList.add('neu'); setTimeout(() => hilfe.classList.remove('neu'), 12000);
     renderer.setAnimationLoop(spielSchleife); // ruft spielSchleife bei jedem Bild auf
+    // Nur zum Testen (Adresse mit ?test): von außen den Affen herumbeamen
+    if (location.search.includes('test')) window.affenTest = { affe, kamera, info: () => ({ bloecke: bloecke.length, baeume: baumZahl, verkehr: verkehr.length, knoten: knotenListe.size, haeuser: haeuser.length }) };
 
     // Wenn das Fenster größer/kleiner wird, Bild anpassen
     addEventListener('resize', () => {
