@@ -633,13 +633,13 @@
       ['🐒 Bewegen', [['Laufen', k('W','A','S','D')], ['Rennen', k('Shift')], ['Springen / Doppelsprung', k('Leertaste') + ' / 2×'], ['Jetpack fliegen', k('Leertaste') + ' halten'], ['Tanzen', k('B') + ' halten']]],
       ['🎥 Kamera & Karte', [['Kamera drehen', k('←','→','↑','↓')], ['Kamera mit der Maus', 'rechte Maustaste halten'], ['Große Karte', k('M')], ['Wegpunkt setzen', 'Klick auf die große Karte']]],
       ['🚗 Fahren', [['Einsteigen / Aussteigen', k('E')], ['Gas / Bremse / Lenken', k('W','S','A','D')], ['Hupen', k('Leertaste')], ['Garage', 'an der ersten Kreuzung']]],
-      ['🍌 Waffen', [['Waffe wählen', k('1','2','3','4','5')], ['Waffen-Rad (Zeitlupe)', k('Tab') + ' halten'], ['Schießen', 'Linksklick oder ' + k('F')], ['Zielen', 'rechte Maustaste oder ' + k('Z')], ['Rauchbombe', k('G')]]],
+      ['🍌 Waffen', [['Waffe wählen', k('1','2','3','4','5','6','7','8')], ['Waffen-Rad (Zeitlupe)', k('Tab') + ' halten'], ['Schießen', 'Linksklick oder ' + k('F')], ['Zielen', 'rechte Maustaste oder ' + k('Z')], ['Rauchbombe', k('G')]]],
       ['👥 Mehrspieler', [['Bei einem Freund mitfahren', 'neben sein Auto stellen, ' + k('E')], ['Mini-Spiele: Fangen & Bananen-Duell', 'im 👥-Menü ' + k('P')], ['Raum öffnen / beitreten', k('P')], ['Chat schreiben', k('T') + ' oder ' + k('Enter')], ['Funkgerät', k('V') + ' halten']]],
     ];
     HILFE.push(['🗺️ Zum Entdecken', [
       ['❗ Auftrags-Affe', 'gleich beim Start – holt euch Missionen!'], ['🐾 Tierhandlung', 'rechts neben der Hauptstraße beim Start'], ['🏡 Affen-Siedlung', 'Häuser kaufen und einrichten (rechts vom Start)'], ['🏁 Straßenrennen', 'mit einem Fahrzeug unters Start-Tor fahren'], ['🏁 Obby', 'hinten über den Rand'], ['👕 Umkleidekabine & 🛍️ Kleiderladen', 'neues Aussehen'],
       ['🎭 Mafia-Gang', 'maskierte Banden überall auf der Karte: +300 🪙 pro Abschuss – aber wenn sie dich treffen, sind Waffen und 200 🪙 weg!'],
-            ['🔫 Waffenhändler', 'Bananen-Pistole & Zielfernrohr'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
+            ['🔫 Waffenhändler', 'Pistole, Zielfernrohr, Gewehr, Granaten & Laser'], ['🏀 Basketball', 'auf dem Platz ' + (IST_HANDY ? '✋' : k('E')) + ' = werfen'], ['🛹 Skatepark', 'schnell über Schanzen & Halfpipe = Tricks'], ['⚽ Fußball', 'Ball ins rechte Tor schießen = +10 🪙'], ['🎤 Karaoke-Bar', 'drinnen ' + (IST_HANDY ? '✋' : k('E')) + ' – mit echtem Mikrofon singen'], ['🏦 Bank', 'Tresor knacken … aber Vorsicht!'],
       ['🚔 Polizei', 'nicht über Rot fahren, nichts Verbotenes tun'], ['🔒 Gefängnis', 'man kann ausbrechen …'],
       ['💬 Mit Affen reden', 'neben einen Affen stellen und ' + E_TASTE + ' drücken – dann Antwort wählen (1–5), selbst schreiben (5) oder mit deiner Stimme sprechen (6 oder V)'],
       ['📟 Fernbedienung', 'Codes eingeben' + (IST_HANDY ? '' : ' mit ' + k('C'))],
@@ -5942,7 +5942,7 @@
         const g = geschosse[i];
         g.vy -= (g.art === 'granate' ? 20 : g.art === 'laser' || g.art === 'sniper' ? 0 : 4) * dt; // Granaten fallen im Bogen, Laser fliegt gerade
         // in kleinen Schritten fliegen, damit sie nicht durch dünne Ziele "durchspringt"
-        const schritte = g.art === 'mini' || g.art === 'schrot' ? 2 : 4;
+        const schritte = g.art === 'sniper' ? 12 : g.art === 'laser' ? 8 : g.art === 'mini' || g.art === 'schrot' ? 2 : 4;   // schnelle Schüsse in kleineren Schritten (nicht durch Wände)
         let weg = false;
         for (let s = 0; s < schritte && !weg; s++) {
           g.mesh.position.x += g.vx * dt / schritte; g.mesh.position.y += g.vy * dt / schritte; g.mesh.position.z += g.vz * dt / schritte;
@@ -9355,7 +9355,7 @@
     hilfe.classList.add('neu'); setTimeout(() => hilfe.classList.remove('neu'), 12000);
     renderer.setAnimationLoop(spielSchleife); // ruft spielSchleife bei jedem Bild auf
     // Nur zum Testen (Adresse mit ?test): von außen den Affen herumbeamen
-    if (location.search.includes('test')) window.affenTest = { affe, kamera, winkel: w => { kameraWinkel = w; }, info: () => ({ bloecke: bloecke.length, baeume: baumZahl, verkehr: verkehr.length, knoten: knotenListe.size, haeuser: haeuser.length }) };
+    if (location.search.includes('test')) window.affenTest = { affe, kamera, inventar, bild: () => spielSchleife(), punkte: () => punkte, laufV, ball: fussBall, karaoke, winkel: w => { kameraWinkel = w; }, info: () => ({ bloecke: bloecke.length, baeume: baumZahl, verkehr: verkehr.length, knoten: knotenListe.size, haeuser: haeuser.length }) };
 
     // Wenn das Fenster größer/kleiner wird, Bild anpassen
     addEventListener('resize', () => {
