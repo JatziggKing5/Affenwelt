@@ -9807,10 +9807,16 @@
       g.gruppe.scale.setScalar(1.05);
       return g;
     }
+    // Verbotene Orte für die Mafia: Sportplätze und Häuser (auch die zum Kaufen)
+    function mafiaVerboten(x, z) {
+      if ([BASKET, SKATE, FUSS].some(s => imFeld(s, x, z, 3))) return true;
+      if (haeuser.some(h => Math.abs(x - h.x) < h.b / 2 + 2 && Math.abs(z - h.z) < h.t / 2 + 2)) return true;
+      return GRUNDSTUECKE.some(g => Math.abs(x - g.x) < HAUS_B / 2 + 2 && Math.abs(z - g.z) < HAUS_T / 2 + 6);
+    }
     function mafiaPlatz(cx, cz, radius) {
       for (let i = 0; i < 300; i++) {
         const x = cx + (Math.random() - 0.5) * 2 * radius, z = cz + (Math.random() - 0.5) * 2 * radius;
-        if (frei(x, z) && !stoesstAn(x, 0.5, z)) return { x, z };
+        if (frei(x, z) && !stoesstAn(x, 0.5, z) && !mafiaVerboten(x, z)) return { x, z };
       }
       return { x: cx, z: cz };
     }
@@ -9835,7 +9841,7 @@
       const weg = Math.atan2(wx - m.x, wz - m.z);
       for (const abw of [0, 0.7, -0.7, 1.4, -1.4]) {
         const nx = m.x + Math.sin(weg + abw) * tempo * dt, nz = m.z + Math.cos(weg + abw) * tempo * dt;
-        if (nx < WIESE.x1 + 3 || nx > WIESE.x2 - 3 || nz < WIESE.z1 + 3 || nz > WIESE.z2 - 3 || stoesstAn(nx, 0.5, nz)) continue;
+        if (nx < WIESE.x1 + 3 || nx > WIESE.x2 - 3 || nz < WIESE.z1 + 3 || nz > WIESE.z2 - 3 || stoesstAn(nx, 0.5, nz) || mafiaVerboten(nx, nz)) continue;
         m.x = nx; m.z = nz; return true;
       }
       return false;
