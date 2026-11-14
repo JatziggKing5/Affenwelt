@@ -640,14 +640,14 @@
       ['🐒 Bewegen', [['Laufen', 'Stick links'], ['Rennen', 'Stick ganz nach außen'], ['Springen / Doppelsprung', '⬆️ / 2× ⬆️'], ['Jetpack fliegen', '⬆️ halten'], ['Tanzen', '🕺 links']]],
       ['🎥 Kamera & Karte', [['Umschauen', 'rechts wischen'], ['Große Karte', 'Karte antippen'], ['Wegpunkt setzen', 'auf große Karte tippen']]],
       ['🚗 Fahren', [['Einsteigen / Aussteigen', '✋'], ['Gas, Bremse, Lenken', 'Stick'], ['Hupen', '📯']]],
-      ['🗺️ Große Welt', [['Laden ausrauben', 'an die Kasse, ✋'], ['Fahrzeug kaufen', '🚘 Autohaus (Oststadt)'], ['Flugzeug fliegen', '✈️ Flughafen im Westen'], ['Schwimmen', '🏖️ Meer im Osten']]],
+      ['🗺️ Große Welt', [['Laden ausrauben', 'an die Kasse, ✋'], ['In Häuser einbrechen', 'an die Hauswand, ✋'], ['Fahrzeug kaufen', '🚘 Autohaus (Oststadt)'], ['Flugzeug fliegen', '✈️ Flughafen im Westen'], ['Schwimmen', '🏖️ Meer im Osten']]],
       ['🍌 Waffen', [['Schießen', '🔫'], ['Zielen', '🎯'], ['Rauchbombe', '💨'], ['Waffe wählen', 'Leiste oben links oder 🎯 (Waffen-Rad)']]],
       ['👥 Mehrspieler', [['Bei einem Freund mitfahren', 'neben sein Auto, ✋'], ['Mini-Spiele: Fangen & Bananen-Duell', 'im 👥-Menü'], ['Raum öffnen / beitreten', '👥'], ['Chat schreiben', '💬'], ['Funkgerät', '🎙️ halten']]],
     ] : [
       ['🐒 Bewegen', [['Laufen', k('W','A','S','D')], ['Rennen', k('Shift')], ['Springen / Doppelsprung', k('Leertaste') + ' / 2×'], ['Jetpack fliegen', k('Leertaste') + ' halten'], ['Tanzen', k('B') + ' halten']]],
       ['🎥 Kamera & Karte', [['Kamera drehen', k('←','→','↑','↓')], ['Kamera mit der Maus', 'rechte Maustaste halten'], ['Große Karte', k('M')], ['Wegpunkt setzen', 'Klick auf die große Karte']]],
       ['🚗 Fahren', [['Einsteigen / Aussteigen', k('E')], ['Gas / Bremse / Lenken', k('W','S','A','D')], ['Hupen', k('Leertaste')], ['Garage', 'an der ersten Kreuzung']]],
-      ['🗺️ Große Welt', [['Laden ausrauben (Kiosk, Tankstelle, Juwelier, Supermarkt)', 'an der Kasse ' + k('E')], ['Fahrzeug kaufen', '🚘 Autohaus in der Oststadt'], ['Flugzeug fliegen', '✈️ Flughafen im Westen'], ['Schwimmen', '🏖️ Meer im Osten']]],
+      ['🗺️ Große Welt', [['Laden ausrauben (Kiosk, Tankstelle, Juwelier, Supermarkt)', 'an der Kasse ' + k('E')], ['In Häuser einbrechen', 'an der Hauswand ' + k('E')], ['Fahrzeug kaufen', '🚘 Autohaus in der Oststadt'], ['Flugzeug fliegen', '✈️ Flughafen im Westen'], ['Schwimmen', '🏖️ Meer im Osten']]],
       ['🍌 Waffen', [['Waffe wählen', k('1','2','3','4','5','6','7','8')], ['Waffen-Rad (Zeitlupe)', k('Tab') + ' halten'], ['Schießen', 'Linksklick oder ' + k('F')], ['Zielen', 'rechte Maustaste oder ' + k('Z')], ['Rauchbombe', k('G')]]],
       ['👥 Mehrspieler', [['Bei einem Freund mitfahren', 'neben sein Auto stellen, ' + k('E')], ['Mini-Spiele: Fangen & Bananen-Duell', 'im 👥-Menü ' + k('P')], ['Raum öffnen / beitreten', k('P')], ['Chat schreiben', k('T') + ' oder ' + k('Enter')], ['Funkgerät', k('V') + ' halten']]],
     ];
@@ -3233,7 +3233,7 @@
           const h = hoch ? zwischen(hochVon, hochBis) : zwischen(4, 7);
           const wandFarbe = HAUS_FARBEN[Math.floor(zufall() * HAUS_FARBEN.length)];
           bloecke.push({ x, z, b, t, unten: 0, oben: h, art: 'block' });
-          haeuser.push({ x, z, b, t });
+          haeuser.push({ x, z, b, t, h, geraubtUm: -9999 });
           // Kleine Häuser aus Blender: das Modell "Haus" (8 breit, 6 hoch, 8 tief) wird passend gestreckt
           if (!hoch && modellAlsInstanz('Haus', x, 0, z, 0, [b / 8, h / 6, t / 8])) { zufall(); continue; }
           instanz(einheitsKiste, hausMaterial, x, h / 2, z, b, h, t, 0, wandFarbe);
@@ -6716,6 +6716,54 @@
       return `<b>🔫 ${E_TASTE} drücken: ${l.name} ausrauben (+${l.beute} Münzen)</b><small>Die Polizei kommt${l.extraSterne ? ' – und zwar mit 2 Sternen!' : '!'} Wirst du erwischt, ist die Beute weg.</small>`;
     }
 
+
+    // ================= EINBRECHEN =================
+    // An der Wand eines Stadthauses E drücken: Schloss knacken (5 Sekunden dranbleiben), dann Beute holen. Die Polizei kommt!
+    const EINBRUCH_DAUER = 5, EINBRUCH_PAUSE = 240;
+    let einbruch = null;   // { haus, bis }
+    const hausAbstand = (p, h) => Math.hypot(Math.max(0, Math.abs(p.x - h.x) - h.b / 2), Math.max(0, Math.abs(p.z - h.z) - h.t / 2));
+    const hausZumEinbrechen = p => p.y < 2 ? haeuser.find(h => hausAbstand(p, h) < 1.6) : null;
+    function einbruchStarten(p) {
+      if (einbruch) return false;
+      const h = hausZumEinbrechen(p);
+      if (!h) return false;
+      if (spielZeit - h.geraubtUm < EINBRUCH_PAUSE) { zeigeMeldung('Hier ist schon alles geklaut. Such dir ein anderes Haus!', 2); return true; }
+      einbruch = { haus: h, bis: spielZeit + EINBRUCH_DAUER };
+      zeigeMeldung(`🔓 Du knackst das Schloss … bleib ${EINBRUCH_DAUER} Sekunden am Haus!`, 2);
+      hupen(1500);
+      return true;
+    }
+    function einbruchBewegen(p) {
+      if (!einbruch) return;
+      const h = einbruch.haus;
+      if (Math.random() < 0.08) hupen(1500);                                 // Kratz-Geräusch
+      if (aktuellesFahrzeug || hausAbstand(p, h) > 4) {
+        zeigeMeldung('❌ Einbruch abgebrochen – du bist weggelaufen!', 2);
+        einbruch = null;
+        return;
+      }
+      if (spielZeit < einbruch.bis) return;
+      einbruch = null;
+      h.geraubtUm = spielZeit;
+      const beute = h.h > 9 ? 100 + Math.floor(Math.random() * 151) : 30 + Math.floor(Math.random() * 91);
+      punkte += beute; punkteZeigen();
+      klang('kasse');
+      const fund = ['💍 Schmuck', '📺 einen Fernseher', '🍌 eine goldene Banane', '💰 ein Sparschwein', '⌚ eine Uhr'][Math.floor(Math.random() * 5)];
+      zeigeMeldung(`🏠 Eingebrochen! Du findest ${fund}: +${beute} Münzen – lauf weg!`, 3);
+      panik(h.x, h.z, 15);
+      straftatPause = 0; straftat('Einbruch!');
+    }
+    function einbruchHinweis(p) {
+      if (einbruch) {
+        const rest = Math.max(0, einbruch.bis - spielZeit);
+        return `<b>🔓 Schloss wird geknackt … noch ${rest.toFixed(1)} s</b><small>Bleib am Haus! Weglaufen = abgebrochen</small>`;
+      }
+      const h = hausZumEinbrechen(p);
+      if (!h) return null;
+      if (spielZeit - h.geraubtUm < EINBRUCH_PAUSE) return '<b>🏠 Hier ist nichts mehr zu holen.</b><small>Such dir ein anderes Haus!</small>';
+      return `<b>🔓 ${E_TASTE} drücken: einbrechen</b><small>Du findest Beute – aber die Polizei kommt!</small>`;
+    }
+
     // ================= AUTOHAUS: Fahrzeuge kaufen =================
     const AUTOHAUS_WAREN = [
       { typ: 'kart',     preis: 150,  text: 'klein, flink, macht Spaß' },
@@ -8821,6 +8869,7 @@
       meerBewegen(dt);               // Wellen, Leuchtturm, Schiff
       flughafenBewegen(dt, p);       // der große Jet startet
       raubBewegen(p);                // Ladenüberfall läuft?
+      einbruchBewegen(p);            // Einbruch läuft?
       clubBewegen(spielZeit);        // Disco-Lichter im Club
       sportBewegen(dt);              // Basketball, Skatepark, Fußball
       karaokeBewegen(dt);            // Karaoke-Bar: Lied, Text, Mikrofon
@@ -8840,7 +8889,7 @@
       if (eGedrueckt) {
         eGedrueckt = false;
         if (mitfahrt) mitfahrtEnde();                                   // beim Freund aussteigen
-        else if (!aktuellesFahrzeug && (auftragAktion(p) || hausAktion(p) || graben(p) || raubStarten(p) || tresorKnacken(p) || barAktion(p) || basketAktion(p) || fussballAktion(p) || karaokeAktion(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
+        else if (!aktuellesFahrzeug && (auftragAktion(p) || hausAktion(p) || graben(p) || raubStarten(p) || einbruchStarten(p) || tresorKnacken(p) || barAktion(p) || basketAktion(p) || fussballAktion(p) || karaokeAktion(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
         else if (aktuellesFahrzeug) { if ((aktuellesFahrzeug.hoeheJetzt || 0) > 0.3) zeigeMeldung('✈️ Erst landen, dann aussteigen!', 1.5); else aussteigen(); }
         else if (!imGefaengnis) { const mf = mitfahrKandidat(p); if (mf) mitfahrtStarten(mf); else { const f = naechstesFahrzeug(p); if (f) einsteigen(f); else if (!autoKlauen(p)) npcAnsprechen(p); } }
       }
@@ -9041,6 +9090,9 @@
           fahrInfo.classList.add('offen');
         } else if (raubHinweis(p)) {
           fahrInfo.innerHTML = raubHinweis(p);
+          fahrInfo.classList.add('offen');
+        } else if (einbruchHinweis(p)) {
+          fahrInfo.innerHTML = einbruchHinweis(p);
           fahrInfo.classList.add('offen');
         } else if (amTresor(p)) {
           const BANK = bankAm(p);
