@@ -5064,6 +5064,42 @@
       fussgaenger.push(f);
     }
 
+    // Leute am Strand und am Flughafen: bummeln in ihrem Bereich von Punkt zu Punkt (kleine Hüpfer, nie in Wände)
+    const BUMMEL_ZONEN = [
+      { name: 'strand', anzahl: 30, x1: MEER_X - 28, x2: MEER_X - 4, z1: 100, z2: 1800 },
+      { name: 'parkplatz', anzahl: 8, x1: -444, x2: -412, z1: 256, z2: 324 },
+      { name: 'terminal-vorne', anzahl: 6, x1: -448, x2: -436, z1: 215, z2: 365 },
+      { name: 'vorfeld', anzahl: 8, x1: -640, x2: -490, z1: 205, z2: 375 },
+    ];
+    function bummelZiel(f) {
+      const z = f.zone;
+      for (let i = 0; i < 12; i++) {
+        const x = Math.max(z.x1, Math.min(z.x2, f.x + zwischen(-12, 12))), y = Math.max(z.z1, Math.min(z.z2, f.z + zwischen(-12, 12)));
+        if (!stoesstAn(x, 0.5, y) && !stoesstAn((x + f.x) / 2, 0.5, (y + f.z) / 2)) { f.weg = [{ x, z: y }]; f.ziel = 0; return; }
+      }
+      f.weg = [{ x: f.x, z: f.z }]; f.ziel = 0;
+    }
+    for (const zone of BUMMEL_ZONEN) {
+      for (let n = 0, versuch = 0; n < zone.anzahl && versuch < 200; versuch++) {
+        const x = zwischen(zone.x1, zone.x2), z = zwischen(zone.z1, zone.z2);
+        if (stoesstAn(x, 0.5, z)) continue;
+        const f = {
+          x, z, richtung: zufall() * Math.PI * 2, zone,
+          tempo: zwischen(0.8, 1.4), zustand: 'laufen', ladenPause: 1e9, laufZeit: zufall() * 10,
+          ...affenKlon(AFFEN_FELLE[Math.floor(zufall() * AFFEN_FELLE.length)]),
+        };
+        f.groesse = zwischen(0.8, 1.0);
+        f.gruppe.scale.setScalar(f.groesse);
+        f.tuete = new THREE.Mesh(einheitsKiste, tueteMaterial);
+        f.tuete.visible = false;
+        f.teile.armR.add(f.tuete);
+        szene.add(f.gruppe);
+        bummelZiel(f);
+        fussgaenger.push(f);
+        n++;
+      }
+    }
+
     // Einen Fußgänger umwerfen (wenn ihn jemand anfährt). Nach 3 Sekunden steht er wieder auf.
     function umwerfen(f, dauer = 3) {
       if (f.zustand === 'liegt') return;
@@ -5137,7 +5173,8 @@
           if (d > strecke) { f.x += (p.x - f.x) / d * strecke; f.z += (p.z - f.z) / d * strecke; break; }
           f.x = p.x; f.z = p.z; strecke -= d; f.ziel++;
           if (f.ziel < f.weg.length) continue;
-          if (f.zustand === 'laufen') fussWegPlanen(f, f.nach, f.danach);
+          if (f.zustand === 'laufen' && f.zone) { bummelZiel(f); if (Math.random() < 0.4) break; }   // Bummler: manchmal kurz stehen
+          else if (f.zustand === 'laufen') fussWegPlanen(f, f.nach, f.danach);
           else if (f.zustand === 'zumLaden') { f.zustand = 'einkaufen'; f.fertigUm = spielZeit + zwischen(4, 9); break; }
           else if (f.zustand === 'raus') { Object.assign(f, f.gemerkt); f.zustand = 'laufen'; f.ladenPause = spielZeit + 40; }
         }
