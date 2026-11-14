@@ -2204,6 +2204,402 @@
       freiHalten.push({ x: cx, z: cz, r: 9 });
     }
 
+    // ================= SPORTPLÄTZE: BASKETBALL, SKATEPARK, FUSSBALL =================
+    // Alle drei liegen im Wald zwischen den Querstraßen bei z = 50 und z = 130.
+    const BASKET = { x: -50, z: 100, b: 28, t: 15 };     // Basketballplatz (lange Seite geht nach links/rechts)
+    const SKATE  = { x: 50,  z: 100, b: 36, t: 26 };     // Skatepark
+    const FUSS   = { x: 135, z: 90,  b: 50, t: 32 };     // Fußballplatz
+    for (const s of [BASKET, SKATE, FUSS]) freiHalten.push({ x: s.x, z: s.z, r: Math.hypot(s.b, s.t) / 2 + 4 });
+    const imFeld = (s, x, z, rand = 0) => Math.abs(x - s.x) < s.b / 2 + rand && Math.abs(z - s.z) < s.t / 2 + rand;
+    const weissLinie = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 });
+    function linieZiehen(x, z, b, t, y = 0.045) { instanz(einheitsKiste, weissLinie, x, y, z, b, 0.01, t, 0, null, false); }
+    function kreisLinie(x, z, r, y = 0.046, dicke = 0.1) {
+      const m = new THREE.Mesh(new THREE.RingGeometry(r - dicke / 2, r + dicke / 2, 40), weissLinie);
+      m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); szene.add(m);
+    }
+    // Wie weit ist der Spieler (oder sein Auto) vom Platz weg? (für "weit weg = nichts animieren")
+    const abstandZu = (s) => { const o = spielerOrt(); return Math.hypot(o.x - s.x, o.z - s.z); };
+
+    // ---------- BASKETBALL ----------
+    const KORB_HOEHE = 3.05;
+    const koerbe = [];                                   // die zwei Körbe (Mittelpunkt des Rings)
+    {
+      const { x: cx, z: cz, b: B, t: T } = BASKET;
+      flach(new THREE.MeshStandardMaterial({ color: 0x1565c0, roughness: 0.8 }), cx, cz, B + 3, T + 3, 0.025);   // blauer Rand
+      flach(new THREE.MeshStandardMaterial({ color: 0xe65100, roughness: 0.7 }), cx, cz, B, T, 0.035);           // orangener Platz
+      linieZiehen(cx, cz - T / 2, B, 0.1); linieZiehen(cx, cz + T / 2, B, 0.1);
+      linieZiehen(cx - B / 2, cz, 0.1, T); linieZiehen(cx + B / 2, cz, 0.1, T); linieZiehen(cx, cz, 0.1, T);
+      kreisLinie(cx, cz, 1.8);
+      const brettMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, transparent: true, opacity: 0.85 });
+      const ringMat = new THREE.MeshStandardMaterial({ color: 0xff5722, metalness: 0.5, roughness: 0.4 });
+      const netzMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+      const pfostenMat = new THREE.MeshStandardMaterial({ color: 0x37474f, metalness: 0.6, roughness: 0.4 });
+      for (const s of [-1, 1]) {
+        const kx = cx + s * (B / 2 - 1.6);                        // Ringmitte
+        linieZiehen(cx + s * (B / 2 - 2.9), cz, 5.8, 4.9, 0.04);   // Zone unter dem Korb (weiß umrandet)
+        flach(new THREE.MeshStandardMaterial({ color: 0x1565c0, roughness: 0.8 }), cx + s * (B / 2 - 2.9), cz, 5.6, 4.7, 0.042);
+        kreisLinie(kx, cz, 6.75, 0.047);                           // Dreier-Linie (der Teil auf dem Platz)
+        neuerBlock(cx + s * (B / 2 + 0.6), cz, 0.3, 0.3, 0, 3.6, 'block', 0x37474f);          // Pfosten
+        instanz(einheitsKiste, pfostenMat, cx + s * (B / 2 - 0.1), 3.5, cz, 1.4, 0.15, 0.15, 0, null, true);   // Arm zum Brett
+        const brett = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.05, 1.8), brettMat);
+        brett.position.set(kx + s * 0.75, KORB_HOEHE + 0.45, cz); szene.add(brett);
+        const quadrat = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.45), new THREE.MeshBasicMaterial({ color: 0xff5722, wireframe: true }));
+        quadrat.position.set(kx + s * 0.71, KORB_HOEHE + 0.3, cz); quadrat.rotation.y = Math.PI / 2; szene.add(quadrat);
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.02, 6, 20), ringMat);
+        ring.rotation.x = Math.PI / 2; ring.position.set(kx, KORB_HOEHE, cz); szene.add(ring);
+        const netz = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.15, 0.45, 12, 2, true), netzMat);
+        netz.position.set(kx, KORB_HOEHE - 0.23, cz); szene.add(netz);
+        koerbe.push({ x: kx, z: cz, y: KORB_HOEHE, netz, seite: s });
+      }
+      for (const s of [-1, 1]) neuerBlock(cx, cz + s * (T / 2 + 2.6), 6, 0.6, 0, 0.5, 'block', 0x8d6e63);   // Bänke
+      schildBauen('🏀 BASKETBALL', 7, 1.2, '#e65100', '#ffffff', cx, 2.6, cz - T / 2 - 4, Math.PI);
+      neuerBlock(cx, cz - T / 2 - 4.06, 0.2, 0.08, 0, 2.0, 'block', 0x37474f);
+    }
+    const ballMatOrange = new THREE.MeshStandardMaterial({ color: 0xf4511e, roughness: 0.6 });
+    const basketBallForm = new THREE.SphereGeometry(0.15, 14, 10);
+    const wuerfe = [];                                  // Bälle, die gerade fliegen
+    // Ein Ball fliegt in einem Bogen von "von" zum Korb. treffer = geht rein?
+    function korbWurf(von, korb, treffer, vonMir) {
+      const m = new THREE.Mesh(basketBallForm, ballMatOrange); m.castShadow = true;
+      m.position.copy(von); szene.add(m);
+      const ziel = new THREE.Vector3(korb.x, korb.y + 0.05, korb.z);
+      if (!treffer) { ziel.x += (Math.random() - 0.5) * 0.7; ziel.z += (Math.random() < 0.5 ? -1 : 1) * (0.3 + Math.random() * 0.3); }
+      const weite = Math.hypot(ziel.x - von.x, ziel.z - von.z);
+      wuerfe.push({ m, von: von.clone(), ziel, korb, treffer, vonMir, s: 0, dauer: 0.7 + weite * 0.07, bogen: 1.6 + weite * 0.18, frei: null, alter: 0 });
+    }
+    function wuerfeBewegen(dt) {
+      for (let i = wuerfe.length - 1; i >= 0; i--) {
+        const w = wuerfe[i];
+        if (!w.frei) {                                  // noch im Flug zum Korb
+          w.s = Math.min(1, w.s + dt / w.dauer);
+          w.m.position.lerpVectors(w.von, w.ziel, w.s);
+          w.m.position.y += 4 * w.bogen * w.s * (1 - w.s);
+          if (w.s >= 1) {
+            if (w.treffer) {
+              w.frei = { vx: 0, vy: -2, vz: 0 };
+              w.korb.wackeln = 0.6;                     // das Netz wackelt
+              if (w.vonMir) korbGetroffen(w);
+              else klang('plopp');
+            } else {
+              const weg = Math.atan2(w.ziel.z - w.korb.z, w.ziel.x - w.korb.x);
+              w.frei = { vx: Math.cos(weg) * 2.5, vy: 2, vz: Math.sin(weg) * 2.5 };
+              ton(180, 120, 0.15, 'square', 0.06);      // "klong" am Ring
+              if (w.vonMir) { basketSerie = 0; zeigeMeldung('🏀 Daneben! Nochmal (E)', 1.2); }
+            }
+          }
+        } else {                                        // fällt runter und hüpft
+          const f = w.frei;
+          f.vy -= 14 * dt;
+          w.m.position.x += f.vx * dt; w.m.position.y += f.vy * dt; w.m.position.z += f.vz * dt;
+          if (w.m.position.y < 0.15) { w.m.position.y = 0.15; f.vy = Math.abs(f.vy) * 0.6; f.vx *= 0.8; f.vz *= 0.8; }
+          w.alter += dt;
+          if (w.alter > 2.5) { szene.remove(w.m); wuerfe.splice(i, 1); }
+        }
+      }
+      for (const k of koerbe) if (k.wackeln > 0) {
+        k.wackeln -= dt;
+        k.netz.scale.set(1 + Math.sin(k.wackeln * 40) * 0.15 * k.wackeln, 1 + k.wackeln * 0.4, 1);
+      }
+    }
+    let basketSerie = 0, naechsterWurf = 0;
+    function korbGetroffen(w) {
+      basketSerie++;
+      const muenzen = (w.dreier ? 3 : 2) + (basketSerie >= 3 ? 2 : 0);
+      punkte += muenzen; punkteZeigen(); klang('muenze');
+      zeigeMeldung(`🏀 ${w.dreier ? 'DREIER!' : 'Korb!'} +${muenzen} 🪙${basketSerie >= 3 ? ` · 🔥 Serie ${basketSerie}` : ''}`, 1.6);
+    }
+    // E auf dem Basketballplatz: auf den näheren Korb werfen
+    function basketAktion(p) {
+      if (!imFeld(BASKET, p.x, p.z, 1) || p.y > 2) return false;
+      if (spielZeit < naechsterWurf) return true;
+      naechsterWurf = spielZeit + 0.9;
+      const korb = koerbe.reduce((a, b) => Math.hypot(p.x - a.x, p.z - a.z) < Math.hypot(p.x - b.x, p.z - b.z) ? a : b);
+      const d = Math.hypot(p.x - korb.x, p.z - korb.z);
+      blickRichtung = Math.atan2(korb.x - p.x, korb.z - p.z);       // zum Korb drehen
+      const chance = THREE.MathUtils.clamp(0.95 - d * 0.055, 0.15, 0.9);
+      const von = new THREE.Vector3(p.x + Math.sin(blickRichtung) * 0.4, p.y + 1.1, p.z + Math.cos(blickRichtung) * 0.4);
+      korbWurf(von, korb, Math.random() < chance, true);
+      wuerfe[wuerfe.length - 1].dreier = d > 6.75;
+      return true;
+    }
+    // Zwei Affen spielen schon Basketball
+    const basketSpieler = [0x5d4037, 0xbcaaa4].map((fell, i) => {
+      const a = affenKlon(fell);
+      const korb = koerbe[i];
+      a.gruppe.position.set(korb.x - korb.seite * (3 + i * 2), 0.5, korb.z + (i ? 2 : -1.5));
+      a.gruppe.rotation.y = Math.atan2(korb.x - a.gruppe.position.x, korb.z - a.gruppe.position.z);
+      szene.add(a.gruppe); NPC_STAND.push({ gruppe: a.gruppe, art: 'basketball' });
+      return { a, korb, naechster: 2 + i * 1.5 };
+    });
+
+    // ---------- SKATEPARK ----------
+    const schanzen = [];                                // Zonen: wer hier mit Tempo drüberläuft, fliegt hoch
+    const skateRails = [];
+    {
+      const { x: cx, z: cz, b: B, t: T } = SKATE;
+      flach(echtesMaterial(new THREE.MeshStandardMaterial({ color: 0xb0b0b0, roughness: 0.9 }), 'stein'), cx, cz, B, T, 0.03);
+      const rampenMat = echtesMaterial(new THREE.MeshStandardMaterial({ color: 0x90a4ae, roughness: 0.8, side: THREE.DoubleSide }), 'stein');
+      const kanteMat = new THREE.MeshStandardMaterial({ color: 0x455a64, metalness: 0.8, roughness: 0.3 });
+      // Keil (Schanze): steigt in Richtung "richtung" (Winkel) an
+      function keil(x, z, breite, laenge, hoehe, richtung) {
+        const form = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(laenge, 0), new THREE.Vector2(laenge, hoehe)]);
+        const g = new THREE.ExtrudeGeometry(form, { depth: breite, bevelEnabled: false });
+        g.translate(-laenge / 2, 0, -breite / 2);
+        const m = new THREE.Mesh(g, rampenMat);
+        m.rotation.y = richtung - Math.PI / 2;                 // Form steigt entlang +x → drehen
+        m.position.set(x, 0.03, z); m.castShadow = true; m.receiveShadow = true; szene.add(m);
+        schanzen.push({ x, z, r: Math.max(breite, laenge) / 2 + 0.3, richtung, kraft: 1.55, name: 'Schanze' });
+      }
+      keil(cx - 8, cz - 6, 3, 3, 0.9, 0);
+      keil(cx - 8, cz + 6, 3, 3, 0.9, Math.PI);
+      keil(cx + 2, cz - 8, 3, 3, 0.9, Math.PI / 2);
+      keil(cx + 2, cz + 8, 3, 3, 0.9, -Math.PI / 2);
+      // Halfpipe: zwei Viertel-Rohre an den Enden (links und rechts)
+      for (const s of [-1, 1]) {
+        const qp = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 12, 20, 1, true, 0, Math.PI / 2), rampenMat);
+        qp.rotation.set(Math.PI / 2, 0, s > 0 ? Math.PI / 2 : 0);
+        qp.rotation.z = s > 0 ? 0 : -Math.PI / 2;
+        qp.position.set(cx + s * (B / 2 - 3), 3, cz);
+        qp.scale.set(1, 1, 1); qp.castShadow = true; qp.receiveShadow = true;
+        szene.add(qp);
+        neuerBlock(cx + s * (B / 2 - 0.4), cz, 0.8, 12, 0, 3.05, 'block', 0x78909c);   // Plattform oben (Rückwand)
+        instanz(stammForm, kanteMat, cx + s * (B / 2 - 0.85), 3.05, cz, 0.3, 12, 0.3, 0, null, false, Math.PI / 2);
+        schanzen.push({ x: cx + s * (B / 2 - 2.2), z: cz, r: 0, b: 2.4, t: 11, richtung: s > 0 ? Math.PI / 2 : -Math.PI / 2, kraft: 2.1, name: 'Halfpipe', hoch: true });
+      }
+      // Grind-Rails: lange Metallstangen zum Draufspringen
+      for (const dz of [-3, 3]) {
+        const r = neuerBlock(cx - 2, cz + dz, 8, 0.15, 0, 0.7, 'block', 0x546e7a);
+        r.mesh.material.metalness = 0.9; r.mesh.material.roughness = 0.25; r.grind = true;
+        skateRails.push(r);
+      }
+      // Funbox in der Mitte
+      neuerBlock(cx + 8, cz, 4, 4, 0, 0.8, 'block', 0x607d8b);
+      // Bunte Graffiti-Mauer hinten
+      const graffiti = musterBild(512, (g, s) => {
+        g.fillStyle = '#455a64'; g.fillRect(0, 0, s, s);
+        const farben = ['#ff1744', '#ffea00', '#00e676', '#2979ff', '#d500f9', '#ff9100'];
+        for (let i = 0; i < 40; i++) { g.fillStyle = farben[i % 6]; g.beginPath(); g.ellipse(Math.random() * s, Math.random() * s, 20 + Math.random() * 60, 10 + Math.random() * 30, Math.random() * 3, 0, Math.PI * 2); g.fill(); }
+        g.font = 'bold 120px sans-serif'; g.fillStyle = '#ffffff'; g.strokeStyle = '#000'; g.lineWidth = 8;
+        g.strokeText('SKATE', 70, 300); g.fillText('SKATE', 70, 300);
+      });
+      const gTex = graffiti; gTex.wrapS = gTex.wrapT = THREE.ClampToEdgeWrapping; gTex.colorSpace = THREE.SRGBColorSpace;
+      neuerBlock(cx, cz + T / 2 + 0.3, B - 8, 0.4, 0, 3, 'block', 0x455a64);
+      const wand = new THREE.Mesh(new THREE.PlaneGeometry(B - 8, 3), new THREE.MeshStandardMaterial({ map: gTex, roughness: 0.9 }));
+      wand.position.set(cx, 1.5, cz + T / 2 + 0.09); wand.rotation.y = Math.PI; szene.add(wand);
+      schildBauen('🛹 SKATEPARK', 7, 1.2, '#212121', '#76ff03', cx, 2.6, cz - T / 2 - 1.5, Math.PI);
+      neuerBlock(cx, cz - T / 2 - 1.56, 0.2, 0.08, 0, 2.0, 'block', 0x37474f);
+    }
+    // Skateboard unter den Füßen (nur im Skatepark sichtbar)
+    const skateboard = new THREE.Group();
+    {
+      const brett = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.05, 0.95), new THREE.MeshStandardMaterial({ color: 0x76ff03, roughness: 0.6 }));
+      skateboard.add(brett);
+      const radMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+      for (const sx of [-0.12, 0.12]) for (const sz of [-0.33, 0.33]) {
+        const r = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.05, 10), radMat);
+        r.rotation.z = Math.PI / 2; r.position.set(sx, -0.06, sz); skateboard.add(r);
+      }
+      skateboard.position.y = -0.42; skateboard.visible = false;
+      affe.add(skateboard);
+    }
+    const skate = { luft: false, trick: null, drehung: 0, grindZeit: 0, naechsteSchanze: 0 };
+    const TRICKS = [{ name: 'Backflip', muenzen: 5 }, { name: '360er', muenzen: 4 }, { name: 'Kickflip', muenzen: 3 }, { name: 'Frontflip', muenzen: 5 }];
+    // Wird bei jedem Bild im Lauf-Modus aufgerufen. Gibt true zurück, wenn der Affe gerade abhebt.
+    function skateSchritt(p, amBoden, unter, dt) {
+      const drin = imFeld(SKATE, p.x, p.z);
+      skateboard.visible = drin;
+      if (!drin) { if (skate.luft) skateLanden(false); return false; }
+      if (skate.luft) { skate.drehung += dt * 9; if (amBoden && fallTempo <= 0) skateLanden(true); return false; }
+      // Grinden auf der Stange
+      if (amBoden && unter.block?.grind && Math.hypot(laufV.x, laufV.z) > 1.5) {
+        skate.grindZeit += dt;
+        if (Math.floor(skate.grindZeit / 0.8) !== Math.floor((skate.grindZeit - dt) / 0.8)) {
+          punkte += 1; punkteZeigen(); klang('tick'); zeigeMeldung('🛹 Grind! +1 🪙', 0.8);
+        }
+      } else skate.grindZeit = 0;
+      if (!amBoden || spielZeit < skate.naechsteSchanze) return false;
+      const tempo = Math.hypot(laufV.x, laufV.z);
+      if (tempo < 2) return false;
+      for (const s of schanzen) {
+        const drauf = s.r ? Math.hypot(p.x - s.x, p.z - s.z) < s.r : Math.abs(p.x - s.x) < s.b / 2 && Math.abs(p.z - s.z) < s.t / 2;
+        if (!drauf) continue;
+        const inRichtung = (laufV.x * Math.sin(s.richtung) + laufV.z * Math.cos(s.richtung)) / tempo;   // läuft er die Rampe hoch?
+        if (inRichtung < 0.4) continue;
+        fallTempo = SPRUNGKRAFT * s.kraft;
+        if (s.hoch) { laufV.x *= -0.6; laufV.z *= 0.6; }         // Halfpipe: hoch und wieder zurück
+        else { laufV.x *= 1.25; laufV.z *= 1.25; }
+        skate.luft = true; skate.drehung = 0; skate.naechsteSchanze = spielZeit + 0.5;
+        skate.trick = TRICKS[Math.floor(Math.random() * TRICKS.length)];
+        klang('sprung2');
+        return true;
+      }
+      return false;
+    }
+    function skateLanden(geschafft) {
+      skate.luft = false;
+      affe.rotation.x = 0; skateboard.rotation.set(0, 0, 0);
+      if (!geschafft || !skate.trick) return;
+      punkte += skate.trick.muenzen; punkteZeigen(); klang('muenze');
+      zeigeMeldung(`🛹 ${skate.trick.name}! +${skate.trick.muenzen} 🪙`, 1.4);
+      skate.trick = null;
+    }
+    function skateDrehen() {                            // nach dem normalen Drehen: Trick-Drehung dazu
+      if (!skate.luft || !skate.trick) return;
+      const w = Math.min(skate.drehung, Math.PI * 2);
+      if (skate.trick.name === 'Backflip') affe.rotation.x = -w;
+      else if (skate.trick.name === 'Frontflip') affe.rotation.x = w;
+      else if (skate.trick.name === '360er') affe.rotation.y += w;
+      else skateboard.rotation.z = w * 2;
+    }
+    // Zwei Affen skaten in der Halfpipe hin und her
+    const skateAffen = [0x3b2314, 0xe0a96d].map((fell, i) => {
+      const a = affenKlon(fell);
+      const b = skateboard.clone(); b.visible = true; b.position.y = -0.92 + 0.5; a.gruppe.add(b);
+      b.position.y = 0.08;
+      szene.add(a.gruppe);
+      return { a, phase: i * 3.1, z: SKATE.z + (i ? 2.5 : -2.5) };
+    });
+
+    // ---------- FUSSBALL ----------
+    const TOR_BREITE = 7, TOR_HOEHE = 2.4;
+    {
+      const { x: cx, z: cz, b: B, t: T } = FUSS;
+      for (let i = 0; i < 10; i++)                      // Rasen in hellen und dunklen Streifen
+        flach(new THREE.MeshStandardMaterial({ color: i % 2 ? 0x43a047 : 0x388e3c, roughness: 1 }), cx - B / 2 + B / 20 + i * B / 10, cz, B / 10, T, 0.03);
+      linieZiehen(cx, cz - T / 2, B, 0.15); linieZiehen(cx, cz + T / 2, B, 0.15);
+      linieZiehen(cx - B / 2, cz, 0.15, T); linieZiehen(cx + B / 2, cz, 0.15, T); linieZiehen(cx, cz, 0.15, T);
+      kreisLinie(cx, cz, 4.5, 0.046, 0.15);
+      const pfosten = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+      const netz = new THREE.MeshBasicMaterial({ color: 0xeeeeee, wireframe: true, transparent: true, opacity: 0.7 });
+      for (const s of [-1, 1]) {
+        const gx = cx + s * B / 2;
+        linieZiehen(gx - s * 4, cz - 7, 8, 0.15); linieZiehen(gx - s * 4, cz + 7, 8, 0.15); linieZiehen(gx - s * 8, cz, 0.15, 14);   // Strafraum
+        for (const dz of [-1, 1]) neuerBlock(gx, cz + dz * TOR_BREITE / 2, 0.15, 0.15, 0, TOR_HOEHE, 'block', 0xffffff);
+        instanz(einheitsKiste, pfosten, gx, TOR_HOEHE, cz, 0.15, 0.15, TOR_BREITE + 0.15, 0, null, true);
+        const n = new THREE.Mesh(new THREE.BoxGeometry(2, TOR_HOEHE, TOR_BREITE, 4, 4, 8), netz);
+        n.position.set(gx + s * 1, TOR_HOEHE / 2, cz); szene.add(n);
+      }
+      // Tribüne an der langen Seite
+      for (let r = 0; r < 3; r++) neuerBlock(cx, cz - T / 2 - 3 - r * 1.2, 30, 1.2, 0, 0.45 * (r + 1), 'block', [0xe53935, 0x1e88e5, 0xfdd835][r]);
+      schildBauen('⚽ FUSSBALL', 7, 1.2, '#1b5e20', '#ffffff', cx, 3.4, cz - T / 2 - 7, Math.PI);
+    }
+    // Der Ball: weiß mit schwarzen Flecken
+    const fussBall = (() => {
+      const g = new THREE.IcosahedronGeometry(0.35, 1);   // hat schon eigene Ecken pro Dreieck
+      const farben = [];
+      for (let i = 0; i < g.attributes.position.count / 3; i++) { const c = i % 7 === 0 ? 0.08 : 1; for (let k = 0; k < 3; k++) farben.push(c, c, c); }
+      g.setAttribute('color', new THREE.Float32BufferAttribute(farben, 3));
+      const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, flatShading: true }));
+      m.castShadow = true; szene.add(m);
+      return { m, x: FUSS.x, y: 0.35, z: FUSS.z, vx: 0, vy: 0, vz: 0, torPause: 0 };
+    })();
+    const fussStand = { du: 0, gegner: 0 };
+    // Gegner-Stürmer (rot) jagt den Ball und schießt aufs linke Tor. Zwei Torwarte.
+    const fussGegner = (() => { const a = affenKlon(0xc62828); szene.add(a.gruppe); return { a, x: FUSS.x + 6, z: FUSS.z, lauf: 0, schussPause: 0 }; })();
+    const torwarte = [-1, 1].map(s => {
+      const a = affenKlon(s < 0 ? 0x1565c0 : 0xc62828);
+      szene.add(a.gruppe);
+      return { a, s, x: FUSS.x + s * (FUSS.b / 2 - 0.8), z: FUSS.z };
+    });
+    function ballTreten(richtung, staerke, hoch = 1.5) {
+      const b = fussBall;
+      b.vx = Math.sin(richtung) * staerke; b.vz = Math.cos(richtung) * staerke; b.vy = hoch;
+      ton(140, 70, 0.08, 'sine', 0.2);
+    }
+    function ballAnstoss() { Object.assign(fussBall, { x: FUSS.x, z: FUSS.z, y: 0.35, vx: 0, vy: 0, vz: 0 }); }
+    function fussballBewegen(dt) {
+      if (abstandZu(FUSS) > 120) return;
+      const b = fussBall, p = affe.position, { x: cx, z: cz, b: B, t: T } = FUSS;
+      if (b.torPause > 0) { b.torPause -= dt; if (b.torPause <= 0) ballAnstoss(); }
+      // Spieler berührt den Ball → Schuss in Laufrichtung (schneller laufen = fester schießen)
+      if (!aktuellesFahrzeug && p.y < 1.6 && Math.hypot(p.x - b.x, p.z - b.z) < 0.85) {
+        const tempo = Math.hypot(laufV.x, laufV.z);
+        const r = tempo > 0.5 ? Math.atan2(laufV.x, laufV.z) : Math.atan2(b.x - p.x, b.z - p.z);
+        ballTreten(r, Math.max(5, tempo * 1.9 + 3), tempo > 6 ? 3.5 : 1.2);
+        b.x = p.x + Math.sin(r) * 0.9; b.z = p.z + Math.cos(r) * 0.9;
+      }
+      // Gegner rennt zum Ball und schießt aufs Tor links (dein Tor)
+      const g = fussGegner;
+      const zielX = b.x + 0.7, zielZ = b.z;                          // stellt sich hinter den Ball (von rechts)
+      const gdx = zielX - g.x, gdz = zielZ - g.z, gd = Math.hypot(gdx, gdz);
+      if (gd > 0.3) { const sp = Math.min(gd, 4.6 * dt); g.x += gdx / gd * sp; g.z += gdz / gd * sp; g.lauf += dt * 10; }
+      g.schussPause -= dt;
+      if (g.schussPause <= 0 && Math.hypot(g.x - b.x, g.z - b.z) < 1.0 && b.torPause <= 0) {
+        const ziel = Math.atan2((cx - B / 2) - b.x, cz + (Math.random() - 0.5) * 5 - b.z);
+        ballTreten(ziel, 9 + Math.random() * 5, 1 + Math.random() * 2);
+        g.schussPause = 1.2;
+      }
+      g.a.gruppe.position.set(g.x, 0.5, g.z);
+      g.a.gruppe.rotation.y = Math.atan2(b.x - g.x, b.z - g.z);
+      laufAnimation(g.a.teile, g.lauf, gd > 0.3 ? 0.9 : 0.1);
+      // Torwarte bewegen sich mit dem Ball mit
+      for (const w of torwarte) {
+        const nah = Math.abs(b.x - w.x) < 18;
+        const zz = THREE.MathUtils.clamp(nah ? b.z : cz, cz - TOR_BREITE / 2 + 0.6, cz + TOR_BREITE / 2 - 0.6);
+        w.z += THREE.MathUtils.clamp(zz - w.z, -2.6 * dt, 2.6 * dt);
+        w.a.gruppe.position.set(w.x, 0.5, w.z);
+        w.a.gruppe.rotation.y = w.s > 0 ? -Math.PI / 2 : Math.PI / 2;
+        w.a.teile.armL.rotation.set(0, 0, -1.2); w.a.teile.armR.rotation.set(0, 0, 1.2);
+        if (Math.abs(b.x - w.x) < 0.7 && Math.abs(b.z - w.z) < 1.1 && b.y < 2.0 && b.vx * w.s > 0) {   // gehalten!
+          b.vx = -b.vx * 0.7; b.vz += (Math.random() - 0.5) * 4; b.x = w.x - w.s * 0.8;
+          if (Math.abs(p.x - cx) < B / 2 + 10) zeigeMeldung(w.s > 0 ? '🧤 Gehalten! Der Torwart war schneller.' : '🧤 Dein Torwart hält!', 1.2);
+        }
+      }
+      // Ball fliegt, rollt aus, hüpft
+      b.vy -= 14 * dt;
+      b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+      if (b.y < 0.35) { b.y = 0.35; b.vy = Math.abs(b.vy) > 1 ? -b.vy * 0.5 : 0; }
+      const reibung = Math.exp(-(b.y > 0.4 ? 0.2 : 1.1) * dt);
+      b.vx *= reibung; b.vz *= reibung;
+      // Rand: abprallen. Tor: zählen!
+      if (Math.abs(b.z - cz) > T / 2) { b.z = cz + Math.sign(b.z - cz) * T / 2; b.vz = -b.vz * 0.6; }
+      if (Math.abs(b.x - cx) > B / 2 && b.torPause <= 0) {
+        const s = Math.sign(b.x - cx);
+        if (Math.abs(b.z - cz) < TOR_BREITE / 2 - 0.2 && b.y < TOR_HOEHE) {
+          b.torPause = 2.5; b.vx *= 0.2; b.vz *= 0.2;
+          if (s > 0) {
+            fussStand.du++; punkte += 10; punkteZeigen(); klang('erfolg');
+            zeigeMeldung(`⚽ TOOOR! +10 🪙 · Du ${fussStand.du} : ${fussStand.gegner} Rot`, 3);
+          } else {
+            fussStand.gegner++; klang('fehler');
+            zeigeMeldung(`😫 Gegentor! Du ${fussStand.du} : ${fussStand.gegner} Rot`, 2.5);
+          }
+        } else { b.x = cx + s * B / 2; b.vx = -b.vx * 0.6; }
+      }
+      if (b.torPause > 0) b.x = THREE.MathUtils.clamp(b.x, cx - B / 2 - 1.8, cx + B / 2 + 1.8);   // bleibt im Netz liegen
+      b.m.position.set(b.x, b.y, b.z);
+      b.m.rotation.x += b.vz * dt * 3; b.m.rotation.z -= b.vx * dt * 3;
+    }
+
+    function sportBewegen(dt) {
+      wuerfeBewegen(dt);
+      fussballBewegen(dt);
+      // Basketball-Affen werfen alle paar Sekunden
+      if (abstandZu(BASKET) < 90) for (const s of basketSpieler) {
+        s.naechster -= dt;
+        const te = s.a.teile;
+        if (s.naechster < 0.4) te.armR.rotation.set(-2.8, 0, 0.2), te.armL.rotation.set(-2.8, 0, -0.2);
+        else te.armR.rotation.set(-0.9, 0, 0.3), te.armL.rotation.set(-0.9, 0, -0.3);
+        if (s.naechster <= 0) {
+          s.naechster = 3 + Math.random() * 3;
+          const q = s.a.gruppe.position;
+          korbWurf(new THREE.Vector3(q.x, 1.7, q.z), s.korb, Math.random() < 0.6, false);
+        }
+      }
+      // Skater fahren in der Halfpipe hin und her und fliegen an den Enden hoch
+      if (abstandZu(SKATE) < 90) for (const s of skateAffen) {
+        const t = spielZeit * 0.7 + s.phase, weg = Math.sin(t);
+        const x = SKATE.x + weg * (SKATE.b / 2 - 2.5);
+        const hoch = Math.max(0, Math.abs(weg) - 0.82) / 0.18;          // an den Enden die Rampe hoch
+        s.a.gruppe.position.set(x, 0.5 + hoch * hoch * 4.5, s.z);
+        s.a.gruppe.rotation.y = Math.cos(t) > 0 ? Math.PI / 2 : -Math.PI / 2;
+        s.a.figur.rotation.x = hoch > 0.6 ? (hoch - 0.6) * 4 : 0;
+        const te = s.a.teile;
+        te.armL.rotation.set(0, 0, -1.1); te.armR.rotation.set(0, 0, 1.1);
+        te.beinL.rotation.set(-0.3, 0, 0); te.beinR.rotation.set(0.3, 0, 0);
+      }
+    }
+
     // ================= GEHEIMVERSTECK =================
     // Ein alter, hohler Baum im Wald (nicht auf der Karte!). Wer davor E drückt, kriecht hinein
     // und landet im Geheimbunker – der liegt weit draußen, außerhalb der Welt.
@@ -5522,6 +5918,9 @@
       rechteck('#ef5350', KRANKENHAUS.x, KRANKENHAUS.z, KRANKENHAUS.b, KRANKENHAUS.t);
       rechteck('#d32f2f', HAENDLER.x, HAENDLER.z, 8, 6);
       rechteck('#ec407a', KLEIDERLADEN.x, KLEIDERLADEN.z, 16, 12);
+      rechteck('#e65100', BASKET.x, BASKET.z, BASKET.b, BASKET.t);
+      rechteck('#9e9e9e', SKATE.x, SKATE.z, SKATE.b, SKATE.t);
+      rechteck('#2e7d32', FUSS.x, FUSS.z, FUSS.b, FUSS.t);
       rechteck('#37474f', GEF.x, GEF.z, 26, 26);
       rechteck('#f0d58c', MEER_X - 15, (WIESE.z1 + WIESE.z2) / 2, 30, WIESE.z2 - WIESE.z1);              // Strand
       rechteck('#1e88e5', (MEER_X + WIESE.x2) / 2, (WIESE.z1 + WIESE.z2) / 2, WIESE.x2 - MEER_X, WIESE.z2 - WIESE.z1); // Meer
@@ -5537,6 +5936,7 @@
       { name: '👕 Umkleide', x: KABINE.x, z: KABINE.z }, ...BANKEN.map(b => ({ name: '🏦 ' + b.name, x: b.x, z: b.z })), { name: '🪩 Club', x: CLUB.x, z: CLUB.z }, { name: '🍌 Waffen', x: HAENDLER.x, z: HAENDLER.z },
       { name: '👗 Affen-Mode', x: KLEIDERLADEN.x, z: KLEIDERLADEN.z }, { name: '🔒 Gefängnis', x: GEF.x, z: GEF.z }, { name: '🏥 Krankenhaus', x: KRANKENHAUS.x, z: KRANKENHAUS.z },
       ...LAEDEN.map(l => ({ name: '🛒 Supermarkt', x: l.x, z: l.z })),
+      { name: '🏀 Basketball', x: BASKET.x, z: BASKET.z }, { name: '🛹 Skatepark', x: SKATE.x, z: SKATE.z }, { name: '⚽ Fußball', x: FUSS.x, z: FUSS.z },
     ];
     // M = große Karte an/aus (Esc schließt sie auch)
     function karteUmschalten(gross = !karteGross) {
@@ -6388,6 +6788,7 @@
       aua: ['Aua! 😵', 'Hey! 😠', 'Was soll das?!', 'Meine Bananen! 🍌', 'Uff!'],
       fahrer: ['Weg da! 🚗', 'Mach Platz!', 'Ich hab\'s eilig!', 'Hallo?! Geh von der Straße!', 'Hup hup! 📯'],
       kassierer: ['Willkommen im Supermarkt! 🍌', 'Frische Bananen im Angebot!', 'Schönen Tag noch!'],
+      basketball: ['Wirf mal! Drück E auf dem Platz 🏀', 'Ich treff fast jeden Korb!', 'Von hinter der Linie gibt es drei Münzen!'],
       dj: ['Seid ihr bereit?! 🎧', 'Dreht die Musik auf! 🎶', 'Tanzt, bis die Sonne aufgeht!'],
       barkeeper: ['Ein Bananen-Shake? 🍌🥤', 'Heute gibt es Dschungel-Saft!', 'Nur alkoholfrei – hier tanzen Kinder!'],
       bank: ['Willkommen in der Affen-Bank! 🏦', 'Bitte nichts klauen … 😅', 'Der Tresor ist ganz sicher. Glaube ich.'],
@@ -7154,6 +7555,7 @@
       bankBewegen();                 // Alarmglocke
       meerBewegen(dt);               // Wellen, Leuchtturm, Schiff
       clubBewegen(spielZeit);        // Disco-Lichter im Club
+      sportBewegen(dt);              // Basketball, Skatepark, Fußball
       if (fGedrueckt) { fGedrueckt = false; benutzen(); naechsterMiniSchuss = spielZeit + 0.07; }
       // Minigun: solange F, linke Maustaste oder der 🔫-Knopf gedrückt ist, feuert sie weiter
       if (auswahl === 3 && (tasten.KeyF || linkeMausGedrueckt || handySchussGehalten) && spielZeit > naechsterMiniSchuss) { naechsterMiniSchuss = spielZeit + 0.07; benutzen(); }
@@ -7164,7 +7566,7 @@
       if (eGedrueckt) {
         eGedrueckt = false;
         if (mitfahrt) mitfahrtEnde();                                   // beim Freund aussteigen
-        else if (!aktuellesFahrzeug && (auftragAktion(p) || hausAktion(p) || graben(p) || tresorKnacken(p) || barAktion(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
+        else if (!aktuellesFahrzeug && (auftragAktion(p) || hausAktion(p) || graben(p) || tresorKnacken(p) || barAktion(p) || basketAktion(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
         else if (aktuellesFahrzeug) { if ((aktuellesFahrzeug.hoeheJetzt || 0) > 0.3) zeigeMeldung('✈️ Erst landen, dann aussteigen!', 1.5); else aussteigen(); }
         else if (!imGefaengnis) { const mf = mitfahrKandidat(p); if (mf) mitfahrtStarten(mf); else { const f = naechstesFahrzeug(p); if (f) einsteigen(f); else if (!autoKlauen(p)) npcAnsprechen(p); } }
       }
@@ -7257,6 +7659,7 @@
         zuletztAmBoden = amBoden;
         if (amBoden) { sprungZaehler = 0; zuletztAufBodenUm = spielZeit; } // gelandet: Sprünge wieder auffüllen
         if (amBoden && unter.block?.trampolin) { fallTempo = SPRUNGKRAFT * 1.9; amBoden = false; klang('sprung2'); } // Trampolin: hoch hinaus!
+        if (skateSchritt(p, amBoden, unter, dt)) amBoden = false;   // Skatepark: Schanzen, Halfpipe, Grinden
         // Faire Sprünge: Leertaste gilt noch 0,15 s ("zu früh gedrückt"), und kurz nach der Kante darf man noch abspringen
         const sprungGewuenscht = spielZeit - sprungGedruecktUm < 0.15;
         const darfAbspringen = amBoden || (sprungZaehler === 0 && spielZeit - zuletztAufBodenUm < 0.12);
@@ -7289,6 +7692,7 @@
           blickRichtung += unterschied * Math.min(1, 12 * dt);
         }
         affe.rotation.y = blickRichtung;
+        skateDrehen();                                            // Skate-Tricks in der Luft
 
         // Lustiges Wackeln: beim Laufen schwingen Arme und Beine, der Kopf wackelt
         const schrittVorher = Math.floor(laufZeit / Math.PI);
