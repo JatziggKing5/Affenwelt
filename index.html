@@ -8979,6 +8979,10 @@
         armLinks.rotation.y = 0; armRechts.rotation.y = 0;
         beinLinks.rotation.x  = -Math.sin(laufZeit) * schwung * 0.7;
         beinRechts.rotation.x =  Math.sin(laufZeit) * schwung * 0.7;
+        if (skateboard.visible) {                                    // Skateboard: Bein rechts bleibt fest auf dem Brett, nur das linke stößt ab
+          beinRechts.rotation.x = 0.1;
+          beinLinks.rotation.x = laeuft && amBoden ? -Math.max(0, Math.sin(laufZeit * 0.5)) * 0.6 : -0.1;
+        }
         kopf.rotation.z = Math.sin(laufZeit * 0.5) * (laeuft ? 0.15 : 0.08);
         figur.position.y = amBoden && laeuft ? Math.abs(Math.sin(laufZeit)) * (rennt ? 0.1 : 0.06) : 0; // hüpft beim Laufen
         if (skateboard.visible) figur.position.y = 0.14;                                            // steht auf dem Brett, nicht darin
