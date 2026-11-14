@@ -8517,9 +8517,9 @@
         if (laenge > 1) { wx /= laenge; wz /= laenge; }                // schräg ist nicht schneller als geradeaus
         const rennt = ((tasten.ShiftLeft || tasten.ShiftRight) && laenge > 0) || (stick.aktiv && laenge > 0.93); // Handy: Stick ganz außen = rennen
         const imWasser = imMeer(p.x) && p.y < 1.2, schwimmt = imWasser && p.x > MEER_TIEF;   // im Meer: langsamer, im Tiefen schwimmen
-        const laufTempo = (hatJetpack() && !zuletztAmBoden ? TEMPO * 1.7 : rennt ? RENN_TEMPO : TEMPO) * (zielModus ? 0.5 : 1) * (spielZeit < energieBis ? energieFaktor : 1) * superTempo * (schwimmt ? 0.55 : imWasser ? 0.7 : 1);
+        const laufTempo = (hatJetpack() && !zuletztAmBoden ? TEMPO * 1.7 : rennt ? RENN_TEMPO : TEMPO) * (zielModus ? 0.5 : 1) * (spielZeit < energieBis ? energieFaktor : 1) * superTempo * (schwimmt ? 0.55 : imWasser ? 0.7 : 1) * (skateboard.visible ? 1.7 : 1);   // auf dem Skateboard: viel schneller
         // Sanft schneller und langsamer werden (in der Luft lenkt man etwas weniger)
-        const griff = Math.min(1, (zuletztAmBoden ? 12 : 5) * dt);
+        const griff = Math.min(1, (zuletztAmBoden ? (skateboard.visible ? 3 : 12) : 5) * dt);   // Skateboard rollt weich
         laufV.x += (wx * laufTempo - laufV.x) * griff;
         laufV.z += (wz * laufTempo - laufV.z) * griff;
         dx = laufV.x * dt; dz = laufV.z * dt;
@@ -8585,6 +8585,7 @@
         beinRechts.rotation.x =  Math.sin(laufZeit) * schwung * 0.7;
         kopf.rotation.z = Math.sin(laufZeit * 0.5) * (laeuft ? 0.15 : 0.08);
         figur.position.y = amBoden && laeuft ? Math.abs(Math.sin(laufZeit)) * (rennt ? 0.1 : 0.06) : 0; // hüpft beim Laufen
+        if (skateboard.visible) figur.position.y = 0.14;                                            // steht auf dem Brett, nicht darin
         figur.rotation.x = amBoden ? Math.min(0.25, tempo * 0.02) : 0;                              // beim Rennen leicht nach vorne gebeugt
         if (liegt) { figur.rotation.x = -Math.PI / 2; figur.position.y = -0.25; }                  // liegt am Boden
         if (schwimmt && amBoden) { figur.position.y = -0.5 + Math.sin(laufZeit) * 0.04; figur.rotation.x = laeuft ? 1.1 : 0.2; } // schwimmt: nur der Kopf schaut raus
