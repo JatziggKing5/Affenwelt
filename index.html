@@ -736,7 +736,7 @@
       }
       const t = new THREE.CanvasTexture(c);
       t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      t.repeat.set((WIESE.x2 - WIESE.x1) / 12, (WIESE.z2 - WIESE.z1) / 12);
+      t.repeat.set((LAND.x2 - LAND.x1) / 12, (LAND.z2 - LAND.z1) / 12);
       t.anisotropy = 8;
       return t;
     }
@@ -745,15 +745,18 @@
     // Die Welt geht von links -950 bis rechts 950 und von hinten -25 (dort beginnt die Obby) bis vorne 1875.
     // (Früher nur -300 bis 300 und bis 575 – jetzt ist sie 10-mal so groß.)
     const ALTE_WELT = { x1: -300, x2: 300, z1: -25, z2: 575 };
-    const WIESE = { x1: -950, x2: 950, z1: -25, z2: 1875 };
+    const WIESE = { x1: -950, x2: 1150, z1: -25, z2: 1875 };   // ab x = 800 ist das Meer
+    const MEER_X = 800, MEER_TIEF = MEER_X + 25, MEER_GRENZE = WIESE.x2 - 30;
+    const imMeer = (x) => x > MEER_X;
+    const LAND = { x1: WIESE.x1, x2: MEER_X - 10, z1: WIESE.z1, z2: WIESE.z2 };   // hier wächst Gras
     const boden = new THREE.Mesh(
-      new THREE.PlaneGeometry(WIESE.x2 - WIESE.x1, WIESE.z2 - WIESE.z1),
+      new THREE.PlaneGeometry(LAND.x2 - LAND.x1, LAND.z2 - LAND.z1),
       new THREE.MeshStandardMaterial({ color: 0x4caf50, map: grasTextur(), roughness: 1 })
     );
     // Hügel-Trick auch für die Wiese: die Halme werfen kleine Schatten
     boden.material.normalNode = huegel(THREE.texture(boden.material.map, THREE.uv().mul(THREE.vec2(boden.material.map.repeat.x, boden.material.map.repeat.y))).r, 0.12);
     boden.rotation.x = -Math.PI / 2; // flach hinlegen
-    boden.position.set((WIESE.x1 + WIESE.x2) / 2, 0, (WIESE.z1 + WIESE.z2) / 2);
+    boden.position.set((LAND.x1 + LAND.x2) / 2, 0, (LAND.z1 + LAND.z2) / 2);
     boden.receiveShadow = true;
     szene.add(boden);
 
@@ -2463,6 +2466,125 @@
       }
     }
 
+    // ================= MEER, STRAND, STEG UND LEUCHTTURM =================
+    // Sand liegt am Strand und auch unter dem Wasser. Das Wasser ist eine große, leicht durchsichtige Fläche.
+    const sandMaterial = echtesMaterial(new THREE.MeshStandardMaterial({ color: 0xd8b56a, roughness: 1 }), 'putz');
+    {
+      const sand = new THREE.Mesh(new THREE.PlaneGeometry(WIESE.x2 - (MEER_X - 30), WIESE.z2 - WIESE.z1), sandMaterial);
+      sand.rotation.x = -Math.PI / 2;
+      sand.position.set((MEER_X - 30 + WIESE.x2) / 2, 0.004, (WIESE.z1 + WIESE.z2) / 2);
+      sand.receiveShadow = true;
+      szene.add(sand);
+    }
+    // Wellen-Bild: ein Muster aus hellen und dunklen Streifen, das langsam übers Wasser wandert
+    const wellenBild = musterBild(256, (g, s, rundum) => {
+      g.fillStyle = '#8080ff'; g.fillRect(0, 0, s, s);
+      for (let i = 0; i < 120; i++) {
+        const x = Math.random() * s, y = Math.random() * s, b = 20 + Math.random() * 50;
+        rundum(() => { g.fillStyle = `rgba(${Math.random() < 0.5 ? 60 : 200},128,255,0.35)`; g.beginPath(); g.ellipse(x, y, b, b * 0.25, 0, 0, Math.PI * 2); g.fill(); });
+      }
+    });
+    const wellen = wellenBild;
+    wellen.repeat.set(220, 300);
+    const wasser = new THREE.Mesh(new THREE.PlaneGeometry(3000, 6000),
+      new THREE.MeshStandardMaterial({ color: 0x0288d1, roughness: 0.75, metalness: 0, transparent: true, opacity: 0.93, normalMap: wellen, normalScale: new THREE.Vector2(0.6, 0.6) }));
+    wasser.rotation.x = -Math.PI / 2;
+    wasser.position.set(MEER_X + 1500, 0.3, 900);
+    szene.add(wasser);
+    // Schaum an der Küste
+    const schaum = new THREE.Mesh(new THREE.PlaneGeometry(0.6, WIESE.z2 - WIESE.z1), new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 }));
+    schaum.rotation.x = -Math.PI / 2;
+    schaum.position.set(MEER_X + 1, 0.31, (WIESE.z1 + WIESE.z2) / 2);
+    szene.add(schaum);
+    const STRAND = { x1: MEER_X - 30, x2: WIESE.x2 + 100, z1: WIESE.z1 - 100, z2: WIESE.z2 + 100 };
+
+    // Palmen: gebogener Stamm aus Stücken, oben ein Kranz aus großen Blättern
+    const palmBlatt = new THREE.MeshStandardMaterial({ color: 0x2e7d32, roughness: 0.8, side: THREE.DoubleSide });
+    const palmStamm = echtesMaterial(new THREE.MeshStandardMaterial({ color: 0x8d6e63, roughness: 1 }), 'rinde');
+    function palme(x, z, h, neigung) {
+      let px = x, py = 0;
+      for (let i = 0; i < 6; i++) {
+        const stueck = h / 6;
+        instanz(stammForm, palmStamm, px + neigung * i * 0.12, py + stueck / 2, z, 1.1 - i * 0.08, stueck, 1.1 - i * 0.08, 0, null, true, 0, -neigung * 0.12);
+        py += stueck;
+      }
+      px += neigung * 0.8;
+      for (let i = 0; i < 7; i++) {
+        const w = i / 7 * Math.PI * 2 + x;
+        instanz(einheitsKiste, palmBlatt, px + Math.cos(w) * 1.3, py - 0.25, z - Math.sin(w) * 1.3, 2.8, 0.05, 0.7, w, null, true, 0, -0.45);
+      }
+      instanz(kugelForm, palmStamm, px, py - 0.25, z, 0.35, 0.35, 0.35, 0, 0x5d4037);   // Kokosnüsse
+      bloecke.push({ x, z, b: 0.4, t: 0.4, unten: 0, oben: h, art: 'block', krone: 1.5 });
+    }
+    const schirmStoff = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
+    const SCHIRM_FARBEN = [0xe53935, 0x1e88e5, 0xfdd835, 0x43a047, 0xff7043, 0xab47bc];
+    {
+      const alt = saat; saat = 4242;
+      for (let z = 20; z < WIESE.z2 - 20; z += zwischen(9, 16)) {
+        if (Math.abs(z - 1000) < 8) continue;                          // Platz für den Steg
+        palme(zwischen(MEER_X - 26, MEER_X - 12), z, zwischen(5, 8), zwischen(0.6, 1.4));
+        if (zufall() < 0.45) {                                         // Sonnenschirm mit Handtuch
+          const sx = zwischen(MEER_X - 10, MEER_X - 4), sz = z + zwischen(3, 6), f = SCHIRM_FARBEN[Math.floor(zufall() * 6)];
+          instanz(stammForm, mastFarbe, sx, 1.1, sz, 0.25, 2.2, 0.25);
+          instanz(kegelForm, schirmStoff, sx, 2.3, sz, 1.6, 0.5, 1.6, 0, f);
+          instanz(einheitsKiste, schirmStoff, sx + 1.4, 0.02, sz, 0.9, 0.02, 1.8, 0, SCHIRM_FARBEN[Math.floor(zufall() * 6)], false);
+        }
+      }
+      saat = alt;
+    }
+    // Ein langer Holzsteg ins Meer (man kann darauf laufen und ins Wasser springen)
+    const stegHolz = echtesMaterial(new THREE.MeshStandardMaterial({ color: 0x8d6e63, roughness: 0.9 }), 'holzWelt');
+    const STEG = { x1: MEER_X - 6, x2: MEER_X + 110, z: 1000, b: 4 };
+    {
+      const laenge = STEG.x2 - STEG.x1, mx = (STEG.x1 + STEG.x2) / 2;
+      instanz(einheitsKiste, stegHolz, mx, 0.8, STEG.z, laenge, 0.2, STEG.b);
+      bloecke.push({ x: mx, z: STEG.z, b: laenge, t: STEG.b, unten: 0.7, oben: 0.9, art: 'block' });
+      bloecke.push({ x: STEG.x1 - 1, z: STEG.z, b: 2, t: STEG.b, unten: 0, oben: 0.45, art: 'block' });   // Stufe
+      instanz(einheitsKiste, stegHolz, STEG.x1 - 1, 0.225, STEG.z, 2, 0.45, STEG.b);
+      for (let x = STEG.x1 + 2; x < STEG.x2; x += 6) for (const s of [-1, 1]) instanz(stammForm, stegHolz, x, 0.4, STEG.z + s * (STEG.b / 2 - 0.2), 1, 0.9, 1);
+      for (let x = STEG.x1 + 4; x < STEG.x2; x += 12) laterne(x, STEG.z - STEG.b / 2 + 0.2, 0, 1);
+    }
+    // Leuchtturm auf einer kleinen Insel
+    const LEUCHTTURM = { x: 960, z: 1250 };
+    const leuchtLicht = new THREE.MeshStandardMaterial({ color: 0xfff59d, emissive: 0xffee58, emissiveIntensity: 2, name: 'Lampenlicht' });
+    {
+      const { x, z } = LEUCHTTURM;
+      instanz(new THREE.CylinderGeometry(1, 1.15, 1, 24), sandMaterial, x, 0.25, z, 22, 0.5, 22);
+      bloecke.push({ x, z, b: 30, t: 30, unten: 0, oben: 0.5, art: 'block' });
+      for (let i = 0; i < 6; i++) instanz(new THREE.CylinderGeometry(0.85, 1, 1, 20), hausMaterial, x, 1 + i * 3 + 1.5, z, 3.2 - i * 0.15, 3, 3.2 - i * 0.15, 0, i % 2 ? 0xffffff : 0xd32f2f);
+      instanz(new THREE.CylinderGeometry(1, 1, 1, 16), leuchtLicht, x, 20.5, z, 1.6, 2, 1.6, 0, null, false);
+      instanz(kegelForm, hausMaterial, x, 22.2, z, 2.4, 1.6, 2.4, 0, 0xb71c1c);
+      bloecke.push({ x, z, b: 5.5, t: 5.5, unten: 0, oben: 22, art: 'block' });
+      for (let i = 0; i < 5; i++) { const w = i * 1.3; palme(x + Math.cos(w) * 9, z + Math.sin(w) * 9, 6, 1); }
+    }
+    // Das Licht vom Leuchtturm dreht sich (nachts sieht man den Strahl)
+    const leuchtStrahl = new THREE.Mesh(new THREE.ConeGeometry(6, 80, 16, 1, true).translate(0, -40, 0).rotateZ(Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xfff9c4, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide }));
+    leuchtStrahl.position.set(LEUCHTTURM.x, 20.5, LEUCHTTURM.z);
+    szene.add(leuchtStrahl);
+    // Ein großes Schiff fährt draußen auf dem Meer hin und her
+    const schiff = new THREE.Group();
+    {
+      const m = (f) => new THREE.MeshStandardMaterial({ color: f, roughness: 0.6 });
+      const teil = (mat, b, h, l, x, y, z) => { const k = new THREE.Mesh(einheitsKiste, mat); k.scale.set(b, h, l); k.position.set(x, y, z); k.castShadow = true; schiff.add(k); };
+      teil(m(0x263238), 14, 5, 70, 0, 1.5, 0);
+      teil(m(0xc62828), 14.2, 1.2, 70.2, 0, -0.4, 0);
+      teil(m(0xeceff1), 11, 8, 12, 0, 8, -26);
+      teil(m(0x37474f), 3, 6, 3, 0, 15, -26);
+      const KISTEN = [0xe53935, 0x1e88e5, 0x43a047, 0xfdd835, 0xff7043];
+      for (let i = 0; i < 18; i++) teil(m(KISTEN[i % 5]), 5.5, 2.5, 10, (i % 2 ? 2.9 : -2.9), 5.3 + Math.floor(i / 6) * 2.6, -12 + (i % 6) * 6.5);
+    }
+    schiff.position.set(MEER_X + 260, 0, 600);
+    szene.add(schiff);
+    function meerBewegen(dt) {
+      wellen.offset.x += dt * 0.012; wellen.offset.y += dt * 0.006;
+      leuchtStrahl.rotation.y += dt * 0.8;
+      leuchtStrahl.visible = nachtAktiv;
+      schiff.position.z += dt * 6 * (schiff.userData.richtung ??= 1);
+      if (schiff.position.z > 1900) { schiff.userData.richtung = -1; schiff.rotation.y = Math.PI; }
+      if (schiff.position.z < -100) { schiff.userData.richtung = 1; schiff.rotation.y = 0; }
+    }
+
     // ================= DIE GROSSE NEUE WELT =================
     // Eigener Zufall für die neuen Gebiete, damit die alte Stadt genau so bleibt, wie sie war.
     const alteSaat = saat; saat = 98765;
@@ -2476,7 +2598,7 @@
     stadtBauen([NEUE_STADT[1]], 14, 0.6, 18, 45);   // richtige Wolkenkratzer!
     stadtBauen([NEUE_STADT[2]], 16, 0.15);
     stadtBauen([NEUE_STADT[3]], 20, 0.03);
-    const KEIN_WALD = [ALTE_WELT, ...NEUE_STADT];   // hier wächst kein neuer Wald (Meer, Flughafen … kommen dazu)
+    const KEIN_WALD = [ALTE_WELT, ...NEUE_STADT, STRAND];   // hier wächst kein neuer Wald (Meer, Flughafen … kommen dazu)
     // Wald in Flecken: eine Wellen-Formel sagt, wo dichter Wald ist und wo Wiese
     const waldDichte = (x, z) => Math.sin(x * 0.013) + Math.sin(z * 0.017 + 1.3) + Math.sin((x + z) * 0.007 + 0.5);
     const NEU_RASTER = 9;
@@ -3244,6 +3366,7 @@
       for (const [px, pz] of fahrzeugPunkte(f, x, z, richtung)) {
         const imBunker = Math.abs(px - GEHEIM.x) < GEHEIM.b / 2 && Math.abs(pz - GEHEIM.z) < GEHEIM.t / 2;
         if (!imBunker && (px < WIESE.x1 + halb || px > WIESE.x2 - halb || pz < WIESE.z1 + halb || pz > WIESE.z2 - halb)) return true;
+        if (!hoch && px > MEER_X - halb && !(Math.abs(pz - STEG.z) < STEG.b / 2 - halb && boden > 0.5)) { letzterTreffer = 'meer'; return true; }   // Autos fahren nicht ins Meer
         for (const o of bloeckeBei(px, pz, halb + 0.5)) {
           if (o.art === 'lava' || o.unten > f.hoehe || o.oben < Math.max(0.1, boden)) continue;
           if (Math.abs(px - o.x) < o.b / 2 + halb && Math.abs(pz - o.z) < o.t / 2 + halb) return true;
@@ -5400,10 +5523,16 @@
       rechteck('#d32f2f', HAENDLER.x, HAENDLER.z, 8, 6);
       rechteck('#ec407a', KLEIDERLADEN.x, KLEIDERLADEN.z, 16, 12);
       rechteck('#37474f', GEF.x, GEF.z, 26, 26);
+      rechteck('#f0d58c', MEER_X - 15, (WIESE.z1 + WIESE.z2) / 2, 30, WIESE.z2 - WIESE.z1);              // Strand
+      rechteck('#1e88e5', (MEER_X + WIESE.x2) / 2, (WIESE.z1 + WIESE.z2) / 2, WIESE.x2 - MEER_X, WIESE.z2 - WIESE.z1); // Meer
+      rechteck('#8d6e63', (STEG.x1 + STEG.x2) / 2, STEG.z, STEG.x2 - STEG.x1, STEG.b);
+      rechteck('#f0d58c', LEUCHTTURM.x, LEUCHTTURM.z, 22, 22);
       p.strokeStyle = '#ffffff'; p.lineWidth = 3;
       p.strokeRect((GEF.x - 13 - WIESE.x1) * HG_MASSSTAB, (GEF.z - 13 - WIESE.z1) * HG_MASSSTAB, 26 * HG_MASSSTAB, 26 * HG_MASSSTAB);
     }
     const ORTE = [ // Beschriftungen auf der großen Karte
+      { name: '🏖️ Strand', x: MEER_X - 15, z: 700 }, { name: '⚓ Steg', x: STEG.x2 - 20, z: STEG.z - 12 }, { name: '🗼 Leuchtturm', x: LEUCHTTURM.x, z: LEUCHTTURM.z - 18 },
+      { name: '🏙️ Hochhäuser', x: 150, z: 970 }, { name: '🏘️ Vororte', x: -450, z: 1300 }, { name: '🏢 Oststadt', x: 500, z: 280 },
       { name: '🏁 Start', x: 0, z: 2 }, { name: '🧗 Obby ↑', x: 18, z: -12 }, { name: '🏎 Garage', x: GARAGE.x, z: GARAGE.z },
       { name: '👕 Umkleide', x: KABINE.x, z: KABINE.z }, ...BANKEN.map(b => ({ name: '🏦 ' + b.name, x: b.x, z: b.z })), { name: '🪩 Club', x: CLUB.x, z: CLUB.z }, { name: '🍌 Waffen', x: HAENDLER.x, z: HAENDLER.z },
       { name: '👗 Affen-Mode', x: KLEIDERLADEN.x, z: KLEIDERLADEN.z }, { name: '🔒 Gefängnis', x: GEF.x, z: GEF.z }, { name: '🏥 Krankenhaus', x: KRANKENHAUS.x, z: KRANKENHAUS.z },
@@ -7023,6 +7152,7 @@
       rauchBewegen(dt);              // Rauchwolken
       lebenBewegen(dt);              // Leben heilen, Krankenhaus
       bankBewegen();                 // Alarmglocke
+      meerBewegen(dt);               // Wellen, Leuchtturm, Schiff
       clubBewegen(spielZeit);        // Disco-Lichter im Club
       if (fGedrueckt) { fGedrueckt = false; benutzen(); naechsterMiniSchuss = spielZeit + 0.07; }
       // Minigun: solange F, linke Maustaste oder der 🔫-Knopf gedrückt ist, feuert sie weiter
@@ -7105,7 +7235,8 @@
         const laenge = Math.hypot(wx, wz);
         if (laenge > 1) { wx /= laenge; wz /= laenge; }                // schräg ist nicht schneller als geradeaus
         const rennt = ((tasten.ShiftLeft || tasten.ShiftRight) && laenge > 0) || (stick.aktiv && laenge > 0.93); // Handy: Stick ganz außen = rennen
-        const laufTempo = (hatJetpack() && !zuletztAmBoden ? TEMPO * 1.7 : rennt ? RENN_TEMPO : TEMPO) * (zielModus ? 0.5 : 1) * (spielZeit < energieBis ? energieFaktor : 1) * superTempo;
+        const imWasser = imMeer(p.x) && p.y < 1.2, schwimmt = imWasser && p.x > MEER_TIEF;   // im Meer: langsamer, im Tiefen schwimmen
+        const laufTempo = (hatJetpack() && !zuletztAmBoden ? TEMPO * 1.7 : rennt ? RENN_TEMPO : TEMPO) * (zielModus ? 0.5 : 1) * (spielZeit < energieBis ? energieFaktor : 1) * superTempo * (schwimmt ? 0.55 : imWasser ? 0.7 : 1);
         // Sanft schneller und langsamer werden (in der Luft lenkt man etwas weniger)
         const griff = Math.min(1, (zuletztAmBoden ? 12 : 5) * dt);
         laufV.x += (wx * laufTempo - laufV.x) * griff;
@@ -7115,6 +7246,7 @@
         // Nur bewegen, wenn dort kein Hindernis im Weg ist (sonst in diese Richtung anhalten)
         if (!stoesstAn(p.x + dx, p.y, p.z)) p.x += dx; else laufV.x = 0;
         if (!stoesstAn(p.x, p.y, p.z + dz)) p.z += dz; else laufV.z = 0;
+        if (p.x > MEER_GRENZE) { p.x = MEER_GRENZE; laufV.x = Math.min(0, laufV.x); if (spielZeit > meldungBis) zeigeMeldung('🌊 Zu weit draußen! Schwimm zurück zum Strand.', 2); }
 
         // Wo ist unter dem Affen fester Boden? (Gras, Block, Fahrzeug – oder Abgrund)
         unter = bodenUnter(p.x, p.y, p.z);
@@ -7172,6 +7304,7 @@
         figur.position.y = amBoden && laeuft ? Math.abs(Math.sin(laufZeit)) * (rennt ? 0.1 : 0.06) : 0; // hüpft beim Laufen
         figur.rotation.x = amBoden ? Math.min(0.25, tempo * 0.02) : 0;                              // beim Rennen leicht nach vorne gebeugt
         if (liegt) { figur.rotation.x = -Math.PI / 2; figur.position.y = -0.25; }                  // liegt am Boden
+        if (schwimmt && amBoden) { figur.position.y = -0.5 + Math.sin(laufZeit) * 0.04; figur.rotation.x = laeuft ? 1.1 : 0.2; } // schwimmt: nur der Kopf schaut raus
         // In der Luft: Arme hoch wie "Juhuu!"
         if (!amBoden) {
           armLinks.rotation.z = -2.4; armRechts.rotation.z = 2.4;
@@ -8383,7 +8516,7 @@
     hilfe.classList.add('neu'); setTimeout(() => hilfe.classList.remove('neu'), 12000);
     renderer.setAnimationLoop(spielSchleife); // ruft spielSchleife bei jedem Bild auf
     // Nur zum Testen (Adresse mit ?test): von außen den Affen herumbeamen
-    if (location.search.includes('test')) window.affenTest = { affe, kamera, info: () => ({ bloecke: bloecke.length, baeume: baumZahl, verkehr: verkehr.length, knoten: knotenListe.size, haeuser: haeuser.length }) };
+    if (location.search.includes('test')) window.affenTest = { affe, kamera, winkel: w => { kameraWinkel = w; }, info: () => ({ bloecke: bloecke.length, baeume: baumZahl, verkehr: verkehr.length, knoten: knotenListe.size, haeuser: haeuser.length }) };
 
     // Wenn das Fenster größer/kleiner wird, Bild anpassen
     addEventListener('resize', () => {
