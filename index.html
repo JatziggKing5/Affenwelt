@@ -4394,11 +4394,8 @@
     }
 
     // Alle Fahrzeuge stehen in der Garage, mit der Nase zum Tor (Richtung = π heißt: schaut nach -z)
-    neuesFahrzeug('auto',     gx - 6.0, gz + 0.5, Math.PI);
-    neuesFahrzeug('sport',    gx - 2.9, gz + 0.5, Math.PI);
-    neuesFahrzeug('monster',  gx + 0.5, gz + 0.5, Math.PI);
-    neuesFahrzeug('motorrad', gx + 3.4, gz + 0.5, Math.PI);
-    neuesFahrzeug('kart',     gx + 5.9, gz + 0.5, Math.PI);
+    // Die Garage ist am Anfang leer: gekaufte Fahrzeuge kommen im Autohaus-Code dazu (GARAGEN_PLAETZE)
+    const GARAGEN_PLAETZE = { auto: gx - 6.0, sport: gx - 2.9, monster: gx + 0.5, motorrad: gx + 3.4, kart: gx + 5.9 };
     neuesFahrzeug('rakete', GEHEIM.ausfahrt.x, GEHEIM.z + 2, Math.PI); // im Geheimversteck, Nase zur Ausfahrt
     // Flugzeuge am Flughafen: auf dem Vorfeld und im Hangar (Nase zur Landebahn = Richtung -x)
     for (const z of [235, 255, 275]) neuesFahrzeug('flugzeug', -600, z, -Math.PI / 2);
@@ -6724,11 +6721,11 @@
       { typ: 'sport',    preis: 900,  text: 'superschnell' },
       { typ: 'monster',  preis: 1200, text: 'fährt über alles drüber' },
       { typ: 'flugzeug', preis: 2000, text: 'Leertaste = steigen – ab in die Luft!' },
-      { typ: 'rakete',   preis: 5000, text: 'das schnellste Auto der Welt' },
     ];
     const autohausMenue = document.getElementById('autohaus');
     const imAutohaus = p => Math.abs(p.x - AUTOHAUS.x) < AUTOHAUS.b / 2 && Math.abs(p.z - AUTOHAUS.z) < AUTOHAUS.t / 2 && p.y < 2;
     let gekauftesFahrzeug = null;
+    const garagenBesitz = new Set(); // welche Garagen-Fahrzeuge schon gekauft sind
     {
       const liste = autohausMenue.querySelector('.waren');
       for (const w of AUTOHAUS_WAREN) {
@@ -6748,15 +6745,22 @@
       });
     }
     function fahrzeugKaufen(w) {
+      if (garagenBesitz.has(w.typ)) { zeigeMeldung('Das hast du schon – es steht in der Garage!', 2); return; }
       if (punkte < w.preis) { zeigeMeldung(`Zu wenig Punkte! (${w.preis} nötig)`, 1.5); return; }
       punkte -= w.preis; punkteZeigen(); klang('kasse');
-      // Das alte gekaufte Fahrzeug verschwindet (außer du sitzt gerade drin)
-      if (gekauftesFahrzeug && gekauftesFahrzeug !== aktuellesFahrzeug) {
-        szene.remove(gekauftesFahrzeug.gruppe);
-        const i = fahrzeuge.indexOf(gekauftesFahrzeug); if (i >= 0) fahrzeuge.splice(i, 1);
+      if (GARAGEN_PLAETZE[w.typ] === undefined) {
+        // Flugzeug: passt nicht in die Garage, steht auf dem Parkplatz (das alte verschwindet, außer du sitzt drin)
+        if (gekauftesFahrzeug && gekauftesFahrzeug !== aktuellesFahrzeug) {
+          szene.remove(gekauftesFahrzeug.gruppe);
+          const i = fahrzeuge.indexOf(gekauftesFahrzeug); if (i >= 0) fahrzeuge.splice(i, 1);
+        }
+        gekauftesFahrzeug = neuesFahrzeug(w.typ, AUTOHAUS_PLATZ.x, AUTOHAUS_PLATZ.z, Math.PI);
+        zeigeMeldung(`🔑 ${gekauftesFahrzeug.emoji} ${gekauftesFahrzeug.name} gekauft! Es steht draußen auf dem Parkplatz.`, 3);
+      } else {
+        gekauftesFahrzeug = neuesFahrzeug(w.typ, GARAGEN_PLAETZE[w.typ], gz + 0.5, Math.PI);
+        garagenBesitz.add(w.typ);
+        zeigeMeldung(`🔑 ${gekauftesFahrzeug.emoji} ${gekauftesFahrzeug.name} gekauft! Es steht jetzt in deiner Garage.`, 3);
       }
-      gekauftesFahrzeug = neuesFahrzeug(w.typ, AUTOHAUS_PLATZ.x, AUTOHAUS_PLATZ.z, Math.PI);
-      zeigeMeldung(`🔑 ${gekauftesFahrzeug.emoji} ${gekauftesFahrzeug.name} gekauft! Es steht draußen auf dem Parkplatz.`, 3);
       hupen(gekauftesFahrzeug.hupe);
     }
 
