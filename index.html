@@ -121,7 +121,7 @@
     #karte.gross {
       top: 50%; left: 50%; right: auto; transform: translate(-50%, -50%);
       width: min(92vw, 92vh); height: min(92vw, 92vh); z-index: 20; border-width: 4px;
-      pointer-events: auto; cursor: crosshair;
+      pointer-events: auto; cursor: crosshair; touch-action: none;
     }
     #karte { pointer-events: auto; cursor: pointer; }
     #mehrspielerKnopf {
@@ -3855,7 +3855,7 @@
     });
     muenzFarbe.name = 'Gold';
     // Jede Münze ist ein Halter am Boden; darin die Münze (aus Blender: "Muenze", sonst selbst gebaut)
-    const muenzen = muenzOrte.map(([x, z, h]) => {
+    const muenzeBauen = ([x, z, h]) => {
       const muenze = new THREE.Group();
       muenze.position.set(x, h, z);
       muenze.userData.mitte = new THREE.Vector3(x, h + 0.8, z); // hier wird eingesammelt
@@ -3871,7 +3871,8 @@
       }
       szene.add(muenze);
       return muenze;
-    });
+    };
+    const muenzen = muenzOrte.map(muenzeBauen);
 
     // Punkte-Anzeige oben rechts
     const PUNKTE_PRO_MUENZE = 10;
@@ -6709,6 +6710,23 @@
       p.strokeStyle = '#ffffff'; p.lineWidth = 3;
       p.strokeRect((GEF.x - 13 - WIESE.x1) * HG_MASSSTAB, (GEF.z - 13 - WIESE.z1) * HG_MASSSTAB, 26 * HG_MASSSTAB, 26 * HG_MASSSTAB);
     }
+    // Münzen auf Wiesen und am Strand verteilen – über die ganze Welt (nicht nur auf Straßen)
+    {
+      const lesen = kartenHintergrund.getContext('2d', { willReadFrequently: true });
+      const istGrasOderSand = (x, z) => {
+        const d = lesen.getImageData(Math.floor((x - WIESE.x1) * HG_MASSSTAB), Math.floor((z - WIESE.z1) * HG_MASSSTAB), 1, 1).data;
+        return (d[0] === 46 && d[1] === 125 && d[2] === 50) || (d[0] === 240 && d[1] === 213 && d[2] === 140); // Gras oder Sand
+      };
+      const ABSTAND = 70;
+      for (let gx = WIESE.x1 + 40; gx < MEER_X - 10; gx += ABSTAND) {
+        for (let gz = WIESE.z1 + 40; gz < WIESE.z2 - 30; gz += ABSTAND) {
+          const x = gx + zf(-22, 22), z = gz + zf(-22, 22);
+          if (z < 120 && x > -60 && x < 60) continue;                 // Startwiese hat schon genug
+          if (nahAnStrasse(x, z, 3) || !istGrasOderSand(x, z) || !frei(x, z)) continue;
+          muenzen.push(muenzeBauen([x, z, 0]));
+        }
+      }
+    }
     const ORTE = [ // Beschriftungen auf der großen Karte
       { name: '✈️ Flughafen', x: TERMINAL.x - 60, z: TERMINAL.z }, { name: '🚘 Autohaus', x: AUTOHAUS.x, z: AUTOHAUS.z },
       ...NEUE_LAEDEN.map(l => ({ name: `${l.emoji} ${l.name}`, x: l.x, z: l.z })), { name: '🛫 Landebahn', x: PISTE.x, z: PISTE.z2 + 12 },
@@ -6721,8 +6739,22 @@
       { name: '🏀 Basketball', x: BASKET.x, z: BASKET.z }, { name: '🛹 Skatepark', x: SKATE.x, z: SKATE.z }, { name: '⚽ Fußball', x: FUSS.x, z: FUSS.z }, { name: '🎤 Karaoke', x: KARAOKE.x, z: KARAOKE.z },
     ];
     // M = große Karte an/aus (Esc schließt sie auch)
+    let karteZoom = 1, karteMx = 0, karteMz = 0;                   // Zoom (1 = ganze Welt) und Mitte der großen Karte
+    let kartenAusschnitt = { x0: WIESE.x1, z0: WIESE.z1, breite: WIESE.x2 - WIESE.x1 };
+    const KARTE_ZOOM_MAX = 12;
+    function karteZoomen(neu, mitteX, mitteZ) {                    // zoomt so, dass der Punkt (mitteX, mitteZ) an seiner Stelle bleibt
+      const a = kartenAusschnitt, alt = karteZoom;
+      neu = Math.min(KARTE_ZOOM_MAX, Math.max(1, neu));
+      if (mitteX === undefined) { mitteX = a.x0 + a.breite / 2; mitteZ = a.z0 + a.breite / 2; }
+      const fx = (mitteX - a.x0) / a.breite, fz = (mitteZ - a.z0) / a.breite;
+      const breite = (WIESE.x2 - WIESE.x1) / neu;
+      karteZoom = neu;
+      karteMx = mitteX - fx * breite + breite / 2; karteMz = mitteZ - fz * breite + breite / 2;
+      if (neu === 1) { karteMx = (WIESE.x1 + WIESE.x2) / 2; karteMz = WIESE.z1 + breite / 2; }
+    }
     function karteUmschalten(gross = !karteGross) {
       karteGross = gross;
+      if (gross) { karteZoom = 1; karteZoomen(1); }
       karte.classList.toggle('gross', karteGross);
       document.getElementById('karteZu').classList.toggle('offen', karteGross);
       karte.width = karte.height = karteGross ? 900 : 180;
@@ -6741,14 +6773,58 @@
     const wegpunktAnzeige = document.getElementById('wegpunkt');
     karte.addEventListener('pointerdown', e => { if (!karteGross) { e.preventDefault(); e.stopPropagation(); karteUmschalten(true); } }); // kleine Karte antippen = groß
     document.getElementById('karteZu').addEventListener('pointerdown', e => { e.preventDefault(); karteUmschalten(false); });
-    karte.addEventListener('mousedown', e => {
+    const kartePunkt = (cx, cy) => {                                // Bildschirmpunkt → Weltpunkt
+      const r = karte.getBoundingClientRect(), a = kartenAusschnitt;
+      return { x: a.x0 + (cx - r.left) / r.width * a.breite, z: a.z0 + (cy - r.top) / r.height * a.breite };
+    };
+    const kZeiger = new Map();                                      // aktuell aufliegende Finger / Maus
+    let kZiehen = null, kPinch = null;
+    karte.addEventListener('pointerdown', e => {
       if (!karteGross) return;
       e.preventDefault();
-      const r = karte.getBoundingClientRect();
-      const x = WIESE.x1 + (e.clientX - r.left) / r.width * (WIESE.x2 - WIESE.x1);
-      const z = WIESE.z1 + (e.clientY - r.top) / r.height * (WIESE.z2 - WIESE.z1);
-      if (wegpunkt && Math.hypot(wegpunkt.x - x, wegpunkt.z - z) < 8) { wegpunkt = null; } // nochmal draufklicken = weg
-      else { wegpunkt = { x, z }; zeigeMeldung('📍 Wegpunkt gesetzt!', 1.2); }
+      karte.setPointerCapture(e.pointerId);
+      kZeiger.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (kZeiger.size === 1) kZiehen = { sx: e.clientX, sy: e.clientY, bewegt: false };
+      else { kZiehen = null; const [a, b] = [...kZeiger.values()]; kPinch = { abstand: Math.hypot(a.x - b.x, a.y - b.y), zoom: karteZoom }; }
+    });
+    karte.addEventListener('pointermove', e => {
+      if (!karteGross || !kZeiger.has(e.pointerId)) return;
+      const alt = kZeiger.get(e.pointerId);
+      kZeiger.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (kZeiger.size >= 2 && kPinch) {                            // zwei Finger: zoomen
+        const [a, b] = [...kZeiger.values()];
+        const w = kartePunkt((a.x + b.x) / 2, (a.y + b.y) / 2);
+        karteZoomen(kPinch.zoom * Math.hypot(a.x - b.x, a.y - b.y) / kPinch.abstand, w.x, w.z);
+      } else if (kZiehen) {                                         // ein Finger / Maus: Karte verschieben
+        if (!kZiehen.bewegt && Math.hypot(e.clientX - kZiehen.sx, e.clientY - kZiehen.sy) < 6) return;
+        kZiehen.bewegt = true;
+        const r = karte.getBoundingClientRect(), m = kartenAusschnitt.breite / r.width;
+        karteMx -= (e.clientX - alt.x) * m; karteMz -= (e.clientY - alt.y) * m;
+      }
+    });
+    const kLoslassen = e => {
+      if (!kZeiger.has(e.pointerId)) return;
+      kZeiger.delete(e.pointerId);
+      if (e.type === 'pointerup' && kZiehen && !kZiehen.bewegt && kZeiger.size === 0) {   // nur getippt: Wegpunkt setzen
+        const { x, z } = kartePunkt(e.clientX, e.clientY);
+        if (wegpunkt && Math.hypot(wegpunkt.x - x, wegpunkt.z - z) < 8 * 3 / Math.sqrt(karteZoom)) { wegpunkt = null; } // nochmal draufklicken = weg
+        else { wegpunkt = { x, z }; zeigeMeldung('📍 Wegpunkt gesetzt!', 1.2); }
+      }
+      if (kZeiger.size < 2) kPinch = null;
+      if (kZeiger.size === 0) kZiehen = null;
+    };
+    karte.addEventListener('pointerup', kLoslassen);
+    karte.addEventListener('pointercancel', kLoslassen);
+    karte.addEventListener('wheel', e => {                          // Mausrad = hinein- und herauszoomen
+      if (!karteGross) return;
+      e.preventDefault();
+      const w = kartePunkt(e.clientX, e.clientY);
+      karteZoomen(karteZoom * Math.exp(-e.deltaY * 0.0015), w.x, w.z);
+    }, { passive: false });
+    addEventListener('keydown', e => {                              // + und − zoomen auch
+      if (!karteGross) return;
+      if (e.key === '+' || e.key === '=') karteZoomen(karteZoom * 1.5);
+      if (e.key === '-' || e.key === '_') karteZoomen(karteZoom / 1.5);
     });
     function wegpunktPruefen(p) {
       wegpunktStrahl.visible = !!wegpunkt;
@@ -6765,9 +6841,17 @@
       const groesse = karte.width;
       const p = aktuellesFahrzeug || affe.position;
       // Welcher Ausschnitt der Welt wird gezeigt? Groß: alles. Klein: 140 m rund um dich.
-      const breite = karteGross ? WIESE.x2 - WIESE.x1 : MINI_AUSSCHNITT;
-      const x0 = karteGross ? WIESE.x1 : p.x - breite / 2;
-      const z0 = karteGross ? WIESE.z1 : p.z - breite / 2;
+      const breite = karteGross ? (WIESE.x2 - WIESE.x1) / karteZoom : MINI_AUSSCHNITT;
+      if (karteGross) { // Mitte so festhalten, dass man nicht aus der Welt hinausschiebt
+        if (karteZoom === 1) { karteMx = (WIESE.x1 + WIESE.x2) / 2; karteMz = WIESE.z1 + breite / 2; }
+        else {
+          karteMx = Math.min(WIESE.x2 - breite / 2, Math.max(WIESE.x1 + breite / 2, karteMx));
+          karteMz = Math.min(WIESE.z2 - breite / 2, Math.max(WIESE.z1 + breite / 2, karteMz));
+        }
+      }
+      const x0 = karteGross ? karteMx - breite / 2 : p.x - breite / 2;
+      const z0 = karteGross ? karteMz - breite / 2 : p.z - breite / 2;
+      if (karteGross) kartenAusschnitt = { x0, z0, breite };
       const m = groesse / breite;
       const kx = x => (x - x0) * m, kz = z => (z - z0) * m;
       const pin = kartenPinsel;
@@ -6801,7 +6885,7 @@
         }
         pin.font = `${Math.round(groesse / 70)}px sans-serif`;
         pin.fillStyle = 'rgba(255,255,255,0.9)';
-        pin.fillText(IST_HANDY ? 'Tippen = Wegpunkt setzen · ✕ = schließen' : 'Klick = Wegpunkt setzen · M oder Esc = schließen', groesse / 2, groesse - groesse / 40);
+        pin.fillText(IST_HANDY ? 'Tippen = Wegpunkt · 2 Finger = zoomen · ziehen = schieben' : 'Klick = Wegpunkt · Mausrad = zoomen · ziehen = schieben · M/Esc = zu', groesse / 2, groesse - groesse / 40);
       }
       // Polizei: blinkender Punkt
       if (polizei.aktiv) {
