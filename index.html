@@ -494,7 +494,10 @@
     <div class="ware"><span>🍌🔫 Bananen-Pistole<br><small>mit 10 Schuss · wer getroffen wird, liegt 5 Sekunden am Boden</small></span><button data-ware="pistole">40 Punkte</button></div>
     <div class="ware"><span>🔭 Zielfernrohr<br><small>für die Pistole · rechte Maustaste: weit heranzoomen</small></span><button data-ware="zielfernrohr">50 Punkte</button></div>
     <div class="ware"><span>💨 Rauchbombe<br><small>Polizei weiter als 15 m weg? Dann verliert sie dich</small></span><button data-ware="rauch">60 Punkte</button></div>
-    <p class="klein">1 = Pistole · 2 = Rauchbombe · linke Maus = schießen · rechte Maus = zielen · Zum Verlassen rauslaufen</p>
+    <div class="ware"><span>🎯 Scharfschützen-Gewehr<br><small>5 Schuss · super schnell und weit · Fernrohr ist eingebaut</small></span><button data-ware="sniper">120 Punkte</button></div>
+    <div class="ware"><span>💣 Bananen-Granaten<br><small>3 Stück · im Bogen werfen · BUMM!</small></span><button data-ware="granate">45 Punkte</button></div>
+    <div class="ware"><span>⚡ Laser-Kanone<br><small>Dauerfeuer · der Akku lädt sich von selbst wieder auf</small></span><button data-ware="laser">150 Punkte</button></div>
+    <p class="klein">1 = Pistole · 2 = Rauchbombe · 6 = Gewehr · 7 = Granate · 8 = Laser · linke Maus = schießen · rechte Maus = zielen · Zum Verlassen rauslaufen</p>
   </div>
   <canvas id="karte" width="180" height="180" title="Mini-Karte"></canvas>
   <div id="wegpunkt"></div>
@@ -3376,6 +3379,9 @@
       if (e.code === 'Digit3' && !e.repeat) waehlen(3);            // 3 = Minigun
       if (e.code === 'Digit4' && !e.repeat) waehlen(4);            // 4 = Bazooka
       if (e.code === 'Digit5' && !e.repeat) waehlen(5);            // 5 = Schrotflinte
+      if (e.code === 'Digit6' && !e.repeat) waehlen(6);            // 6 = Scharfschützen-Gewehr
+      if (e.code === 'Digit7' && !e.repeat) waehlen(7);            // 7 = Granate
+      if (e.code === 'Digit8' && !e.repeat) waehlen(8);            // 8 = Laser-Kanone
       if (e.code === 'KeyZ' && !e.repeat) zielfernrohrBenutzen(!zielModus); // Z = zielen an/aus (für Trackpads)
       if (e.code === 'KeyM' && !e.repeat) karteUmschalten();         // M = große Karte
       if (e.code === 'Escape' && karteGross) karteUmschalten(false);
@@ -5041,7 +5047,7 @@
       punkte = alles ? 0 : Math.max(0, punkte - 20);
       punkteZeigen();
       const hatteSachen = hatWaffe() || inventar.rauch > 0;
-      Object.assign(inventar, { pistole: false, munition: 0, zielfernrohr: false, rauch: 0, minigun: false, mgMun: 0, bazooka: false, bzMun: 0, schrot: false, srMun: 0 }); // die Polizei nimmt alles weg
+      Object.assign(inventar, OHNE_WAFFEN, { zielfernrohr: false }); // die Polizei nimmt alles weg
       if (kleider.an.ruecken === 'jetpack') { ausziehen('ruecken'); kleiderMerken(); } // Jetpack ab (bleibt aber deiner)
       auswahl = 0;
       zielfernrohrBenutzen(false);
@@ -5103,15 +5109,18 @@
 
     // ================= WAFFENHÄNDLER: BANANEN-PISTOLE, ZIELFERNROHR, RAUCHBOMBE =================
     const inventar = { pistole: false, munition: 0, zielfernrohr: false, rauch: 0,
-                       minigun: false, mgMun: 0, bazooka: false, bzMun: 0, schrot: false, srMun: 0 }; // die drei aus dem Geheimversteck
-    const WAFFEN_NR = [1, 3, 4, 5];   // Auswahl-Nummern, die eine Waffe in der Hand bedeuten
-    const hatWaffe = () => inventar.pistole || inventar.minigun || inventar.bazooka || inventar.schrot;
-    const ersteWaffe = () => inventar.pistole ? 1 : inventar.minigun ? 3 : inventar.bazooka ? 4 : inventar.schrot ? 5 : 0;
+                       minigun: false, mgMun: 0, bazooka: false, bzMun: 0, schrot: false, srMun: 0, // die drei aus dem Geheimversteck
+                       sniper: false, snMun: 0, granaten: 0, laser: false, akku: 100 };              // neu beim Waffenhändler
+    const OHNE_WAFFEN = { pistole: false, munition: 0, rauch: 0, minigun: false, mgMun: 0, bazooka: false, bzMun: 0, schrot: false, srMun: 0, sniper: false, snMun: 0, granaten: 0, laser: false, akku: 100 };
+    const WAFFEN_NR = [1, 3, 4, 5, 6, 7, 8];   // Auswahl-Nummern, die eine Waffe in der Hand bedeuten
+    const hatWaffe = () => inventar.pistole || inventar.minigun || inventar.bazooka || inventar.schrot || inventar.sniper || inventar.granaten > 0 || inventar.laser;
+    const ersteWaffe = () => inventar.pistole ? 1 : inventar.minigun ? 3 : inventar.bazooka ? 4 : inventar.schrot ? 5 : inventar.sniper ? 6 : inventar.laser ? 8 : inventar.granaten > 0 ? 7 : 0;
+    const mitFernrohr = () => inventar.zielfernrohr || auswahl === 6;   // das Gewehr hat sein Fernrohr schon dabei
     let auswahl = 0;          // was der Affe in der Hand hat: 0 = nichts, 1 = Bananen-Pistole, 2 = Rauchbombe
     let zielModus = false;    // gerade durchs Zielfernrohr schauen?
     let zielNeigung = 0;      // mit dem Zielfernrohr nach oben (+) oder unten (−) zielen
     const LIEGEZEIT = 5;      // so viele Sekunden liegt jemand, der von einer Banane getroffen wurde
-    const PREISE = { pistole: 40, munition: 20, zielfernrohr: 50, rauch: 60 }; // in Punkten
+    const PREISE = { pistole: 40, munition: 20, zielfernrohr: 50, rauch: 60, sniper: 120, snMun: 30, granate: 45, laser: 150 }; // in Punkten
     const waffenLeiste = document.getElementById('waffenleiste');
     const haendlerMenue = document.getElementById('haendler');
     const zielfernrohrBild = document.getElementById('zielfernrohr');
@@ -5196,7 +5205,36 @@
       g.add(mitPos(new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.012, 6, 10, Math.PI), waffenGelb), 0, -0.06, 0.05));
       return g;
     }
-    const WAFFEN_BAUEN = { 3: minigunBauen, 4: bazookaBauen, 5: schrotBauen };
+    function sniperBauen() {                          // langes Gewehr mit Fernrohr oben drauf
+      const g = new THREE.Group();
+      g.add(rohr(0.025, 0.9, waffenSchwarz, 0, 0.02, 0.45));
+      g.add(mitPos(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.4), waffenGelb), 0, 0, 0));
+      const kolben = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.15, 0.3), waffenHolz); kolben.position.set(0, -0.05, -0.32); kolben.rotation.x = 0.2; g.add(kolben);
+      g.add(rohr(0.04, 0.32, waffenSchwarz, 0, 0.12, 0.08));
+      g.add(mitPos(new THREE.Mesh(new THREE.CircleGeometry(0.035, 12), new THREE.MeshStandardMaterial({ color: 0x4fc3f7, emissive: 0x01579b })), 0, 0.12, 0.245));
+      return g;
+    }
+    const granatenMaterial = new THREE.MeshStandardMaterial({ color: 0x9e9d24, roughness: 0.5 });
+    function granateBauen() {                         // grüne Bananen-Granate mit gelbem Stiel und Ring
+      const g = new THREE.Group();
+      const k = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 10), granatenMaterial); k.scale.set(1, 1.25, 1); k.castShadow = true; g.add(k);
+      g.add(mitPos(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.08, 8), waffenGelb), 0, 0.15, 0));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.008, 6, 12), waffenSchwarz); ring.position.set(0.04, 0.19, 0); g.add(ring);
+      g.rotation.x = -Math.PI / 2;
+      const aussen = new THREE.Group(); aussen.add(g); aussen.position.z = 0.08;
+      return aussen;
+    }
+    const laserMaterial = new THREE.MeshStandardMaterial({ color: 0x76ff03, emissive: 0x76ff03, emissiveIntensity: 2.5 });
+    function laserBauen() {                           // weiß-blaue Kanone mit grün leuchtenden Ringen
+      const g = new THREE.Group();
+      const weiss = new THREE.MeshStandardMaterial({ color: 0xeceff1, metalness: 0.4, roughness: 0.3 });
+      g.add(rohr(0.07, 0.5, weiss, 0, 0.02, 0.15));
+      for (let i = 0; i < 3; i++) g.add(rohr(0.078, 0.03, laserMaterial, 0, 0.02, i * 0.12));
+      g.add(rohr(0.04, 0.12, laserMaterial, 0, 0.02, 0.45));
+      g.add(mitPos(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.08), waffenSchwarz), 0, -0.1, -0.02));
+      return g;
+    }
+    const WAFFEN_BAUEN = { 3: minigunBauen, 4: bazookaBauen, 5: schrotBauen, 6: sniperBauen, 7: granateBauen, 8: laserBauen };
     const handWaffen = {};
     for (const [nr, bauen] of Object.entries(WAFFEN_BAUEN)) {
       const m = bauen();
@@ -5222,6 +5260,9 @@
       if (inventar.minigun) felder.push(feld(3, '🍌🔁', `${inventar.mgMun} Schuss`, auswahl === 3));
       if (inventar.bazooka) felder.push(feld(4, '🍌💥', `${inventar.bzMun} Raketen`, auswahl === 4));
       if (inventar.schrot) felder.push(feld(5, '🍌🍌', `${inventar.srMun} Ladungen`, auswahl === 5));
+      if (inventar.sniper) felder.push(feld(6, '🎯', `${inventar.snMun} Schuss`, auswahl === 6));
+      if (inventar.granaten > 0) felder.push(feld(7, '💣', `${inventar.granaten}× Granate`, auswahl === 7));
+      if (inventar.laser) felder.push(feld(8, '⚡', `Akku ${Math.round(inventar.akku)}%`, auswahl === 8));
       waffenLeiste.innerHTML = felder.join('');
       waffenLeiste.classList.toggle('offen', felder.length > 0);
       pistoleImArm.visible = auswahl === 1 && !aktuellesFahrzeug;
@@ -5232,6 +5273,9 @@
       const fk = haendlerMenue.querySelector('[data-ware="zielfernrohr"]');
       fk.textContent = inventar.zielfernrohr ? 'Hast du ✓' : `${PREISE.zielfernrohr} Punkte`;
       fk.disabled = inventar.zielfernrohr;
+      haendlerMenue.querySelector('[data-ware="sniper"]').textContent = inventar.sniper ? `+5 Schuss · ${PREISE.snMun}` : `${PREISE.sniper} Punkte`;
+      const lk = haendlerMenue.querySelector('[data-ware="laser"]');
+      lk.textContent = inventar.laser ? 'Hast du ✓' : `${PREISE.laser} Punkte`; lk.disabled = inventar.laser;
     }
     waffenLeiste.addEventListener('mousedown', e => {
       e.preventDefault();
@@ -5242,6 +5286,9 @@
     function waehlen(nr) {
       if (nr === 1 && !inventar.pistole) { zeigeMeldung('Du hast noch keine Bananen-Pistole – der Waffenhändler hat eine! 🍌', 2); return; }
       if (nr === 2 && inventar.rauch <= 0) { zeigeMeldung('Keine Rauchbombe – der Waffenhändler hat welche! 💨', 2); return; }
+      if (nr === 6 && !inventar.sniper) { zeigeMeldung('Kein Gewehr – der Waffenhändler hat eins! 🎯', 2); return; }
+      if (nr === 7 && inventar.granaten <= 0) { zeigeMeldung('Keine Granaten – der Waffenhändler hat welche! 💣', 2); return; }
+      if (nr === 8 && !inventar.laser) { zeigeMeldung('Keine Laser-Kanone – der Waffenhändler hat eine! ⚡', 2); return; }
       if ((nr === 3 && !inventar.minigun) || (nr === 4 && !inventar.bazooka) || (nr === 5 && !inventar.schrot)) { zeigeMeldung('🤫 Diese Waffe gibt es nur im Geheimversteck …', 2); return; }
       auswahl = auswahl === nr ? 0 : nr;
       if (!WAFFEN_NR.includes(auswahl)) zielfernrohrBenutzen(false);
@@ -5256,6 +5303,9 @@
       { nr: 5, emoji: '🍌🍌', name: 'Schrotflinte', hat: () => inventar.schrot,     info: () => `${inventar.srMun} Ladungen` },
       { nr: 3, emoji: '🍌🔁', name: 'Minigun',     hat: () => inventar.minigun,     info: () => `${inventar.mgMun} Schuss` },
       { nr: 4, emoji: '🍌💥', name: 'Bazooka',     hat: () => inventar.bazooka,     info: () => `${inventar.bzMun} Raketen` },
+      { nr: 6, emoji: '🎯', name: 'Gewehr',        hat: () => inventar.sniper,      info: () => `${inventar.snMun} Schuss` },
+      { nr: 8, emoji: '⚡', name: 'Laser',         hat: () => inventar.laser,       info: () => `Akku ${Math.round(inventar.akku)}%` },
+      { nr: 7, emoji: '💣', name: 'Granate',       hat: () => inventar.granaten > 0, info: () => `${inventar.granaten}×` },
       { nr: 2, emoji: '💨', name: 'Rauchbombe',    hat: () => inventar.rauch > 0,   info: () => `${inventar.rauch}×` },
     ];
     const waffenRad = document.getElementById('waffenRad'), waffenRadMitte = waffenRad.querySelector('.mitte');
@@ -5325,6 +5375,8 @@
     function kaufen(ware) {
       if (ware === 'pistole' && inventar.pistole) ware = 'munition';
       if (ware === 'zielfernrohr' && inventar.zielfernrohr) return;
+      if (ware === 'sniper' && inventar.sniper) ware = 'snMun';
+      if (ware === 'laser' && inventar.laser) return;
       if (punkte < PREISE[ware]) { zeigeMeldung(`Zu wenig Punkte! (${PREISE[ware]} nötig)`, 1.5); return; }
       punkte -= PREISE[ware]; klang('kasse');
       punkteZeigen();
@@ -5332,6 +5384,10 @@
       if (ware === 'munition') { inventar.munition += 10; zeigeMeldung('🍌 +10 Schuss', 1.5); }
       if (ware === 'zielfernrohr') { inventar.zielfernrohr = true; zeigeMeldung('🔭 Zielfernrohr! Rechte Maustaste halten (oder Z)', 2.5); }
       if (ware === 'rauch') { inventar.rauch += 1; zeigeMeldung('💨 Rauchbombe gekauft! Taste 2 oder G', 2); }
+      if (ware === 'sniper') { inventar.sniper = true; inventar.snMun += 5; auswahl = 6; zeigeMeldung('🎯 Scharfschützen-Gewehr! Taste 6 · rechte Maustaste = zielen', 2.5); }
+      if (ware === 'snMun') { inventar.snMun += 5; zeigeMeldung('🎯 +5 Schuss', 1.5); }
+      if (ware === 'granate') { inventar.granaten += 3; auswahl = 7; zeigeMeldung('💣 3 Bananen-Granaten! Taste 7 · fliegen im Bogen', 2.5); }
+      if (ware === 'laser') { inventar.laser = true; inventar.akku = 100; auswahl = 8; zeigeMeldung('⚡ Laser-Kanone! Taste 8 · Maus gedrückt halten', 2.5); }
       inventarZeigen();
       hupen(1300);
     }
@@ -5346,12 +5402,12 @@
     function zielfernrohrBenutzen(an) {
       if (an) {
         if (aktuellesFahrzeug || !hatWaffe()) return;
-        if (!WAFFEN_NR.includes(auswahl)) { if (spielZeit > zielHinweisBis) { zielHinweisBis = spielZeit + 30; zeigeMeldung('Nimm erst eine Waffe in die Hand: Taste 1, 3, 4 oder 5 🍌', 1.8); } return; } // nur mit gewählter Waffe zielen
+        if (!WAFFEN_NR.includes(auswahl)) { if (spielZeit > zielHinweisBis) { zielHinweisBis = spielZeit + 30; zeigeMeldung('Nimm erst eine Waffe in die Hand: Taste 1, 3–8 🍌', 1.8); } return; } // nur mit gewählter Waffe zielen
         if (!zielModus) zielNeigung = 0;
       }
       zielModus = an;
       zielfernrohrBild.classList.toggle('offen', zielModus);
-      zielfernrohrBild.classList.toggle('fernrohr', zielModus && inventar.zielfernrohr); // ohne Fernrohr: nur Fadenkreuz
+      zielfernrohrBild.classList.toggle('fernrohr', zielModus && mitFernrohr()); // ohne Fernrohr: nur Fadenkreuz
     }
     // In welche Richtung zeigt das Zielfernrohr? (3D, mit Neigung)
     function zielRichtung() {
@@ -5391,13 +5447,15 @@
     const bananenMaterial = new THREE.MeshStandardMaterial({ color: 0xffe135, roughness: 0.5 });
     const bazookaMaterial = new THREE.MeshStandardMaterial({ color: 0xffd600, emissive: 0xff6d00, emissiveIntensity: 0.6, roughness: 0.4 });
     const geschosse = [];
+    const laserForm = new THREE.BoxGeometry(0.06, 0.06, 0.9);
     const _hand = new THREE.Vector3();
     // Eine Banane abfeuern. art: 'normal', 'mini' (Minigun), 'bazooka' (explodiert), 'schrot'
     function abfeuern(r, tempo, art = 'normal', groesse = 1, leben = 2) {
       const modell = handWaffen[auswahl] || pistoleImArm;
       modell.getWorldPosition(_hand);
       const start = zielModus ? kamera.position.clone().addScaledVector(r, 0.6) : _hand.addScaledVector(r, 0.4);
-      const m = new THREE.Mesh(bananenForm, art === 'bazooka' ? bazookaMaterial : bananenMaterial);
+      const m = art === 'laser' ? new THREE.Mesh(laserForm, laserMaterial) : art === 'granate' ? granateBauen() : new THREE.Mesh(bananenForm, art === 'bazooka' ? bazookaMaterial : bananenMaterial);
+      if (art === 'laser') m.lookAt(start.x + r.x, start.y + r.y, start.z + r.z);   // Strahl zeigt in Flugrichtung
       m.position.copy(start);
       m.scale.setScalar(groesse);
       m.castShadow = true;
@@ -5405,7 +5463,7 @@
       const g = { mesh: m, vx: r.x * tempo, vy: r.y * tempo, vz: r.z * tempo, leben, art };
       geschosse.push(g);
       eigeneBananeGeschossen(g); // auch die Mitspieler sehen die Banane
-      klang('schuss');
+      if (art === 'laser') ton(1400, 300, 0.12, 'sawtooth', 0.05); else klang('schuss');
     }
     // Wohin wird gezielt? Beim Zielen: Fadenkreuz. Sonst: dahin, wo der Affe schaut. "streuung" = etwas ungenau
     function schussRichtung(streuung = 0) {
@@ -5447,6 +5505,21 @@
         inventar.srMun--;
         for (let i = 0; i < 7; i++) abfeuern(schussRichtung(0.3), 35, 'schrot', 0.9, 0.7);
         hupen(400); hupen(300);
+      } else if (auswahl === 6) {                               // Scharfschützen-Gewehr: ganz schnell, ganz genau
+        if (inventar.snMun <= 0) { zeigeMeldung('Gewehr leer! Beim Waffenhändler gibt es +5 🎯', 1.8); return; }
+        inventar.snMun--;
+        abfeuern(schussRichtung(), 110, 'sniper', 0.8, 3);
+        hupen(220); rauschen(0.25, ['lowpass', 1200], 0.15);
+      } else if (auswahl === 7) {                               // Granate: im Bogen werfen, explodiert beim Aufprall
+        if (inventar.granaten <= 0) { zeigeMeldung('Keine Granaten mehr! 💣', 1.5); return; }
+        inventar.granaten--;
+        const r = schussRichtung(); r.y += 0.45; r.normalize();
+        abfeuern(r, 17, 'granate', 1.3, 4);
+        if (inventar.granaten <= 0) auswahl = ersteWaffe();
+      } else if (auswahl === 8) {                               // Laser: braucht Akku, lädt sich selbst wieder auf
+        if (inventar.akku < 8) { if (spielZeit > meldungBis) zeigeMeldung('⚡ Akku leer – kurz warten, er lädt sich auf!', 1); return; }
+        inventar.akku -= 8;
+        abfeuern(schussRichtung(0.02), 75, 'laser', 1, 1.2);
       }
       inventarZeigen();
     }
@@ -5514,7 +5587,7 @@
     function geschosseBewegen(dt) {
       for (let i = geschosse.length - 1; i >= 0; i--) {
         const g = geschosse[i];
-        g.vy -= 4 * dt; // fällt nur ganz wenig
+        g.vy -= (g.art === 'granate' ? 20 : g.art === 'laser' || g.art === 'sniper' ? 0 : 4) * dt; // Granaten fallen im Bogen, Laser fliegt gerade
         // in kleinen Schritten fliegen, damit sie nicht durch dünne Ziele "durchspringt"
         const schritte = g.art === 'mini' || g.art === 'schrot' ? 2 : 4;
         let weg = false;
@@ -5524,10 +5597,10 @@
           const inWand = bloeckeBei(q.x, q.z, 0.5).some(o => o.art !== 'lava' && Math.abs(q.x - o.x) < o.b / 2 && Math.abs(q.z - o.z) < o.t / 2 && q.y < o.oben && q.y > o.unten);
           weg = (g.fremd ? triffMich(g) : (getroffen(g) || triffMitspieler(g))) || inWand || q.y < 0;
         }
-        g.mesh.rotation.x += 14 * dt; g.mesh.rotation.y += 9 * dt;
+        if (g.art !== 'laser') { g.mesh.rotation.x += 14 * dt; g.mesh.rotation.y += 9 * dt; }
         g.leben -= dt;
         if (weg || g.leben < 0) {
-          if (g.art === 'bazooka' && !g.fremd) explosion(g.mesh.position.x, Math.max(0.5, g.mesh.position.y), g.mesh.position.z, true);
+          if ((g.art === 'bazooka' || g.art === 'granate') && !g.fremd) explosion(g.mesh.position.x, Math.max(0.5, g.mesh.position.y), g.mesh.position.z, true);
           szene.remove(g.mesh); geschosse.splice(i, 1);
         }
       }
@@ -6696,7 +6769,7 @@
     function erwischt() {
       const verlust = punkte;
       punkte = 0; punkteZeigen();
-      Object.assign(inventar, { pistole: false, munition: 0, rauch: 0, minigun: false, mgMun: 0, bazooka: false, bzMun: 0, schrot: false, srMun: 0 });
+      Object.assign(inventar, OHNE_WAFFEN);
       waehlen(0); inventarZeigen();
       selbstLiegtBis = spielZeit + 2.5;
       klang('knurren');
@@ -7559,6 +7632,12 @@
       if (fGedrueckt) { fGedrueckt = false; benutzen(); naechsterMiniSchuss = spielZeit + 0.07; }
       // Minigun: solange F, linke Maustaste oder der 🔫-Knopf gedrückt ist, feuert sie weiter
       if (auswahl === 3 && (tasten.KeyF || linkeMausGedrueckt || handySchussGehalten) && spielZeit > naechsterMiniSchuss) { naechsterMiniSchuss = spielZeit + 0.07; benutzen(); }
+      if (auswahl === 8 && (tasten.KeyF || linkeMausGedrueckt || handySchussGehalten) && spielZeit > naechsterMiniSchuss) { naechsterMiniSchuss = spielZeit + 0.14; benutzen(); }
+      if (inventar.laser && inventar.akku < 100) {               // Laser-Akku lädt sich langsam wieder auf
+        const vorher = Math.floor(inventar.akku / 10);
+        inventar.akku = Math.min(100, inventar.akku + 14 * dt);
+        if (Math.floor(inventar.akku / 10) !== vorher) inventarZeigen();
+      }
       knalleBewegen(dt);
       if (gGedrueckt) { gGedrueckt = false; rauchbombe(); }
 
@@ -7854,15 +7933,15 @@
       const tempoJetzt = aktuellesFahrzeug ? Math.abs(aktuellesFahrzeug.tempo || 0) : Math.hypot(laufV.x, laufV.z);
       const fovZiel = zielModus ? 0 : Math.min(12, Math.max(0, (tempoJetzt - 7) * 0.5));
       fovExtra += (fovZiel - fovExtra) * Math.min(1, 4 * dt);
-      const zoom = (zielModus ? (inventar.zielfernrohr ? 15 : 40) : 60) + fovExtra;
+      const zoom = (zielModus ? (auswahl === 6 ? 8 : inventar.zielfernrohr ? 15 : 40) : 60) + fovExtra;
       if (Math.abs(kamera.fov - zoom) > 0.01) { kamera.fov = zoom; kamera.updateProjectionMatrix(); }
-      figur.visible = !(zielModus && inventar.zielfernrohr); // im Zielfernrohr sieht man den Affen nicht
+      figur.visible = !(zielModus && mitFernrohr()); // im Zielfernrohr sieht man den Affen nicht
       if (zielModus) {
         if (aktuellesFahrzeug) zielfernrohrBenutzen(false);
         const r = zielRichtung();
         blickRichtung = Math.atan2(r.x, r.z);           // Affe dreht sich zum Ziel
         affe.rotation.y = blickRichtung;
-        const seitlich = inventar.zielfernrohr ? 0 : 0.5; // ohne Fernrohr: etwas rechts über der Schulter
+        const seitlich = mitFernrohr() ? 0 : 0.5; // ohne Fernrohr: etwas rechts über der Schulter
         kamera.position.set(p.x - r.z * seitlich - r.x * 0.2, p.y + 0.45, p.z + r.x * seitlich - r.z * 0.2);
         kamera.lookAt(kamera.position.x + r.x * 50, kamera.position.y + r.y * 50, kamera.position.z + r.z * 50);
         malen();
