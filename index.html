@@ -2359,11 +2359,11 @@
       keil(cx + 2, cz + 8, 3, 3, 0.9, -Math.PI / 2);
       // Halfpipe: zwei Viertel-Rohre an den Enden (links und rechts)
       for (const s of [-1, 1]) {
-        const qp = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 12, 20, 1, true, 0, Math.PI / 2), rampenMat);
-        qp.rotation.set(Math.PI / 2, 0, s > 0 ? Math.PI / 2 : 0);
-        qp.rotation.z = s > 0 ? 0 : -Math.PI / 2;
+        // Ein Viertel eines liegenden Rohrs: unten flach, zur Wand hin steil (rechts: Viertel x ≥ 0, links: x ≤ 0)
+        const qp = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 12, 20, 1, true, s > 0 ? 0 : -Math.PI / 2, Math.PI / 2), rampenMat);
+        qp.rotation.x = Math.PI / 2;
         qp.position.set(cx + s * (B / 2 - 3), 3, cz);
-        qp.scale.set(1, 1, 1); qp.castShadow = true; qp.receiveShadow = true;
+        qp.castShadow = true; qp.receiveShadow = true;
         szene.add(qp);
         neuerBlock(cx + s * (B / 2 - 0.4), cz, 0.8, 12, 0, 3.05, 'block', 0x78909c);   // Plattform oben (Rückwand)
         instanz(stammForm, kanteMat, cx + s * (B / 2 - 0.85), 3.05, cz, 0.3, 12, 0.3, 0, null, false, Math.PI / 2);
@@ -2457,8 +2457,7 @@
     // Zwei Affen skaten in der Halfpipe hin und her
     const skateAffen = [0x3b2314, 0xe0a96d].map((fell, i) => {
       const a = affenKlon(fell);
-      const b = skateboard.clone(); b.visible = true; b.position.y = -0.92 + 0.5; a.gruppe.add(b);
-      b.position.y = 0.08;
+      const b = skateboard.clone(); b.visible = true; b.position.y = -0.42; a.gruppe.add(b);   // Brett unter den Füßen
       szene.add(a.gruppe);
       return { a, phase: i * 3.1, z: SKATE.z + (i ? 2.5 : -2.5) };
     });
@@ -2601,6 +2600,360 @@
         te.armL.rotation.set(0, 0, -1.1); te.armR.rotation.set(0, 0, 1.1);
         te.beinL.rotation.set(-0.3, 0, 0); te.beinR.rotation.set(0.3, 0, 0);
       }
+    }
+
+    // ================= KARAOKE-BAR =================
+    // Bühne mit Mikrofon, Leinwand mit Liedtext, Publikum. E drücken = Karaoke-Menü.
+    // Echtes Mikrofon: deine Stimme kommt mit Hall aus den Lautsprechern, und das Spiel hört, ob du triffst.
+    const KARAOKE = { x: -135, z: 100, b: 22, t: 16, h: 6, vorne: 1 };
+    var karaokeDrin = false;                            // steht der Spieler gerade in der Bar? (var: musikLautstaerke fragt das früh ab)
+    freiHalten.push({ x: KARAOKE.x, z: KARAOKE.z + 6, r: 18 });
+    const karaokePublikum = [], karaokeSpots = [];
+    let karaokeLeinwand = null;
+    {
+      const { x: cx, z: cz, b: B, t: T, h: H, vorne } = KARAOKE, W = 0.3;
+      const fz = cz + vorne * T / 2, hz = cz - vorne * T / 2;
+      const wand = 0x311b92;
+      neuerBlock(cx, hz, B, W, 0, H, 'block', wand);
+      neuerBlock(cx - B / 2, cz, W, T, 0, H, 'block', wand);
+      neuerBlock(cx + B / 2, cz, W, T, 0, H, 'block', wand);
+      neuerBlock(cx - (B / 4 + 0.75), fz, B / 2 - 1.5, W, 0, H, 'block', wand);
+      neuerBlock(cx + (B / 4 + 0.75), fz, B / 2 - 1.5, W, 0, H, 'block', wand);
+      neuerBlock(cx, fz, 3, W, 3, H, 'block', wand);
+      neuerBlock(cx, cz, B + 0.6, T + 0.6, H, H + 0.3, 'block', 0x1a1a2e);
+      flach(new THREE.MeshStandardMaterial({ color: 0x1a0033, roughness: 0.4, metalness: 0.2 }), cx, cz, B - 0.4, T - 0.4, 0.03);
+      flach(new THREE.MeshStandardMaterial({ color: 0x9e9e9e, roughness: 0.9 }), cx, (fz + 126) / 2, 3, 126 - fz, 0.02);   // Weg zur Straße
+      // Bühne an der Rückwand, mit leuchtender Kante
+      neuerBlock(cx, hz + vorne * 2.3, 12, 4, 0, 0.6, 'block', 0x4a148c);
+      instanz(einheitsKiste, new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff4fd8, emissiveIntensity: 2 }), cx, 0.32, hz + vorne * 4.32, 12, 0.08, 0.06, 0, null, false);
+      // Mikrofon-Ständer
+      const metall = new THREE.MeshStandardMaterial({ color: 0x9e9e9e, metalness: 0.9, roughness: 0.2 });
+      instanz(stammForm, metall, cx, 1.35, hz + vorne * 3.3, 0.12, 1.5, 0.12, 0, null, true);
+      instanz(kugelForm, new THREE.MeshStandardMaterial({ color: 0x212121, metalness: 0.5, roughness: 0.5 }), cx, 2.15, hz + vorne * 3.3, 0.1, 0.13, 0.1, 0, null, true);
+      // Leinwand mit dem Liedtext (wird beim Singen neu gemalt)
+      const lw = document.createElement('canvas'); lw.width = 1024; lw.height = 256;
+      const tex = new THREE.CanvasTexture(lw); tex.colorSpace = THREE.SRGBColorSpace;
+      const lwMesh = new THREE.Mesh(new THREE.PlaneGeometry(10, 2.5), new THREE.MeshBasicMaterial({ map: tex }));
+      lwMesh.position.set(cx, 3.5, hz + vorne * 0.2); lwMesh.rotation.y = vorne > 0 ? 0 : Math.PI;
+      szene.add(lwMesh);
+      karaokeLeinwand = { c: lw, g: lw.getContext('2d'), tex, text: null };
+      // Boxen links und rechts von der Bühne
+      for (const s of [-1, 1]) {
+        neuerBlock(cx + s * 7.5, hz + vorne * 1.2, 1.4, 1.2, 0, 2.2, 'block', 0x212121);
+        instanz(kugelForm, new THREE.MeshStandardMaterial({ color: 0x424242 }), cx + s * 7.5, 1.4, hz + vorne * 1.82, 0.45, 0.45, 0.12, 0, null, false);
+      }
+      // Scheinwerfer-Kegel von der Decke auf die Bühne
+      for (let i = 0; i < 3; i++) {
+        const mat = new THREE.MeshBasicMaterial({ color: CLUB_FARBEN[i * 2], transparent: true, opacity: 0.18, depthWrite: false, blending: THREE.AdditiveBlending });
+        const kegel = new THREE.Mesh(new THREE.ConeGeometry(1.4, 5.2, 20, 1, true), mat);
+        kegel.position.set(cx - 4 + i * 4, H - 2.6, hz + vorne * 3); szene.add(kegel);
+        karaokeSpots.push({ kegel, mat, i, x: cx - 4 + i * 4 });
+      }
+      // Tische mit Hockern
+      const tischMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.6 });
+      for (const [dx, dz] of [[-7.5, 5], [7.5, 5], [-7.5, 1.5], [7.5, 1.5]]) {
+        neuerBlock(cx + dx, cz + vorne * dz, 1.4, 1.4, 0, 0.9, 'block', 0x5d4037);
+        instanz(stammForm, tischMat, cx + dx + 1.2, 0.3, cz + vorne * dz, 1.4, 0.6, 1.4, 0, null, true);
+      }
+      // Publikum: Affen schauen zur Bühne
+      const FELLE = [0x8d6e63, 0x3b2314, 0xe0a96d, 0x5d4037, 0xbcaaa4];
+      FELLE.forEach((fell, i) => {
+        const a = affenKlon(fell);
+        a.gruppe.position.set(cx - 4 + i * 2, 0.5, cz + vorne * (2 + (i % 2) * 1.4));
+        a.gruppe.rotation.y = vorne > 0 ? Math.PI : 0;
+        szene.add(a.gruppe);
+        karaokePublikum.push({ a, versatz: i * 1.3 });
+      });
+      const wirt = affenKlon(0x4e342e);
+      wirt.gruppe.position.set(cx + B / 2 - 1.5, 0.5, fz - vorne * 1.5);
+      wirt.gruppe.rotation.y = -Math.PI / 2;
+      szene.add(wirt.gruppe); NPC_STAND.push({ gruppe: wirt.gruppe, art: 'karaoke' });
+      schildBauen('🎤 KARAOKE', 7, 1.2, '#4a148c', '#ffeb3b', cx, H + 0.8, fz + vorne * 0.2, vorne > 0 ? 0 : Math.PI);
+    }
+    const imKaraoke = p => !aktuellesFahrzeug && p.y < 3 && Math.abs(p.x - KARAOKE.x) < KARAOKE.b / 2 && Math.abs(p.z - KARAOKE.z) < KARAOKE.t / 2;
+
+    // --- Eingebaute Lieder: alte Volkslieder (die darf jeder singen) ---
+    // Jede Zeile: Text + Noten [MIDI-Ton, Schläge]. 60 = C, 62 = D, 64 = E, 65 = F, 67 = G, 69 = A
+    const LIEDER = [
+      { name: 'Alle meine Entchen', bpm: 110, zeilen: [
+        ['Alle meine Entchen', [[60, 1], [62, 1], [64, 1], [65, 1], [67, 2], [67, 2]]],
+        ['schwimmen auf dem See,', [[69, 1], [69, 1], [69, 1], [69, 1], [67, 4]]],
+        ['schwimmen auf dem See,', [[69, 1], [69, 1], [69, 1], [69, 1], [67, 4]]],
+        ['Köpfchen in das Wasser,', [[65, 1], [65, 1], [65, 1], [65, 1], [64, 2], [64, 2]]],
+        ['Schwänzchen in die Höh\'.', [[62, 1], [62, 1], [62, 1], [62, 1], [60, 4]]],
+      ] },
+      { name: 'Bruder Jakob', bpm: 100, zeilen: [
+        ['Bruder Jakob, Bruder Jakob,', [[60, 1], [62, 1], [64, 1], [60, 1], [60, 1], [62, 1], [64, 1], [60, 1]]],
+        ['schläfst du noch? Schläfst du noch?', [[64, 1], [65, 1], [67, 2], [64, 1], [65, 1], [67, 2]]],
+        ['Hörst du nicht die Glocken?', [[67, 0.5], [69, 0.5], [67, 0.5], [65, 0.5], [64, 1], [60, 1]]],
+        ['Hörst du nicht die Glocken?', [[67, 0.5], [69, 0.5], [67, 0.5], [65, 0.5], [64, 1], [60, 1]]],
+        ['Ding, dang, dong! Ding, dang, dong!', [[60, 1], [55, 1], [60, 2], [60, 1], [55, 1], [60, 2]]],
+      ] },
+      { name: 'Hänschen klein', bpm: 120, zeilen: [
+        ['Hänschen klein ging allein', [[67, 1], [64, 1], [64, 2], [65, 1], [62, 1], [62, 2]]],
+        ['in die weite Welt hinein.', [[60, 1], [62, 1], [64, 1], [65, 1], [67, 1], [67, 1], [67, 2]]],
+        ['Stock und Hut steht ihm gut,', [[67, 1], [64, 1], [64, 2], [65, 1], [62, 1], [62, 2]]],
+        ['ist gar wohlgemut.', [[60, 1], [64, 1], [67, 1], [67, 1], [60, 4]]],
+        ['Aber Mutter weinet sehr,', [[62, 1], [62, 1], [62, 1], [62, 1], [62, 1], [64, 1], [65, 2]]],
+        ['hat ja nun kein Hänschen mehr.', [[64, 1], [64, 1], [64, 1], [64, 1], [64, 1], [65, 1], [67, 2]]],
+        ['Da besinnt sich das Kind,', [[67, 1], [64, 1], [64, 2], [65, 1], [62, 1], [62, 2]]],
+        ['kehrt nach Haus geschwind.', [[60, 1], [64, 1], [67, 1], [67, 1], [60, 4]]],
+      ] },
+    ];
+    // Lied in eine Zeitliste umrechnen: jede Note und jede Zeile bekommt ihre Startzeit (in Sekunden)
+    function liedPlanen(lied) {
+      const schlag = 60 / lied.bpm, vorlauf = 4 * schlag;              // 4 Schläge vorzählen
+      const noten = [], zeilen = [];
+      let t = vorlauf;
+      for (const [text, n] of lied.zeilen) {
+        const start = t;
+        for (const [ton, dauer] of n) { noten.push({ t, ton, dauer: dauer * schlag }); t += dauer * schlag; }
+        zeilen.push({ text, start, ende: t });
+      }
+      return { noten, zeilen, schlag, vorlauf, laenge: t + schlag };
+    }
+
+    // --- Was gerade läuft ---
+    const karaoke = { lied: null, plan: null, start: 0, notenIndex: 0, schlagIndex: 0, audio: null, eigeneZeilen: [], punkte: 0, getroffen: 0, laut: 0, ton: null };
+    const karaokeJetzt = () => karaoke.audio ? karaoke.audio.currentTime : tonMaschine.currentTime - karaoke.start;
+
+    // --- Menü und Anzeige ---
+    const knopfStil = 'display:block;width:100%;margin:6px 0;padding:10px;font-size:16px;font-weight:bold;border:0;border-radius:12px;color:#fff;cursor:pointer';
+    const karaokeMenue = document.createElement('div');
+    karaokeMenue.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:30;display:none;background:rgba(26,0,51,.96);border:3px solid #ffeb3b;border-radius:18px;padding:16px 18px;color:#fff;text-align:center;width:min(340px,92vw);max-height:88vh;overflow-y:auto;box-shadow:0 0 30px #ffeb3b88;font-family:inherit';
+    karaokeMenue.innerHTML = '<div style="font-size:20px;font-weight:bold;margin-bottom:8px">🎤 Karaoke</div>' +
+      LIEDER.map((l, i) => `<button data-k="lied${i}" style="${knopfStil};background:#7b1fa2">🎶 ${l.name}</button>`).join('') +
+      `<label style="${knopfStil};background:#1565c0;box-sizing:border-box">🎵 Eigenes Lied laden (MP3)<input type="file" accept="audio/*" style="display:none"></label>` +
+      '<textarea placeholder="Liedtext hier einfügen (eine Zeile pro Zeile) – wird beim eigenen Lied angezeigt" style="width:100%;box-sizing:border-box;height:70px;border-radius:10px;border:0;padding:8px;font-family:inherit;font-size:13px"></textarea>' +
+      `<button data-k="mikro" style="${knopfStil};background:#2e7d32">🎤 Mikrofon einschalten</button>` +
+      `<button data-k="stopp" style="${knopfStil};background:#c62828">⏹️ Lied stoppen</button>` +
+      '<div style="font-size:12px;opacity:.85;margin:6px 0">🎧 Tipp: Kopfhörer aufsetzen, sonst pfeift es!</div>' +
+      '<button data-k="x" style="margin-top:4px;padding:6px 14px;border:0;border-radius:10px;background:#555;color:#fff;cursor:pointer">Schließen</button>';
+    document.body.appendChild(karaokeMenue);
+    for (const ev of ['pointerdown', 'mousedown', 'click', 'touchstart']) karaokeMenue.addEventListener(ev, e => e.stopPropagation());
+    const karaokeText = karaokeMenue.querySelector('textarea');
+    for (const ev of ['keydown', 'keyup']) karaokeText.addEventListener(ev, e => e.stopPropagation());   // beim Tippen nicht laufen
+    const karaokeMikroKnopf = karaokeMenue.querySelector('[data-k="mikro"]');
+    const karaokeOffen = () => karaokeMenue.style.display === 'block';
+    const karaokeZu = () => { karaokeMenue.style.display = 'none'; karaokeText.blur(); };
+
+    const karaokeAnzeige = document.createElement('div');
+    karaokeAnzeige.style.cssText = 'position:fixed;left:50%;bottom:90px;transform:translateX(-50%);z-index:22;display:none;text-align:center;pointer-events:none;font-family:inherit;width:min(700px,94vw)';
+    karaokeAnzeige.innerHTML = '<div class="zeile" style="font-size:clamp(20px,4vw,34px);font-weight:bold;text-shadow:0 2px 8px #000;padding:4px 10px"></div>' +
+      '<div class="naechste" style="font-size:16px;color:#ddd;text-shadow:0 2px 6px #000;min-height:20px"></div>' +
+      '<div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-top:6px;color:#fff;text-shadow:0 1px 4px #000;font-weight:bold">' +
+      '<span class="mic">🎤</span><div style="width:160px;height:12px;border-radius:6px;background:rgba(0,0,0,.5);overflow:hidden"><div class="pegel" style="height:100%;width:0;background:linear-gradient(90deg,#76ff03,#ffeb3b,#ff1744)"></div></div>' +
+      '<span class="treffer"></span></div>';
+    document.body.appendChild(karaokeAnzeige);
+    const kaZeile = karaokeAnzeige.querySelector('.zeile'), kaNaechste = karaokeAnzeige.querySelector('.naechste');
+    const kaPegel = karaokeAnzeige.querySelector('.pegel'), kaTreffer = karaokeAnzeige.querySelector('.treffer'), kaMic = karaokeAnzeige.querySelector('.mic');
+
+    // --- Mikrofon: einschalten, Stimme mit Hall abspielen, Lautstärke und Tonhöhe messen ---
+    const mikro = { an: false, strom: null, teile: [], analyser: null, monitor: null, daten: null };
+    async function mikroAn() {
+      if (!navigator.mediaDevices?.getUserMedia) { zeigeMeldung('🎤 Dein Browser kann kein Mikrofon benutzen.', 2.5); return; }
+      try {
+        tonAusgang();
+        const ctx = tonMaschine;
+        const strom = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        const quelle = ctx.createMediaStreamSource(strom);
+        const analyser = ctx.createAnalyser(); analyser.fftSize = 2048;
+        const monitor = ctx.createGain(); monitor.gain.value = 0;
+        const hall = ctx.createDelay(1); hall.delayTime.value = 0.13;
+        const rueck = ctx.createGain(); rueck.gain.value = 0.32;
+        const hallLaut = ctx.createGain(); hallLaut.gain.value = 0.45;
+        quelle.connect(analyser);
+        quelle.connect(monitor); monitor.connect(ctx.destination);
+        monitor.connect(hall); hall.connect(rueck); rueck.connect(hall); hall.connect(hallLaut); hallLaut.connect(ctx.destination);
+        Object.assign(mikro, { an: true, strom, analyser, monitor, teile: [quelle, analyser, monitor, hall, rueck, hallLaut], daten: new Float32Array(analyser.fftSize) });
+        karaokeMikroKnopf.textContent = "🎤 Mikrofon ausschalten"; karaokeMikroKnopf.style.background = '#c62828';
+        zeigeMeldung('🎤 Mikro ist an! Es bleibt an, bis du es ausschaltest.', 2.5);
+      } catch (e) {
+        zeigeMeldung('🎤 Kein Mikrofon – hast du es erlaubt?', 2.5);
+      }
+    }
+    function mikroAus() {
+      if (!mikro.an) return;
+      mikro.strom.getTracks().forEach(t => t.stop());
+      for (const t of mikro.teile) try { t.disconnect(); } catch (e) {}
+      Object.assign(mikro, { an: false, strom: null, teile: [], analyser: null, monitor: null });
+      karaokeMikroKnopf.textContent = "🎤 Mikrofon einschalten"; karaokeMikroKnopf.style.background = '#2e7d32';
+      kaPegel.style.width = '0';
+      zeigeMeldung('🎤 Mikro ist aus.', 1.5);
+    }
+    // Welchen Ton singst du gerade? (Autokorrelation: wie weit muss man die Welle verschieben, bis sie wieder passt)
+    function gesungenerTon(d, rate) {
+      let bestes = -1, bestWert = 0;
+      for (let v = Math.floor(rate / 1000); v < Math.floor(rate / 80); v++) {
+        let s = 0;
+        for (let i = 0; i < 1024; i++) s += d[i] * d[i + v];
+        if (s > bestWert) { bestWert = s; bestes = v; }
+      }
+      if (bestes < 0) return null;
+      return 69 + 12 * Math.log2(rate / bestes / 440);
+    }
+
+    // --- Lied starten / stoppen ---
+    function liedStarten(i) {
+      liedStoppen(true);
+      tonAusgang();
+      const lied = LIEDER[i];
+      Object.assign(karaoke, { lied, plan: liedPlanen(lied), start: tonMaschine.currentTime + 0.1, notenIndex: 0, schlagIndex: 0, punkte: 0, getroffen: 0, audio: null });
+      karaokeZu();
+      zeigeMeldung(`🎶 ${lied.name} – sing mit! ${mikro.an ? '' : '(Mikro ist noch aus)'}`, 2.5);
+    }
+    function eigenesLied(datei) {
+      liedStoppen(true);
+      const audio = new Audio(URL.createObjectURL(datei));
+      audio.volume = 0.9;
+      const zeilen = karaokeText.value.split('\n').map(z => z.trim()).filter(Boolean);
+      Object.assign(karaoke, { lied: { name: datei.name.replace(/\.[^.]+$/, '') }, plan: null, audio, eigeneZeilen: zeilen, punkte: 0, getroffen: 0 });
+      audio.addEventListener('ended', () => liedFertig());
+      audio.play().catch(() => zeigeMeldung('🎵 Das Lied lässt sich nicht abspielen.', 2));
+      karaokeZu();
+      zeigeMeldung(`🎵 ${karaoke.lied.name} – sing mit!`, 2.5);
+    }
+    function liedStoppen(still) {
+      if (karaoke.audio) { karaoke.audio.pause(); URL.revokeObjectURL(karaoke.audio.src); }
+      const lief = !!karaoke.lied;
+      Object.assign(karaoke, { lied: null, plan: null, audio: null });
+      karaokeAnzeige.style.display = 'none';
+      leinwandMalen('🎤 KARAOKE', 'Drück E und such dir ein Lied aus!');
+      if (lief && !still) zeigeMeldung('⏹️ Lied gestoppt.', 1.2);
+    }
+    function liedFertig() {
+      const muenzen = Math.min(40, Math.round(karaoke.punkte / 25));
+      const name = karaoke.lied?.name;
+      liedStoppen(true);
+      for (let i = 0; i < 10; i++) rauschen(0.08, ['bandpass', 1800 + Math.random() * 1500], 0.12, i * 0.09 + Math.random() * 0.05);   // Applaus
+      karaoke.applausBis = spielZeit + 3;
+      if (muenzen > 0) { punkte += muenzen; punkteZeigen(); klang('erfolg'); zeigeMeldung(`👏 Super gesungen! „${name}“ · +${muenzen} 🪙`, 3.5); }
+      else zeigeMeldung(mikro.an ? '👏 Das Publikum klatscht! Sing nächstes Mal lauter für Münzen.' : '👏 Fertig! Mit Mikrofon gibt es Münzen fürs Singen.', 3.5);
+    }
+    karaokeMenue.addEventListener('click', e => {
+      const k = e.target.closest('[data-k]')?.dataset.k; if (!k) return;
+      if (k === 'x') karaokeZu();
+      else if (k === 'mikro') mikro.an ? mikroAus() : mikroAn();
+      else if (k === 'stopp') { liedStoppen(false); karaokeZu(); }
+      else if (k.startsWith('lied')) liedStarten(+k.slice(4));
+    });
+    karaokeMenue.querySelector('input[type=file]').addEventListener('change', e => { const d = e.target.files?.[0]; if (d) eigenesLied(d); e.target.value = ''; });
+    function karaokeAktion(p) {
+      if (!imKaraoke(p)) return false;
+      if (karaokeOffen()) karaokeZu(); else karaokeMenue.style.display = 'block';
+      return true;
+    }
+
+    // Leinwand in der Bar bemalen (nur wenn sich der Text ändert)
+    function leinwandMalen(oben, unten, anteil = -1) {
+      const L = karaokeLeinwand, schluessel = oben + '|' + unten + '|' + (anteil < 0 ? -1 : Math.round(anteil * 20));
+      if (!L || L.text === schluessel) return;
+      L.text = schluessel;
+      const g = L.g, w = L.c.width, h = L.c.height;
+      g.fillStyle = '#0d0221'; g.fillRect(0, 0, w, h);
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = 'bold 64px sans-serif';
+      if (anteil >= 0) {                                       // gesungener Teil der Zeile wird gelb
+        g.fillStyle = '#ffffff'; g.fillText(oben, w / 2, h * 0.38);
+        g.save(); g.beginPath(); const breite = g.measureText(oben).width;
+        g.rect(w / 2 - breite / 2, 0, breite * anteil, h * 0.7); g.clip();
+        g.fillStyle = '#ffeb3b'; g.fillText(oben, w / 2, h * 0.38); g.restore();
+      } else { g.fillStyle = '#ffeb3b'; g.fillText(oben, w / 2, h * 0.38); }
+      g.font = '36px sans-serif'; g.fillStyle = '#b39ddb'; g.fillText(unten, w / 2, h * 0.78);
+      L.tex.needsUpdate = true;
+    }
+    leinwandMalen('🎤 KARAOKE', 'Drück E und such dir ein Lied aus!');
+
+    // --- Jedes Bild: Musik planen, Text zeigen, Mikro messen, Lichter und Publikum bewegen ---
+    function karaokeBewegen(dt) {
+      const drin = imKaraoke(affe.position);
+      if (drin !== karaokeDrin) {
+        karaokeDrin = drin; musikLautstaerke();
+        if (!drin) { karaokeZu(); if (karaoke.lied) liedStoppen(false); }
+      }
+      if (mikro.an) mikro.monitor.gain.setTargetAtTime(drin ? 0.9 : 0, tonMaschine.currentTime, 0.05);   // draußen hört man sich nicht
+      if (abstandZu(KARAOKE) > 70) return;
+      // Scheinwerfer wandern und wechseln die Farbe
+      for (const s of karaokeSpots) {
+        s.kegel.position.x = s.x + Math.sin(spielZeit * 0.8 + s.i * 2) * 1.5;
+        s.mat.color.setHex(CLUB_FARBEN[Math.floor(spielZeit * 0.7 + s.i * 2) % CLUB_FARBEN.length]);
+        s.mat.opacity = karaoke.lied ? 0.22 : 0.08;
+      }
+      // Mikro messen: wie laut, welcher Ton
+      let laut = 0, gesungen = null;
+      if (mikro.an) {
+        mikro.analyser.getFloatTimeDomainData(mikro.daten);
+        let s = 0; for (let i = 0; i < mikro.daten.length; i++) s += mikro.daten[i] * mikro.daten[i];
+        laut = Math.sqrt(s / mikro.daten.length);
+        if (laut > 0.02 && karaoke.plan) gesungen = gesungenerTon(mikro.daten, tonMaschine.sampleRate);
+      }
+      karaoke.laut += (laut - karaoke.laut) * Math.min(1, dt * 12);
+      // Publikum: wippt mit, klatscht, wenn du laut singst oder das Lied vorbei ist
+      const jubel = karaoke.laut > 0.05 || spielZeit < (karaoke.applausBis || 0);
+      for (const z of karaokePublikum) {
+        const te = z.a.teile, t = spielZeit * 6 + z.versatz;
+        if (jubel) { te.armL.rotation.set(-1.6, 0, -0.3 + Math.sin(t * 1.5) * 0.35); te.armR.rotation.set(-1.6, 0, 0.3 - Math.sin(t * 1.5) * 0.35); }
+        else { te.armL.rotation.set(-0.3, 0, -0.3); te.armR.rotation.set(-0.3, 0, 0.3); }
+        z.a.figur.position.y = karaoke.lied ? Math.abs(Math.sin(t * 0.5)) * 0.08 : 0;
+      }
+      if (!karaoke.lied) return;
+      const jetzt = karaokeJetzt();
+      // Eingebautes Lied: Töne kurz vorher planen (Melodie, Bass, Schlagzeug)
+      if (karaoke.plan) {
+        const P = karaoke.plan, ctxT = tonMaschine.currentTime;
+        while (karaoke.notenIndex < P.noten.length && karaoke.start + P.noten[karaoke.notenIndex].t < ctxT + 0.3) {
+          const n = P.noten[karaoke.notenIndex++], wann = karaoke.start + n.t - ctxT;
+          ton(midi(n.ton), 0, n.dauer * 0.95, 'triangle', 0.1 * EINST.musik, Math.max(0, wann));
+          ton(midi(n.ton - 12), 0, n.dauer * 0.9, 'sine', 0.06 * EINST.musik, Math.max(0, wann));
+        }
+        while (karaoke.start + karaoke.schlagIndex * P.schlag < ctxT + 0.3 && karaoke.schlagIndex * P.schlag < P.laenge) {
+          const wann = Math.max(0, karaoke.start + karaoke.schlagIndex * P.schlag - ctxT);
+          ton(110, 45, 0.15, 'sine', 0.22 * EINST.musik, wann);                                          // Bumm
+          if (karaoke.schlagIndex % 2) rauschen(0.05, ['highpass', 6000], 0.05 * EINST.musik, wann);    // Tss
+          if (karaoke.schlagIndex * P.schlag < P.vorlauf) ton(1200, 0, 0.05, 'square', 0.04, wann);       // vorzählen
+          karaoke.schlagIndex++;
+        }
+        // Text: aktuelle Zeile mit gelbem Fortschritt, darunter die nächste
+        const zi = P.zeilen.findIndex(z => jetzt < z.ende);
+        if (jetzt < P.vorlauf) {
+          const zahl = 4 - Math.floor(jetzt / P.schlag);
+          kaZeile.innerHTML = `<span style="color:#ffeb3b">${zahl > 0 ? zahl : ''}</span>`; kaNaechste.textContent = P.zeilen[0].text;
+          leinwandMalen(String(Math.max(1, zahl)), P.zeilen[0].text);
+        } else if (zi >= 0) {
+          const z = P.zeilen[zi], anteil = THREE.MathUtils.clamp((jetzt - z.start) / (z.ende - z.start), 0, 1);
+          kaZeile.style.background = 'none';
+          kaZeile.innerHTML = `<span style="background:linear-gradient(90deg,#ffeb3b ${anteil * 100}%,#fff ${anteil * 100}%);-webkit-background-clip:text;background-clip:text;color:transparent">${z.text}</span>`;
+          kaNaechste.textContent = P.zeilen[zi + 1]?.text || '🎉';
+          leinwandMalen(z.text, P.zeilen[zi + 1]?.text || '', anteil);
+          // Punkte: laut genug singen = gut, den richtigen Ton treffen = super
+          const note = P.noten.find(n => jetzt >= n.t && jetzt < n.t + n.dauer);
+          if (laut > 0.03) {
+            karaoke.punkte += dt * 10;
+            if (gesungen !== null && note) {
+              const abstand = Math.abs(((gesungen - note.ton) % 12 + 18) % 12 - 6);   // egal welche Oktave
+              karaoke.ton = abstand < 1.2;
+              if (karaoke.ton) { karaoke.punkte += dt * 30; karaoke.getroffen += dt; }
+            }
+          } else karaoke.ton = null;
+        }
+        if (jetzt > P.laenge) liedFertig();
+      } else if (karaoke.audio) {
+        // Eigenes Lied: Text (falls eingefügt) gleichmäßig über die Liedlänge verteilen
+        const A = karaoke.audio, Z = karaoke.eigeneZeilen;
+        if (Z.length && A.duration) {
+          const zi = Math.min(Z.length - 1, Math.floor(A.currentTime / A.duration * Z.length));
+          kaZeile.textContent = Z[zi]; kaNaechste.textContent = Z[zi + 1] || '';
+          leinwandMalen(Z[zi], Z[zi + 1] || '');
+        } else {
+          kaZeile.textContent = '🎵 ' + karaoke.lied.name; kaNaechste.textContent = mikro.an ? 'Sing mit! 🎤' : 'Mach das Mikro an (E) 🎤';
+          leinwandMalen('🎵 ' + karaoke.lied.name, 'Sing mit! 🎤');
+        }
+        if (laut > 0.03) karaoke.punkte += dt * 12;
+      }
+      karaokeAnzeige.style.display = 'block';
+      kaPegel.style.width = Math.min(100, karaoke.laut * 700) + '%';
+      kaMic.textContent = mikro.an ? '🎤' : '🔇';
+      kaTreffer.textContent = karaoke.ton === true ? '🎯 Richtiger Ton!' : karaoke.ton === false ? '🎵 Etwas daneben' : '';
     }
 
     // ================= GEHEIMVERSTECK =================
@@ -3855,7 +4208,7 @@
     const midi = n => 440 * Math.pow(2, (n - 69) / 12);
     function musikLautstaerke() {
       if (!musik) return;
-      const leise = tanz || clubLaut > 0.5 ? 0 : 1;     // beim Tanzen läuft der Tanz-Beat, im Club die Party-Musik
+      const leise = tanz || clubLaut > 0.5 || karaokeDrin ? 0 : 1;     // beim Tanzen läuft der Tanz-Beat, im Club die Party-Musik
       musik.g.gain.setTargetAtTime(EINST.musik * 0.5 * leise, tonMaschine.currentTime, 0.3);
       if (musik.club) musik.club.gain.setTargetAtTime(EINST.musik * 0.9 * clubLaut, tonMaschine.currentTime, 0.25);
     }
@@ -5994,6 +6347,7 @@
       rechteck('#e65100', BASKET.x, BASKET.z, BASKET.b, BASKET.t);
       rechteck('#9e9e9e', SKATE.x, SKATE.z, SKATE.b, SKATE.t);
       rechteck('#2e7d32', FUSS.x, FUSS.z, FUSS.b, FUSS.t);
+      rechteck('#7b1fa2', KARAOKE.x, KARAOKE.z, KARAOKE.b, KARAOKE.t);
       rechteck('#37474f', GEF.x, GEF.z, 26, 26);
       rechteck('#f0d58c', MEER_X - 15, (WIESE.z1 + WIESE.z2) / 2, 30, WIESE.z2 - WIESE.z1);              // Strand
       rechteck('#1e88e5', (MEER_X + WIESE.x2) / 2, (WIESE.z1 + WIESE.z2) / 2, WIESE.x2 - MEER_X, WIESE.z2 - WIESE.z1); // Meer
@@ -6009,7 +6363,7 @@
       { name: '👕 Umkleide', x: KABINE.x, z: KABINE.z }, ...BANKEN.map(b => ({ name: '🏦 ' + b.name, x: b.x, z: b.z })), { name: '🪩 Club', x: CLUB.x, z: CLUB.z }, { name: '🍌 Waffen', x: HAENDLER.x, z: HAENDLER.z },
       { name: '👗 Affen-Mode', x: KLEIDERLADEN.x, z: KLEIDERLADEN.z }, { name: '🔒 Gefängnis', x: GEF.x, z: GEF.z }, { name: '🏥 Krankenhaus', x: KRANKENHAUS.x, z: KRANKENHAUS.z },
       ...LAEDEN.map(l => ({ name: '🛒 Supermarkt', x: l.x, z: l.z })),
-      { name: '🏀 Basketball', x: BASKET.x, z: BASKET.z }, { name: '🛹 Skatepark', x: SKATE.x, z: SKATE.z }, { name: '⚽ Fußball', x: FUSS.x, z: FUSS.z },
+      { name: '🏀 Basketball', x: BASKET.x, z: BASKET.z }, { name: '🛹 Skatepark', x: SKATE.x, z: SKATE.z }, { name: '⚽ Fußball', x: FUSS.x, z: FUSS.z }, { name: '🎤 Karaoke', x: KARAOKE.x, z: KARAOKE.z },
     ];
     // M = große Karte an/aus (Esc schließt sie auch)
     function karteUmschalten(gross = !karteGross) {
@@ -6862,6 +7216,7 @@
       fahrer: ['Weg da! 🚗', 'Mach Platz!', 'Ich hab\'s eilig!', 'Hallo?! Geh von der Straße!', 'Hup hup! 📯'],
       kassierer: ['Willkommen im Supermarkt! 🍌', 'Frische Bananen im Angebot!', 'Schönen Tag noch!'],
       basketball: ['Wirf mal! Drück E auf dem Platz 🏀', 'Ich treff fast jeden Korb!', 'Von hinter der Linie gibt es drei Münzen!'],
+      karaoke: ['Sing doch mal was! Drück E 🎤', 'Mit Mikrofon gibt es Münzen!', 'Heute Abend ist Karaoke-Party! 🎶'],
       dj: ['Seid ihr bereit?! 🎧', 'Dreht die Musik auf! 🎶', 'Tanzt, bis die Sonne aufgeht!'],
       barkeeper: ['Ein Bananen-Shake? 🍌🥤', 'Heute gibt es Dschungel-Saft!', 'Nur alkoholfrei – hier tanzen Kinder!'],
       bank: ['Willkommen in der Affen-Bank! 🏦', 'Bitte nichts klauen … 😅', 'Der Tresor ist ganz sicher. Glaube ich.'],
@@ -7629,6 +7984,7 @@
       meerBewegen(dt);               // Wellen, Leuchtturm, Schiff
       clubBewegen(spielZeit);        // Disco-Lichter im Club
       sportBewegen(dt);              // Basketball, Skatepark, Fußball
+      karaokeBewegen(dt);            // Karaoke-Bar: Lied, Text, Mikrofon
       if (fGedrueckt) { fGedrueckt = false; benutzen(); naechsterMiniSchuss = spielZeit + 0.07; }
       // Minigun: solange F, linke Maustaste oder der 🔫-Knopf gedrückt ist, feuert sie weiter
       if (auswahl === 3 && (tasten.KeyF || linkeMausGedrueckt || handySchussGehalten) && spielZeit > naechsterMiniSchuss) { naechsterMiniSchuss = spielZeit + 0.07; benutzen(); }
@@ -7645,7 +8001,7 @@
       if (eGedrueckt) {
         eGedrueckt = false;
         if (mitfahrt) mitfahrtEnde();                                   // beim Freund aussteigen
-        else if (!aktuellesFahrzeug && (auftragAktion(p) || hausAktion(p) || graben(p) || tresorKnacken(p) || barAktion(p) || basketAktion(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
+        else if (!aktuellesFahrzeug && (auftragAktion(p) || hausAktion(p) || graben(p) || tresorKnacken(p) || barAktion(p) || basketAktion(p) || karaokeAktion(p) || geheimAktion(p))) { /* graben, Tresor knacken oder Geheimversteck */ }
         else if (aktuellesFahrzeug) { if ((aktuellesFahrzeug.hoeheJetzt || 0) > 0.3) zeigeMeldung('✈️ Erst landen, dann aussteigen!', 1.5); else aussteigen(); }
         else if (!imGefaengnis) { const mf = mitfahrKandidat(p); if (mf) mitfahrtStarten(mf); else { const f = naechstesFahrzeug(p); if (f) einsteigen(f); else if (!autoKlauen(p)) npcAnsprechen(p); } }
       }
