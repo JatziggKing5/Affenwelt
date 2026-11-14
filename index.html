@@ -8563,7 +8563,7 @@
         // --- Verbotenes beim Fahren? ---
         // Über eine rote Ampel in die Kreuzung gefahren?
         for (const k of knotenListe.values()) {
-          if (!k.ampel) continue;
+          if (!k.ampel || f.typ === 'flugzeug') continue;   // Flugzeuge dürfen über Ampeln fliegen
           const drin = Math.abs(f.x - k.x) < k.hw && Math.abs(f.z - k.z) < k.hw;
           const vorherDrin = Math.abs(f.vorherX - k.x) < k.hw && Math.abs(f.vorherZ - k.z) < k.hw;
           if (drin && !vorherDrin && Math.abs(f.tempo) > 2) {
@@ -9592,7 +9592,7 @@
       }
       // --- Die Gangster selbst ---
       const ps = spielerOrt();
-      const ruhig = spielZeit < selbstLiegtBis + 3 || imGefaengnis;  // nach einem Treffer lassen sie dir kurz Zeit
+      const ruhig = spielZeit < selbstLiegtBis + 3 || imGefaengnis || aktuellesFahrzeug?.typ === 'flugzeug';  // im Flugzeug lässt dich die Mafia in Ruhe  // nach einem Treffer lassen sie dir kurz Zeit
       for (const m of mafia) {
         const d = Math.hypot(ps.x - m.x, ps.z - m.z);
         m.gruppe.visible = d < 110 && (!m.tot || spielZeit < m.totUm + 4);
