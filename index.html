@@ -607,7 +607,7 @@
     if (IST_HANDY) document.body.classList.add('handy');
     const E_TASTE = IST_HANDY ? '✋' : 'E'; // so heißt die Aktions-Taste in den Hinweisen
     // Einstellungen (Lautstärke, Grafik, Maus) – die merkt sich der Browser. Der Spielstand wird NICHT gespeichert.
-    const EINST = { laut: 0.8, musik: 0.4, schatten: true, leuchten: !IST_HANDY, aufloesung: 1, sicht: 'weit', maus: 1, umkehren: false, tageszeit: 'auto', stimmen: true };
+    const EINST = { laut: 0.8, musik: 0.4, schatten: true, leuchten: !IST_HANDY, aufloesung: 1, sicht: 'weit', maus: 1, umkehren: false, tageszeit: 'auto', stimmen: true, kiAffen: false };
     try { Object.assign(EINST, JSON.parse(localStorage.getItem('affenEinstellungen') || '{}')); } catch (e) {}
     const einstMerken = () => { try { localStorage.setItem('affenEinstellungen', JSON.stringify(EINST)); } catch (e) {} };
     const aufloesungSetzen = () => renderer.setPixelRatio(Math.min(devicePixelRatio, IST_HANDY ? 1.5 : 2) * EINST.aufloesung); // auf dem Handy etwas sparsamer
@@ -672,6 +672,7 @@
           <div class="einst"><span>Lautstärke</span><input type="range" min="0" max="1" step="0.05" data-e="laut"></div>
           <div class="einst"><span>Musik</span><input type="range" min="0" max="1" step="0.05" data-e="musik"></div>
           <div class="einst"><span>Affen sprechen laut 🗣️</span><input type="checkbox" data-e="stimmen"></div>
+          <div class="einst"><span>Schlaue Affen 🧠 <small id="kiStatus">(KI, lädt einmal ca. 2 GB)</small></span><input type="checkbox" data-e="kiAffen"></div>
         </div>
         <div class="gruppe"><h3>🖥️ Grafik <small>(langsames Gerät? Hier sparen!)</small></h3>
           <div class="einst"><span>Schatten</span><input type="checkbox" data-e="schatten"></div>
@@ -696,6 +697,7 @@
     }
     function einstellungenAnwenden() {
       sonne.castShadow = EINST.schatten;
+      if (EINST.kiAffen) kiLaden();
       aufloesungSetzen(); renderer.setSize(innerWidth, innerHeight);
       const nah = EINST.sicht === 'nah';
       szene.fog.near = nah ? 35 : 60; szene.fog.far = nah ? 120 : 220;
@@ -8100,7 +8102,7 @@
 
     // ================= DIE AFFEN REDEN: Sprechblasen und (wenn erlaubt) echte Stimmen =================
     const SPRUECHE = {
-      hallo: ['Hallo! 👋', 'Na, wie geht\'s?', 'Hi! Schönes Wetter heute, oder?', 'Uh-uh-ah-ah! 🐒', 'Guten Tag!', 'Huhu!'],
+      hallo: ['Hallo! 👋', 'Na, wie geht\'s?', 'Hi! Schönes Wetter heute, oder?', 'Servus! 🐒', 'Guten Tag!', 'Huhu!'],
       reden: [
         'Hast du die Obby schon geschafft? Ich bin immer in die Lava gefallen! 🔥',
         'Ich geh gleich Bananen kaufen. 🍌', 'Weißt du, warum die Banane krumm ist? Ich auch nicht!',
@@ -8274,7 +8276,7 @@
     const gespraechBox = document.getElementById('gespraech');
     const gespraechForm = gespraechBox.querySelector('form'), gespraechText = gespraechBox.querySelector('input');
     let gespraechMit = null;
-    const WITZE_ANTWORT = ['Hahaha! 😂 Der ist gut!', 'Hihi, den erzähl ich weiter! 🤣', 'Hä? Den versteh ich nicht … 🤔', 'Uh-uh-ah-ah! 😆 Zu lustig!', 'Der war ja sooo alt … 🙄'];
+    const WITZE_ANTWORT = ['Hahaha! 😂 Der ist gut!', 'Hihi, den erzähl ich weiter! 🤣', 'Hä? Den versteh ich nicht … 🤔', 'Haha, du bist echt witzig! 😆', 'Der war ja sooo alt … 🙄'];
     const FRECH_ANTWORT = ['Was?! Frechheit! 😠', 'Mit dir red ich nicht mehr! 😤', 'Na warte, ich sag\'s meiner Mama! 😡', 'Selber! 😝'];
     const BELEIDIGT = ['Lass mich in Ruhe! 😤', 'Pff. Ich bin noch sauer. 😒', 'Erst frech sein und jetzt reden wollen? Nö!'];
     // Orte, nach denen man fragen kann (der Affe setzt dir einen Wegpunkt)
@@ -8333,8 +8335,14 @@
       }
     }
     // Selbst geschrieben: der Affe sucht in deinem Satz nach Wörtern, die er kennt
-    function npcAntwortAuf(text) {
+    function npcAntwortAuf(text, nurAktionen = false) {
       const t = text.toLowerCase(), wer = gespraechMit;
+      if (nurAktionen) {   // mit KI: nur das, was im Spiel etwas auslöst – den Rest beantwortet die KI
+        if (/tsch(ü|ue)ss|bye|ciao|bis dann|bis bald/.test(t)) return 'Tschüss! 👋';
+        if (/dumm|bl(ö|oe)d|doof|idiot|hässlich|stinkst|affenarsch|depp/.test(t)) { wer.sauerBis = spielZeit + 30; return FRECH_ANTWORT[Math.floor(Math.random() * FRECH_ANTWORT.length)]; }
+        if (/^wo (ist|geht|finde)|wie komm ich|zeig mir den weg/.test(t)) { gespraechWahl('weg'); return null; }
+        return undefined;
+      }
       const regeln = [
         [/tsch(ü|ue)ss|bye|ciao|bis dann|bis bald/, () => 'Tschüss! 👋'],
         [/dumm|bl(ö|oe)d|doof|idiot|hässlich|stinkst|affenarsch|depp/, () => { wer.sauerBis = spielZeit + 30; return FRECH_ANTWORT[Math.floor(Math.random() * FRECH_ANTWORT.length)]; }],
@@ -8358,7 +8366,37 @@
         [/\?$/, () => ['Gute Frage! Keine Ahnung … 🤔', 'Hmm, das weiß ich nicht.', 'Frag mal den Auftrags-Affen!'][Math.floor(Math.random() * 3)]],
       ];
       for (const [muster, antwort] of regeln) if (muster.test(t)) return antwort();
-      return ['Hä? 🤔', 'Interessant! Erzähl mehr!', 'Uh-uh-ah? 🐒', 'Das versteh ich nicht ganz …'][Math.floor(Math.random() * 4)];
+      return ['Hä? 🤔', 'Interessant! Erzähl mehr!', 'Wie meinst du das? 🐒', 'Das versteh ich nicht ganz …'][Math.floor(Math.random() * 4)];
+    }
+    // ================= SCHLAUE AFFEN: eine kleine KI läuft direkt im Browser (WebGPU, ohne Schlüssel) =================
+    const KI_MODELL = 'Qwen2.5-3B-Instruct-q4f16_1-MLC';
+    let ki = null, kiLaedt = null;
+    function kiStatus(text) { const el = document.getElementById('kiStatus'); if (el) el.textContent = text; }
+    function kiLaden() {   // lädt das KI-Gehirn einmal (danach merkt es sich der Browser)
+      if (ki || kiLaedt) return kiLaedt;
+      kiLaedt = import('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.88/+esm')
+        .then(w => w.CreateMLCEngine(KI_MODELL, { initProgressCallback: f => kiStatus(`(lädt … ${Math.round(f.progress * 100)} %)`) }))
+        .then(e => { ki = e; kiStatus('(bereit ✅)'); return e; })
+        .catch(e => { console.warn('KI geht nicht:', e); kiLaedt = null; kiStatus('(geht hier leider nicht ❌)'); return null; });
+      return kiLaedt;
+    }
+    function kiWelt(wer) {   // was der Affe über die Welt weiß
+      const uhr = Math.floor(stunde);
+      return `Du bist ${wer.name}, ein freundlicher, schlauer Affe in der Stadt "Affenwelt". In Affenwelt sind alle Bewohner Affen, sie leben wie Menschen: mit Autos, Läden, Häusern und Polizei.
+Es ist gerade ${uhr} Uhr (${uhr >= 20 || uhr < 6 ? 'Nacht' : 'Tag'}). ${fahndung ? 'Die Polizei sucht gerade den Spieler!' : ''}
+In der Stadt gibt es: einen Strand und das Meer im Osten (das Wasser ist ziemlich kühl, ca. 18 Grad), Supermarkt, Bank, Club, Kleiderladen, Tierhandlung, Kiosk, Tankstelle, Juwelier, Autohaus, Flughafen, eine Affen-Siedlung mit Häusern und ein Gefängnis. Nachts schleicht ein gefährlicher Leopard herum. Wer über Rot fährt oder klaut, wird von der Polizei gesucht. Beim Auftrags-Affen bekommt man Aufträge und verdient Punkte.
+Regeln: Antworte immer auf Deutsch, in 1 bis 2 kurzen Sätzen, locker und freundlich, wie ein schlauer Mensch. Gib echte, richtige Antworten auf Fragen (auch Wissensfragen). Sag nie "uh uh ah ah". Bleib kinderfreundlich. Du darfst ein Emoji benutzen.`;
+    }
+    async function kiAntwort(wer, text) {
+      const e = await kiLaden();
+      if (!e) return null;
+      wer.verlauf ??= [];
+      const nachrichten = [{ role: 'system', content: kiWelt(wer) }, ...wer.verlauf.slice(-6), { role: 'user', content: text }];
+      const r = await e.chat.completions.create({ messages: nachrichten, max_tokens: 70, temperature: 0.7 });
+      let antwort = (r.choices[0]?.message?.content || '').trim().replace(/\s+/g, ' ');
+      if (!antwort) return null;
+      wer.verlauf.push({ role: 'user', content: text }, { role: 'assistant', content: antwort });
+      return antwort;
     }
     gespraechForm.addEventListener('submit', e => {
       e.preventDefault();
@@ -8371,9 +8409,15 @@
       if (!text || !gespraechMit) return;
       sprechblase(affe, text);
       const wer = gespraechMit;
-      setTimeout(() => {
+      setTimeout(async () => {
         if (gespraechMit !== wer) return;
-        const antwort = npcAntwortAuf(text);
+        let antwort = EINST.kiAffen ? npcAntwortAuf(text, true) : npcAntwortAuf(text);
+        if (antwort === undefined) {   // die KI denkt nach
+          gespraechBox.querySelector('.satz').textContent = '🤔 ' + wer.name + ' denkt nach …';
+          try { antwort = await kiAntwort(wer, text); } catch (e) { console.warn(e); antwort = null; }
+          if (gespraechMit !== wer) return;                 // weggegangen
+          antwort ??= npcAntwortAuf(text);                  // KI kaputt? dann die alten Regeln
+        }
         if (antwort) gespraechSatz(antwort);
         if (/tsch(ü|ue)ss|bye|ciao/.test(text.toLowerCase()) || wer.sauerBis > spielZeit) gespraechZu();
       }, 700);
