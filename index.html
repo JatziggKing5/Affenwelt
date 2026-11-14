@@ -3949,9 +3949,12 @@
     // Neue Codes einfach in CODES dazuschreiben: '1234': () => { … was passieren soll … }
     let aimbot = false;   // Code 4521
     let superTempo = 1;   // 1 = normal, 3 = Code 5118
+    let unsterblich = false;   // Code 2684 an, Code 0001 aus
     const CODES = {
       '5118': () => { superTempo = 3; return '⚡ DREIMAL SCHNELL! (0000 = wieder normal)'; },
       '4521': () => { aimbot = !aimbot; return aimbot ? '🎯 AIMBOT AN! Deine Schüsse treffen den nächsten Gangster.' : '🎯 Aimbot aus.'; },
+      '2684': () => { unsterblich = true; leben = 100; lebenZeigen(); return '🛡️ UNSTERBLICH! Dir kann nichts mehr passieren. (0001 = wieder normal)'; },
+      '0001': () => { unsterblich = false; return '❤️ Nicht mehr unsterblich. Pass auf dich auf!'; },
       '0000': () => { superTempo = 1; return '🐢 Wieder normale Geschwindigkeit.'; },
       '9909': () => {
         if (!Number.isFinite(punkte)) return '💰 Unendlich Geld ist schon an!';
@@ -8701,7 +8704,7 @@
       lebenBox.classList.toggle('wenig', leben < 30);
     }
     function schaden(menge) {                          // Leben abziehen; bei 0 wirst du ohnmächtig
-      if (ohnmachtBis || imGefaengnis) return;
+      if (ohnmachtBis || imGefaengnis || unsterblich) return;
       leben = Math.max(0, leben - menge);
       letzterSchadenUm = spielZeit;
       lebenZeigen();
