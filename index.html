@@ -2585,6 +2585,135 @@
       if (schiff.position.z < -100) { schiff.userData.richtung = 1; schiff.rotation.y = 0; }
     }
 
+    // ================= FLUGHAFEN =================
+    // Im Westen: eine lange Landebahn, ein Terminal zum Reingehen, ein Tower, ein Hangar und Flugzeuge.
+    const FLUGHAFEN = { x1: -945, x2: -406, z1: 60, z2: 505 };
+    const PISTE = { x: -760, z1: 90, z2: 480, b: 30 };
+    const betonMaterial = echtesMaterial(new THREE.MeshStandardMaterial({ color: 0x8a8a8a, roughness: 0.95 }), 'stein');
+    const glasFassade = new THREE.MeshStandardMaterial({ color: 0x81d4fa, roughness: 0.1, metalness: 0.4, transparent: true, opacity: 0.5 });
+    const bauMaterial = echtesMaterial(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 }), 'putz');
+    // Ein fester Klotz: sichtbar (als Instanz) und man kann nicht hindurch
+    function klotz(mat, x, z, b, t, unten, oben, farbe = null) {
+      instanz(einheitsKiste, mat, x, (unten + oben) / 2, z, b, oben - unten, t, 0, farbe);
+      bloecke.push({ x, z, b, t, unten, oben, art: 'block' });
+    }
+    {
+      // Landebahn mit Markierungen und Lichtern am Rand
+      const laenge = PISTE.z2 - PISTE.z1, mz = (PISTE.z1 + PISTE.z2) / 2;
+      flach(asphalt, PISTE.x, mz, PISTE.b, laenge, 0.015);
+      for (let z = PISTE.z1 + 30; z < PISTE.z2 - 30; z += 20) flach(linie, PISTE.x, z, 0.8, 10, 0.03);
+      for (const s of [-1, 1]) flach(linie, PISTE.x + s * (PISTE.b / 2 - 1), mz, 0.5, laenge - 4, 0.03);
+      for (const ende of [PISTE.z1 + 8, PISTE.z2 - 8]) for (let i = -5; i <= 5; i++) if (i) flach(linie, PISTE.x + i * 2.4, ende, 1.2, 12, 0.03);
+      for (let z = PISTE.z1; z <= PISTE.z2; z += 15) for (const s of [-1, 1])
+        instanz(kugelForm, lampenLicht, PISTE.x + s * (PISTE.b / 2 + 1), 0.25, z, 0.25, 0.25, 0.25, 0, null, false);
+      // Rollwege zum Vorfeld und zum Hangar, und das Vorfeld aus Beton
+      flach(betonMaterial, -692, 290, 106, 18, 0.014);
+      flach(betonMaterial, -662, 150, 166, 18, 0.014);
+      flach(betonMaterial, -565, 290, 150, 180, 0.013);
+      for (let x = -740; x < -640; x += 6) flach(gelb, x, 290, 3, 0.3, 0.03);   // gelbe Rollweg-Linie
+      // Parkplatz vor dem Terminal (an der Straße)
+      flach(asphalt, -428, 290, 36, 70, 0.012);
+      for (let z = 260; z <= 320; z += 5) flach(linie, -428, z, 14, 0.15, 0.03);
+    }
+    // Terminal: großes Haus mit Glaswand, vorne und hinten eine Tür
+    const TERMINAL = { x: -468, z: 290, b: 36, t: 80, h: 10 };
+    {
+      const { x, z, b, t, h } = TERMINAL, W = 0.5, TUER = 8;
+      const seite = (wx, mat, farbe) => {   // Wand mit Tür in der Mitte
+        const stueck = (t - TUER) / 2;
+        klotz(mat, wx, z - TUER / 2 - stueck / 2, W, stueck, 0, h, farbe);
+        klotz(mat, wx, z + TUER / 2 + stueck / 2, W, stueck, 0, h, farbe);
+        klotz(mat, wx, z, W, TUER, 4, h, farbe);
+      };
+      seite(x + b / 2, glasFassade, null);           // zur Straße: Glas
+      seite(x - b / 2, bauMaterial, 0xeceff1);       // zum Vorfeld
+      klotz(bauMaterial, x, z - t / 2, b, W, 0, h, 0xeceff1);
+      klotz(bauMaterial, x, z + t / 2, b, W, 0, h, 0xeceff1);
+      klotz(bauMaterial, x, z, b + 2, t + 2, h, h + 0.6, 0x90a4ae);   // Dach
+      flach(fliesen, x, z, b - 0.6, t - 0.6, 0.03);
+      for (let i = 0; i < 5; i++) klotz(bauMaterial, x - 6, z - 30 + i * 6, 2, 4, 0, 1.1, 0x1565c0);   // Check-in-Schalter
+      for (let r = 0; r < 4; r++) for (let i = 0; i < 6; i++) klotz(bauMaterial, x + 4 + r * 3, z + 10 + i * 4, 1.6, 2.6, 0, 0.5, 0x546e7a); // Sitzbänke
+      schildBauen('✈️ AFFEN-AIRPORT', 16, 2.4, '#0d47a1', '#ffffff', x + b / 2 + 0.4, h + 1.8, z, Math.PI / 2);
+      schildBauen('ABFLUG  🛫  Bananen-Insel 14:05', 12, 1.2, '#111', '#ffd600', x - b / 2 + 0.4, 6.5, z, Math.PI / 2);
+      SONDERBAUTEN.push({ x, z, b, t });
+    }
+    // Tower: hoher Turm mit Glaskanzel
+    {
+      const tx = -520, tz = 420;
+      instanz(new THREE.CylinderGeometry(1, 1, 1, 16), bauMaterial, tx, 15, tz, 2.4, 30, 2.4, 0, 0xeceff1);
+      instanz(new THREE.CylinderGeometry(1, 0.8, 1, 16), glasFassade, tx, 32, tz, 5, 4, 5);
+      instanz(new THREE.CylinderGeometry(1, 1, 1, 16), bauMaterial, tx, 34.3, tz, 5.4, 0.6, 5.4, 0, 0x37474f);
+      bloecke.push({ x: tx, z: tz, b: 5, t: 5, unten: 0, oben: 34.6, art: 'block' });
+      SONDERBAUTEN.push({ x: tx, z: tz, b: 10, t: 10 });
+    }
+    // Hangar: offen zur Landebahn (Westen)
+    const HANGAR = { x: -560, z: 150, b: 40, t: 34, h: 14 };
+    {
+      const { x, z, b, t, h } = HANGAR;
+      klotz(bauMaterial, x + b / 2, z, 0.6, t, 0, h, 0x78909c);
+      klotz(bauMaterial, x, z - t / 2, b, 0.6, 0, h, 0x78909c);
+      klotz(bauMaterial, x, z + t / 2, b, 0.6, 0, h, 0x78909c);
+      klotz(bauMaterial, x, z, b + 1, t + 1, h, h + 0.8, 0x546e7a);
+      flach(betonMaterial, x, z, b, t, 0.016);
+      schildBauen('HANGAR 1', 10, 2, '#263238', '#ffca28', x - b / 2 - 0.1, h - 2, z, -Math.PI / 2);
+      SONDERBAUTEN.push({ x, z, b, t });
+    }
+    // Großer Passagier-Jet (aus einfachen Formen). Die Nase zeigt nach +z.
+    function jetBauen(farbe = 0x1565c0) {
+      const g = new THREE.Group();
+      const weissM = new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.4, metalness: 0.2 });
+      const farbM = new THREE.MeshStandardMaterial({ color: farbe, roughness: 0.4 });
+      const dunkelM = new THREE.MeshStandardMaterial({ color: 0x263238, roughness: 0.3 });
+      const teil = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.castShadow = true; g.add(m); return m; };
+      teil(new THREE.CylinderGeometry(2.2, 2.2, 32, 20), weissM, 0, 4, 0, Math.PI / 2);                  // Rumpf
+      teil(new THREE.SphereGeometry(2.2, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), weissM, 0, 4, 16, Math.PI / 2); // Nase
+      teil(new THREE.ConeGeometry(2.2, 8, 20), weissM, 0, 4.6, -20, -Math.PI / 2);                        // Heck
+      teil(new THREE.BoxGeometry(0.15, 0.7, 26), dunkelM, 2.15, 4.8, 1);                                  // Fenster rechts
+      teil(new THREE.BoxGeometry(0.15, 0.7, 26), dunkelM, -2.15, 4.8, 1);                                 // Fenster links
+      teil(new THREE.BoxGeometry(4.45, 0.5, 30), farbM, 0, 3.3, 0);                                       // Streifen
+      teil(new THREE.BoxGeometry(34, 0.5, 6), weissM, 0, 3, -1);                                          // Flügel
+      teil(new THREE.BoxGeometry(12, 0.35, 3), weissM, 0, 5.3, -21);                                      // Höhenleitwerk
+      teil(new THREE.BoxGeometry(0.4, 7, 5), farbM, 0, 8.5, -20.5);                                       // Seitenleitwerk
+      for (const s of [-1, 1]) {
+        teil(new THREE.CylinderGeometry(1.1, 1.1, 4.5, 14), farbM, s * 7, 1.9, 0.5, Math.PI / 2);         // Triebwerke
+        teil(new THREE.CylinderGeometry(0.2, 0.2, 1.8, 8), dunkelM, s * 3, 0.9, -2);                      // Fahrwerk
+      }
+      teil(new THREE.CylinderGeometry(0.2, 0.2, 1.8, 8), dunkelM, 0, 0.9, 12);
+      return g;
+    }
+    // Ein Jet steht am Gate …
+    {
+      const j = jetBauen(0xd32f2f);
+      j.position.set(-560, 0, 345); j.rotation.y = -Math.PI / 2;
+      szene.add(j);
+      bloecke.push({ x: -560, z: 345, b: 36, t: 5, unten: 0, oben: 6.2, art: 'block' });    // Rumpf
+      bloecke.push({ x: -561, z: 345, b: 6, t: 34, unten: 2.5, oben: 3.3, art: 'block' });   // Flügel (darauf stehen!)
+      FERN_AUS.push({ o: j, x: -560, z: 345 });
+    }
+    // … und einer startet immer wieder auf der Landebahn
+    const startJet = { g: jetBauen(0x1565c0), zeit: 0 };
+    startJet.g.position.set(PISTE.x, 0, PISTE.z1 + 20);
+    szene.add(startJet.g);
+    function flughafenBewegen(dt, p) {
+      const j = startJet, g = j.g;
+      j.zeit = (j.zeit + dt) % 100;
+      const t = j.zeit;
+      const start = PISTE.z1 + 20;
+      if (t < 12) { g.position.set(PISTE.x, 0, start); g.rotation.x = 0; g.visible = true; }            // wartet
+      else if (t < 32) { const s = t - 12; g.position.z = start + 0.7 * s * s; }                       // rollt immer schneller
+      else if (t < 70) {                                                                                // hebt ab
+        const s = t - 32;
+        g.position.z = start + 0.7 * 400 + 28 * s + 0.4 * s * s;
+        g.position.y = Math.min(150, 0.12 * s * s + 1.5 * s);
+        g.rotation.x = -Math.min(0.22, s * 0.04);
+      } else g.visible = false;
+      // Lautes Dröhnen, wenn du in der Nähe bist und der Jet rollt
+      if (t > 12 && t < 45 && Math.random() < dt * 6) {
+        const d = Math.hypot(p.x - g.position.x, p.z - g.position.z, (p.y || 0) - g.position.y);
+        if (d < 150) rauschen(0.3, 400, 0.25 * (1 - d / 150));
+      }
+    }
+
     // ================= DIE GROSSE NEUE WELT =================
     // Eigener Zufall für die neuen Gebiete, damit die alte Stadt genau so bleibt, wie sie war.
     const alteSaat = saat; saat = 98765;
@@ -2598,7 +2727,7 @@
     stadtBauen([NEUE_STADT[1]], 14, 0.6, 18, 45);   // richtige Wolkenkratzer!
     stadtBauen([NEUE_STADT[2]], 16, 0.15);
     stadtBauen([NEUE_STADT[3]], 20, 0.03);
-    const KEIN_WALD = [ALTE_WELT, ...NEUE_STADT, STRAND];   // hier wächst kein neuer Wald (Meer, Flughafen … kommen dazu)
+    const KEIN_WALD = [ALTE_WELT, ...NEUE_STADT, STRAND, FLUGHAFEN];   // hier wächst kein neuer Wald (Meer, Flughafen … kommen dazu)
     // Wald in Flecken: eine Wellen-Formel sagt, wo dichter Wald ist und wo Wiese
     const waldDichte = (x, z) => Math.sin(x * 0.013) + Math.sin(z * 0.017 + 1.3) + Math.sin((x + z) * 0.007 + 0.5);
     const NEU_RASTER = 9;
@@ -3335,6 +3464,9 @@
     neuesFahrzeug('motorrad', gx + 3.4, gz + 0.5, Math.PI);
     neuesFahrzeug('kart',     gx + 5.9, gz + 0.5, Math.PI);
     neuesFahrzeug('rakete', GEHEIM.ausfahrt.x, GEHEIM.z + 2, Math.PI); // im Geheimversteck, Nase zur Ausfahrt
+    // Flugzeuge am Flughafen: auf dem Vorfeld und im Hangar (Nase zur Landebahn = Richtung -x)
+    for (const z of [235, 255, 275]) neuesFahrzeug('flugzeug', -600, z, -Math.PI / 2);
+    neuesFahrzeug('flugzeug', HANGAR.x, HANGAR.z, -Math.PI / 2);
 
     // Liegt ein Punkt (mit Abstand r) in einem Fahrzeug? Rechnet in die Sicht des Fahrzeugs um.
     function punktInFahrzeug(f, px, pz, r) {
@@ -5527,10 +5659,16 @@
       rechteck('#1e88e5', (MEER_X + WIESE.x2) / 2, (WIESE.z1 + WIESE.z2) / 2, WIESE.x2 - MEER_X, WIESE.z2 - WIESE.z1); // Meer
       rechteck('#8d6e63', (STEG.x1 + STEG.x2) / 2, STEG.z, STEG.x2 - STEG.x1, STEG.b);
       rechteck('#f0d58c', LEUCHTTURM.x, LEUCHTTURM.z, 22, 22);
+      rechteck('#9e9e9e', -565, 290, 150, 180);                                                          // Vorfeld
+      rechteck('#9e9e9e', -692, 290, 106, 18); rechteck('#9e9e9e', -662, 150, 166, 18);
+      rechteck('#333', PISTE.x, (PISTE.z1 + PISTE.z2) / 2, PISTE.b, PISTE.z2 - PISTE.z1);               // Landebahn
+      rechteck('#90caf9', TERMINAL.x, TERMINAL.z, TERMINAL.b, TERMINAL.t);
+      rechteck('#78909c', HANGAR.x, HANGAR.z, HANGAR.b, HANGAR.t);
       p.strokeStyle = '#ffffff'; p.lineWidth = 3;
       p.strokeRect((GEF.x - 13 - WIESE.x1) * HG_MASSSTAB, (GEF.z - 13 - WIESE.z1) * HG_MASSSTAB, 26 * HG_MASSSTAB, 26 * HG_MASSSTAB);
     }
     const ORTE = [ // Beschriftungen auf der großen Karte
+      { name: '✈️ Flughafen', x: TERMINAL.x - 60, z: TERMINAL.z }, { name: '🛫 Landebahn', x: PISTE.x, z: PISTE.z2 + 12 },
       { name: '🏖️ Strand', x: MEER_X - 15, z: 700 }, { name: '⚓ Steg', x: STEG.x2 - 20, z: STEG.z - 12 }, { name: '🗼 Leuchtturm', x: LEUCHTTURM.x, z: LEUCHTTURM.z - 18 },
       { name: '🏙️ Hochhäuser', x: 150, z: 970 }, { name: '🏘️ Vororte', x: -450, z: 1300 }, { name: '🏢 Oststadt', x: 500, z: 280 },
       { name: '🏁 Start', x: 0, z: 2 }, { name: '🧗 Obby ↑', x: 18, z: -12 }, { name: '🏎 Garage', x: GARAGE.x, z: GARAGE.z },
@@ -7153,6 +7291,7 @@
       lebenBewegen(dt);              // Leben heilen, Krankenhaus
       bankBewegen();                 // Alarmglocke
       meerBewegen(dt);               // Wellen, Leuchtturm, Schiff
+      flughafenBewegen(dt, p);       // der große Jet startet
       clubBewegen(spielZeit);        // Disco-Lichter im Club
       if (fGedrueckt) { fGedrueckt = false; benutzen(); naechsterMiniSchuss = spielZeit + 0.07; }
       // Minigun: solange F, linke Maustaste oder der 🔫-Knopf gedrückt ist, feuert sie weiter
